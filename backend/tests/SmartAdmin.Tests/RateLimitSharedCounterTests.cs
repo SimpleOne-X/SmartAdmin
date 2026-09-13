@@ -25,8 +25,8 @@ public class RateLimitSharedCounterTests
     private static ICacheProvider SharedCache() =>
         new MemoryCacheProvider(new MemoryCache(new MemoryCacheOptions()), new AdminCacheOptions());
 
-    /// <summary>一个开了限流、且把认证桶收紧到 <see cref="AUTH_PERMIT"/> 的"副本",共用给定缓存。</summary>
-    private static AdminAppFactory Replica(ICacheProvider shared) => new()
+    /// <summary>一个开了限流、且把认证桶收紧到 <see cref="AUTH_PERMIT"/> 的"副本",共用给定缓存与时钟。</summary>
+    private static AdminAppFactory Replica(ICacheProvider shared, TimeProvider clock) => new()
     {
         Settings = new Dictionary<string, string?>
         {
@@ -34,7 +34,13 @@ public class RateLimitSharedCounterTests
             ["SmartAdmin:Security:RateLimit:WindowSeconds"] = "60",
             ["SmartAdmin:Security:RateLimit:AuthPermitPerWindow"] = AUTH_PERMIT.ToString(),
         },
-        Overrides = s => s.Replace(ServiceDescriptor.Singleton(shared)),
+        // 断 429 必须冻结时钟:固定窗口跨整分钟计数归零(见 RateLimitTests 的注释);两个副本传同一个时钟,请求才必落同一窗口
+        Overrides = s =>
+        {
+            s.Replace(ServiceDescriptor.Singleton(shared));
+            s.RemoveAll<TimeProvider>();
+            s.AddSingleton<TimeProvider>(clock);
+        },
     };
 
     /// <summary>把两个副本的限流阈值都从 DB 收紧(DB 值优先于 Options),并确定性刷新快照。</summary>
@@ -57,8 +63,9 @@ public class RateLimitSharedCounterTests
     public async Task Two_replicas_sharing_a_cache_hit_the_same_threshold()
     {
         var shared = SharedCache();
-        using var a = Replica(shared);
-        using var b = Replica(shared);
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var a = Replica(shared, clock);
+        using var b = Replica(shared, clock);
         await TightenAsync(a, b);
 
         // 负载均衡轮询:请求交替落到两个副本上
@@ -78,8 +85,9 @@ public class RateLimitSharedCounterTests
     {
         // 反面钉子:没有共享缓存(= 没装 Redis)时,各副本各数各的——这是今天的行为,也是不装 Redis 时的已知天花板。
         // 它证明上一条测的确实是"共享计数",而不是别的什么东西碰巧让请求被拒。
-        using var a = Replica(SharedCache());
-        using var b = Replica(SharedCache());
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var a = Replica(SharedCache(), clock);
+        using var b = Replica(SharedCache(), clock);
         await TightenAsync(a, b);
 
         var ca = a.CreateClient();
