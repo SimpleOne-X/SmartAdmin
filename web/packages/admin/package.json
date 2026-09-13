@@ -28,7 +28,7 @@
     "cli"
   ],
   "bin": {
-    "smart-admin-icons": "./cli/smart-admin-icons.mjs"
+    "smart-admin-icons": "cli/smart-admin-icons.mjs"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
