@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using SmartAdmin.Core;
 
 namespace SmartAdmin.Services;
@@ -111,7 +112,7 @@ public class OpenAiCompatibleAdapter(IHttpClientFactory httpClientFactory) : IAi
             messages.Add(new JsonObject
             {
                 ["role"] = MapRole(message.Role),
-                ["content"] = message.Content,
+                ["content"] = BuildContent(message),
             });
         }
 
@@ -137,7 +138,63 @@ public class OpenAiCompatibleAdapter(IHttpClientFactory httpClientFactory) : IAi
             body["stream_options"] = new JsonObject { ["include_usage"] = true };
         }
 
+        if (request.ResponseSchema.HasValue)
+        {
+            body["response_format"] = new JsonObject
+            {
+                ["type"] = "json_schema",
+                ["json_schema"] = new JsonObject
+                {
+                    ["name"] = SanitizeSchemaName(request.Scene),
+                    ["schema"] = JsonNode.Parse(request.ResponseSchema.Value.GetRawText()),
+                    ["strict"] = true,
+                },
+            };
+        }
+
         return body;
+    }
+
+    /// <summary>message.Content 走纯字符串(现状零改动路径);message.Parts 非空时改成多段内容数组,文本/图片按
+    /// OpenAI 兼容协议的 text / image_url 内容块序列化(DeepSeek/通义千问/智谱/Kimi/豆包等厂商共用同一套字段名)</summary>
+    private static JsonNode BuildContent(AiChatMessage message)
+    {
+        if (message.Parts is not { Count: > 0 } parts)
+        {
+            return JsonValue.Create(message.Content)!;
+        }
+
+        var content = new JsonArray();
+        foreach (var part in parts)
+        {
+            content.Add(part switch
+            {
+                AiChatContentPart.Text text => new JsonObject { ["type"] = "text", ["text"] = text.Content },
+                AiChatContentPart.Image image => new JsonObject
+                {
+                    ["type"] = "image_url",
+                    ["image_url"] = new JsonObject { ["url"] = BuildImageUrl(image.Source) },
+                },
+                _ => throw new ArgumentOutOfRangeException(nameof(parts), part, "未知的 AiChatContentPart 类型"),
+            });
+        }
+
+        return content;
+    }
+
+    private static string BuildImageUrl(AiImageSource source) => source switch
+    {
+        AiImageSource.Base64 base64 => $"data:{base64.MediaType};base64,{base64.Data}",
+        AiImageSource.Url url => url.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "未知的 AiImageSource 类型"),
+    };
+
+    /// <summary>OpenAI 的 json_schema.name 必填、正则 ^[a-zA-Z0-9_-]+$、最长 64;Scene 允许有点号等字符,净化后复用,
+    /// 不要求调用方额外传一个 schema 名字</summary>
+    private static string SanitizeSchemaName(string scene)
+    {
+        var sanitized = Regex.Replace(scene, "[^a-zA-Z0-9_-]", "_");
+        return sanitized.Length > 64 ? sanitized[..64] : sanitized;
     }
 
     private static string MapRole(AiChatRole role) => role switch

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace SmartAdmin.Core;
 
 /// <summary>
@@ -34,14 +36,55 @@ public sealed record AiChatRequest
 
     /// <summary>透传给日志扩展的自定义元数据;一期不落库</summary>
     public IReadOnlyDictionary<string, string>? Metadata { get; init; }
+
+    /// <summary>约束模型输出必须匹配的 JSON Schema;不填是现在的自由文本行为。协议适配器用它拼各自厂商的结构化输出字段
+    /// (OpenAI 兼容:response_format.json_schema;Anthropic:output_config.format);厂商/模型不支持时上游报错,
+    /// 按现有 49020 系列错误码映射,网关不做静默降级或估算解析。</summary>
+    public JsonElement? ResponseSchema { get; init; }
 }
 
 /// <summary>一条对话消息</summary>
 public sealed record AiChatMessage(AiChatRole Role, string Content)
 {
+    /// <summary>多段内容(文本/图片混排);不填时用 <see cref="Content"/> 走纯文本,填了 Parts 时 Content 被忽略。
+    /// System 角色不支持多段内容(两个协议的 system 都只接受纯文本),填了抛 49032。</summary>
+    public IReadOnlyList<AiChatContentPart>? Parts { get; init; }
+
     public static AiChatMessage System(string content) => new(AiChatRole.System, content);
     public static AiChatMessage User(string content) => new(AiChatRole.User, content);
+
+    /// <summary>多模态消息(文本/图片混排)</summary>
+    public static AiChatMessage User(IReadOnlyList<AiChatContentPart> parts) => new(AiChatRole.User, string.Empty) { Parts = parts };
+
     public static AiChatMessage Assistant(string content) => new(AiChatRole.Assistant, content);
+}
+
+/// <summary>消息内容段(封闭继承——只有 Text/Image 两种,私有构造禁止外部再派生)</summary>
+public abstract record AiChatContentPart
+{
+    private AiChatContentPart()
+    {
+    }
+
+    /// <summary>文本段</summary>
+    public sealed record Text(string Content) : AiChatContentPart;
+
+    /// <summary>图片段</summary>
+    public sealed record Image(AiImageSource Source) : AiChatContentPart;
+}
+
+/// <summary>图片来源(封闭继承)</summary>
+public abstract record AiImageSource
+{
+    private AiImageSource()
+    {
+    }
+
+    /// <summary>base64 编码的图片数据;MediaType 如 "image/jpeg"</summary>
+    public sealed record Base64(string MediaType, string Data) : AiImageSource;
+
+    /// <summary>图片的 URL 引用</summary>
+    public sealed record Url(string Value) : AiImageSource;
 }
 
 /// <summary>消息角色</summary>

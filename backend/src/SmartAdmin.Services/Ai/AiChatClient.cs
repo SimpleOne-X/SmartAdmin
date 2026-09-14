@@ -23,6 +23,7 @@ public class AiChatClient(
     public virtual async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken cancellationToken = default)
     {
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(request.Scene), ErrorCode.AiSceneRequired);
+        AdminException.ThrowIf(HasSystemMultimodalMessage(request), ErrorCode.AiMultimodalSystemUnsupported);
 
         var (provider, model) = await ResolveAsync(request.ProviderCode, request.Model, cancellationToken);
         var adapter = ResolveAdapter(provider.Protocol);
@@ -54,6 +55,7 @@ public class AiChatClient(
         AiChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(request.Scene), ErrorCode.AiSceneRequired);
+        AdminException.ThrowIf(HasSystemMultimodalMessage(request), ErrorCode.AiMultimodalSystemUnsupported);
 
         var (provider, model) = await ResolveAsync(request.ProviderCode, request.Model, cancellationToken);
         var adapter = ResolveAdapter(provider.Protocol);
@@ -135,6 +137,10 @@ public class AiChatClient(
         }
         throw new AdminException(ErrorCode.AiNoDefaultModel);
     }
+
+    /// <summary>两个协议的 system 字段都只接受纯文本,System 角色消息带 Parts(图片等多段内容)直接拒绝</summary>
+    private static bool HasSystemMultimodalMessage(AiChatRequest request) =>
+        request.Messages.Any(m => m.Role == AiChatRole.System && m.Parts is { Count: > 0 });
 
     private static CachedProvider FindProvider(IReadOnlyList<CachedProvider> providers, string code)
     {

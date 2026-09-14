@@ -1459,6 +1459,7 @@ export default {
       upstreamBadResponse: '上游服务返回异常',
       dataProtectionKeyMissing: '数据保护密钥不可用,无法解密 API Key',
       sceneRequired: '必须指定调用场景(scene)',
+      multimodalSystemUnsupported: 'System 角色消息不支持图片等多段内容',
     },
     recycle: {
       notFound: '回收站中未找到该记录',

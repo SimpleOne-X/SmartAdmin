@@ -125,7 +125,7 @@ public class AnthropicAdapter(IHttpClientFactory httpClientFactory) : IAiProtoco
             messages.Add(new JsonObject
             {
                 ["role"] = MapRole(message.Role),
-                ["content"] = message.Content,
+                ["content"] = BuildContent(message),
             });
         }
 
@@ -152,8 +152,55 @@ public class AnthropicAdapter(IHttpClientFactory httpClientFactory) : IAiProtoco
             body["stream"] = true;
         }
 
+        if (request.ResponseSchema.HasValue)
+        {
+            body["output_config"] = new JsonObject
+            {
+                ["format"] = new JsonObject
+                {
+                    ["type"] = "json_schema",
+                    ["schema"] = JsonNode.Parse(request.ResponseSchema.Value.GetRawText()),
+                },
+            };
+        }
+
         return body;
     }
+
+    /// <summary>message.Content 走纯字符串(现状零改动路径);message.Parts 非空时改成多段内容数组,文本/图片按
+    /// Anthropic 协议的 text / image 内容块序列化</summary>
+    private static JsonNode BuildContent(AiChatMessage message)
+    {
+        if (message.Parts is not { Count: > 0 } parts)
+        {
+            return JsonValue.Create(message.Content)!;
+        }
+
+        var content = new JsonArray();
+        foreach (var part in parts)
+        {
+            content.Add(part switch
+            {
+                AiChatContentPart.Text text => new JsonObject { ["type"] = "text", ["text"] = text.Content },
+                AiChatContentPart.Image image => new JsonObject { ["type"] = "image", ["source"] = BuildImageSource(image.Source) },
+                _ => throw new ArgumentOutOfRangeException(nameof(parts), part, "未知的 AiChatContentPart 类型"),
+            });
+        }
+
+        return content;
+    }
+
+    private static JsonObject BuildImageSource(AiImageSource source) => source switch
+    {
+        AiImageSource.Base64 base64 => new JsonObject
+        {
+            ["type"] = "base64",
+            ["media_type"] = base64.MediaType,
+            ["data"] = base64.Data,
+        },
+        AiImageSource.Url url => new JsonObject { ["type"] = "url", ["url"] = url.Value },
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "未知的 AiImageSource 类型"),
+    };
 
     private static string MapRole(AiChatRole role) => role switch
     {

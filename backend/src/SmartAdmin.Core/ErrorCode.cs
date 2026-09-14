@@ -547,6 +547,10 @@ public enum ErrorCode
     [MsgKey("error.ai.sceneRequired")]
     AiSceneRequired = 49031,
 
+    /// <summary>System 角色消息不支持多段内容(图片等);两个协议的 system 字段都只接受纯文本</summary>
+    [MsgKey("error.ai.multimodalSystemUnsupported")]
+    AiMultimodalSystemUnsupported = 49032,
+
     // ── 50xxx 系统内部 ───────────────────────────────────────────────
 
     /// <summary>

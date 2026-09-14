@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
@@ -464,5 +465,208 @@ public class AiChatClientTests
             Model = "whatever",
         }));
         Assert.Equal(ErrorCode.AiProviderNotFound, ex.Code);
+    }
+
+    // ── 多模态内容(issue #7) ────────────────────────────────────────
+
+    private static readonly IReadOnlyList<AiChatContentPart> MultimodalParts =
+    [
+        new AiChatContentPart.Text("描述这张图"),
+        new AiChatContentPart.Image(new AiImageSource.Base64("image/png", "QQ==")),
+    ];
+
+    [Fact]
+    public async Task OpenAi_multimodal_message_serializes_text_and_base64_image_parts()
+    {
+        const string responseBody = """
+            {"id":"c1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+            """;
+        string? capturedBody = null;
+        using var f = Factory(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK, responseBody);
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "openai");
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        await client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.User(MultimodalParts)],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+        });
+
+        using var body = JsonDocument.Parse(capturedBody!);
+        var content = body.RootElement.GetProperty("messages")[0].GetProperty("content");
+        Assert.Equal(JsonValueKind.Array, content.ValueKind);
+        Assert.Equal("text", content[0].GetProperty("type").GetString());
+        Assert.Equal("描述这张图", content[0].GetProperty("text").GetString());
+        Assert.Equal("image_url", content[1].GetProperty("type").GetString());
+        Assert.Equal("data:image/png;base64,QQ==", content[1].GetProperty("image_url").GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public async Task OpenAi_multimodal_message_serializes_url_image_source()
+    {
+        const string responseBody = """
+            {"id":"c1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+            """;
+        string? capturedBody = null;
+        using var f = Factory(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK, responseBody);
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "openai");
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        await client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.User([new AiChatContentPart.Image(new AiImageSource.Url("https://example.com/a.png"))])],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+        });
+
+        using var body = JsonDocument.Parse(capturedBody!);
+        var content = body.RootElement.GetProperty("messages")[0].GetProperty("content");
+        Assert.Equal("https://example.com/a.png", content[0].GetProperty("image_url").GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public async Task OpenAi_response_schema_serializes_response_format_json_schema()
+    {
+        const string responseBody = """
+            {"id":"c1","choices":[{"message":{"role":"assistant","content":"{}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+            """;
+        string? capturedBody = null;
+        using var f = Factory(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK, responseBody);
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "openai");
+
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { ok = new { type = "boolean" } },
+            required = new[] { "ok" },
+            additionalProperties = false,
+        });
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        await client.ChatAsync(new AiChatRequest
+        {
+            Scene = "approval.summary",
+            Messages = [AiChatMessage.User("hi")],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+            ResponseSchema = schema,
+        });
+
+        using var body = JsonDocument.Parse(capturedBody!);
+        var jsonSchema = body.RootElement.GetProperty("response_format").GetProperty("json_schema");
+        Assert.Equal("json_schema", body.RootElement.GetProperty("response_format").GetProperty("type").GetString());
+        Assert.Equal("approval_summary", jsonSchema.GetProperty("name").GetString());
+        Assert.True(jsonSchema.GetProperty("strict").GetBoolean());
+        Assert.Equal("object", jsonSchema.GetProperty("schema").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Anthropic_multimodal_message_serializes_text_and_base64_image_parts()
+    {
+        const string responseBody = """
+            {"id":"msg_1","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}
+            """;
+        string? capturedBody = null;
+        using var f = Factory(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK, responseBody);
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "anthropic", authScheme: "x-api-key");
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        await client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.User(MultimodalParts)],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+        });
+
+        using var body = JsonDocument.Parse(capturedBody!);
+        var content = body.RootElement.GetProperty("messages")[0].GetProperty("content");
+        Assert.Equal("text", content[0].GetProperty("type").GetString());
+        Assert.Equal("image", content[1].GetProperty("type").GetString());
+        var source = content[1].GetProperty("source");
+        Assert.Equal("base64", source.GetProperty("type").GetString());
+        Assert.Equal("image/png", source.GetProperty("media_type").GetString());
+        Assert.Equal("QQ==", source.GetProperty("data").GetString());
+    }
+
+    [Fact]
+    public async Task Anthropic_response_schema_serializes_output_config_format()
+    {
+        const string responseBody = """
+            {"id":"msg_1","content":[{"type":"text","text":"{}"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}
+            """;
+        string? capturedBody = null;
+        using var f = Factory(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return Json(HttpStatusCode.OK, responseBody);
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "anthropic", authScheme: "x-api-key");
+
+        var schema = JsonSerializer.SerializeToElement(new { type = "object" });
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        await client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.User("hi")],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+            ResponseSchema = schema,
+        });
+
+        using var body = JsonDocument.Parse(capturedBody!);
+        var format = body.RootElement.GetProperty("output_config").GetProperty("format");
+        Assert.Equal("json_schema", format.GetProperty("type").GetString());
+        Assert.Equal("object", format.GetProperty("schema").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task System_message_with_parts_throws_multimodal_system_unsupported_without_calling_upstream()
+    {
+        var called = false;
+        using var f = Factory((req, ct) =>
+        {
+            called = true;
+            return Task.FromResult(Json(HttpStatusCode.OK, "{}"));
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "openai");
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        var ex = await Assert.ThrowsAsync<AdminException>(() => client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.System("sys") with { Parts = MultimodalParts }, AiChatMessage.User("hi")],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+        }));
+
+        Assert.Equal(ErrorCode.AiMultimodalSystemUnsupported, ex.Code);
+        Assert.False(called);
     }
 }

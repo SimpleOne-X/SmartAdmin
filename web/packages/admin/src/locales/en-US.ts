@@ -1487,6 +1487,8 @@ export default {
       upstreamBadResponse: 'Upstream service returned an unexpected response',
       dataProtectionKeyMissing: 'Data protection key unavailable, cannot decrypt the API key',
       sceneRequired: 'A call scene is required',
+      multimodalSystemUnsupported:
+        'System messages do not support multi-part content such as images',
     },
     recycle: {
       notFound: 'Deleted record not found',
