@@ -21,6 +21,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [Add a Frontend Page](https://smartcode-x.github.io/SmartAdmin/guide/frontend-page)
 - [Wire Import/Export on Your Entity](https://smartcode-x.github.io/SmartAdmin/guide/import-export)
 - [Scheduled Jobs](https://smartcode-x.github.io/SmartAdmin/guide/scheduled-jobs)
+- [AI Models](https://smartcode-x.github.io/SmartAdmin/guide/ai-models)
 
 ## Customize the kernel
 
@@ -93,6 +94,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [前端加一个页面](https://smartcode-x.github.io/SmartAdmin/zh/guide/frontend-page)
 - [给自己的实体接导入导出](https://smartcode-x.github.io/SmartAdmin/zh/guide/import-export)
 - [定时任务](https://smartcode-x.github.io/SmartAdmin/zh/guide/scheduled-jobs)
+- [AI 模型](https://smartcode-x.github.io/SmartAdmin/zh/guide/ai-models)
 - [替换内置服务](https://smartcode-x.github.io/SmartAdmin/zh/guide/replace-service)
 - [配置多数据库（多 ConfigId）](https://smartcode-x.github.io/SmartAdmin/zh/guide/multi-database)
 - [升级到新版本](https://smartcode-x.github.io/SmartAdmin/zh/guide/upgrade)

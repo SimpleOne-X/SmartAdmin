@@ -21,6 +21,19 @@
 | 串行跳过(SerialSkip) | 默认并发模式:上次触发未结束则本次跳过并记 Skipped 记录;另一模式为并行(Parallel),无排队。 |
 | 执行一次(Run-now) | 手动触发:在收到请求的副本本机执行,不经选主、不做领取、不动 `NextRunTime`。 |
 
+## AI 管理(AI Management)
+
+| 术语 | 定义 |
+|---|---|
+| 网关(Gateway) | `IAiChatClient`:业务代码调用大模型的唯一入口,厂商/Key/默认模型解析、Token 记账、错误映射全部在这一层完成。 |
+| 厂商(Provider) | `sys_ai_provider` 一行:Base URL + 鉴权方式 + Key + 一组模型的完整声明,后台「AI 模型」页维护。 |
+| 预设(Preset) | 厂商新增时选的静态模板(`AiProviderPresets`),带出协议、Base URL、鉴权方式与起步模型清单;保存后厂商与预设脱钩,预设本身不落库,只在新增那一刻抄一份。 |
+| 协议(Protocol) | 厂商说的 HTTP 方言,一期两种:`openai`(OpenAI 兼容 REST)、`anthropic`。多个预设可以共用同一个协议(如 DeepSeek、通义千问都是 `openai`)。 |
+| 全局默认模型(Default model) | 未显式指定厂商与模型时网关使用的模型;`SysAiModel.IsDefault` **全库唯一**,不是同厂商内唯一。 |
+| 场景(Scene) | 调用方在 `AiChatRequest.Scene` 里标的业务标签(如 `approval.summary`),用量统计按它拆账,必填,空串抛 49031。 |
+| 用量记录(Usage log) | `sys_ai_usage_log` 一行 = 一次调用的统计快照(Token 数、耗时、成败),不含对话正文。 |
+| 用量来源(UsageSource) | Token 数是否为上游真实回报:`Reported` = 上游给了 usage 字段;`Missing` = 上游未回报(典型是流式且厂商不支持 `include_usage`),记 0,不做估算。 |
+
 ## 通用(既有约定,收录防歧义)
 
 | 术语 | 定义 |

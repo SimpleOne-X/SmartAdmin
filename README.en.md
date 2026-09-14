@@ -84,6 +84,7 @@ Pull the frontend as in step 2. Production requires a JWT signing key, `SmartAdm
 | Switch to MySQL / SQL Server / PostgreSQL | [Swap out the default database](https://smartcode-x.github.io/SmartAdmin/guide/getting-started#swap-out-the-default-database) |
 | Change built-in behavior (login flow, password hashing, caching…) | [Replace Built-in Services](https://smartcode-x.github.io/SmartAdmin/guide/replace-service) |
 | Add scheduled jobs, wire import/export | [Scheduled Jobs](https://smartcode-x.github.io/SmartAdmin/guide/scheduled-jobs) · [Import/Export](https://smartcode-x.github.io/SmartAdmin/guide/import-export) |
+| Call a large language model (AI approval workflows and the like) | [AI Models](https://smartcode-x.github.io/SmartAdmin/guide/ai-models) |
 | Deploy, upgrade | [Deployment](https://smartcode-x.github.io/SmartAdmin/guide/deployment/) · [Upgrading](https://smartcode-x.github.io/SmartAdmin/guide/upgrade) |
 | Understand the design | [Core Concepts](https://smartcode-x.github.io/SmartAdmin/guide/concepts) · [Runtime architecture diagram](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.en.svg) |
 | Let an AI assistant write code by the rules | [Agent Skills](https://smartcode-x.github.io/SmartAdmin/community/agent-skills) |
@@ -94,6 +95,7 @@ Pull the frontend as in step 2. Production requires a JWT signing key, `SmartAdm
 - **Permissions**: roles and three-level menus (directory / page / button), where a permission code is the API route; five organization data scopes that filter queries automatically, so business code writes no org conditions
 - **Administration**: organizations, positions, users, a multi-app portal, dictionaries, a config center, notices and a recycle bin
 - **Operations**: operation / login / exception logs, file uploads (resumable chunks, signed links), scheduled jobs (cron, fixed interval, one-off), server monitoring and health checks
+- **AI Management**: a large-model gateway behind `IAiChatClient`, with OpenAI-compatible and Anthropic protocol adapters covering OpenAI, Azure OpenAI, DeepSeek, Qwen, Zhipu, Kimi, Doubao, Gemini, Ollama and more presets; keys encrypted at rest, token usage tracked by provider / model / scene / user
 - **Databases**: SQLite, MySQL, SQL Server and PostgreSQL, switched by one config section; optional Redis for multi-replica deployments
 - **Admin UI**: dynamic menu routing, button-level permissions, light and dark themes, three login skins, Chinese and English, plus common components for tables, forms, dictionaries, uploads and an import wizard
 

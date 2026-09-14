@@ -87,6 +87,7 @@ app.Run();
 | 换成 MySQL / SQL Server / PostgreSQL | [换掉默认数据库](https://smartcode-x.github.io/SmartAdmin/zh/guide/getting-started#换掉默认数据库) |
 | 改掉内置行为（登录流程、密码哈希、缓存等） | [替换内置服务](https://smartcode-x.github.io/SmartAdmin/zh/guide/replace-service) |
 | 加定时任务、接导入导出 | [定时任务](https://smartcode-x.github.io/SmartAdmin/zh/guide/scheduled-jobs) · [导入导出](https://smartcode-x.github.io/SmartAdmin/zh/guide/import-export) |
+| 接大模型（AI 审批之类的场景） | [AI 模型](https://smartcode-x.github.io/SmartAdmin/zh/guide/ai-models) |
 | 部署上线、升级版本 | [部署](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/) · [升级到新版本](https://smartcode-x.github.io/SmartAdmin/zh/guide/upgrade) |
 | 了解整体设计 | [核心概念](https://smartcode-x.github.io/SmartAdmin/zh/guide/concepts) · [运行时架构图](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.zh-CN.svg) |
 | 让 AI 助手按规范写代码 | [Agent Skills](https://smartcode-x.github.io/SmartAdmin/zh/community/agent-skills) |
@@ -97,6 +98,7 @@ app.Run();
 - **权限**：角色，目录 / 页面 / 按钮三级菜单，权限码就是接口路由；五种机构数据范围，查询自动隔离，业务代码不写机构条件
 - **系统管理**：机构、岗位、用户、多应用门户、字典、配置中心、通知公告、回收站
 - **运维**：操作 / 登录 / 异常日志，文件上传（分片续传、签名直链），定时任务（cron、固定间隔、一次性），服务器监控与健康检查
+- **AI 管理**：大模型接入网关 `IAiChatClient`，OpenAI 兼容与 Anthropic 两套协议覆盖 OpenAI、Azure OpenAI、DeepSeek、通义千问、智谱、Kimi、豆包、Gemini、Ollama 等预置厂商，Key 加密落库，按厂商 / 模型 / 场景 / 用户记 Token 用量
 - **数据库**：SQLite、MySQL、SQL Server、PostgreSQL，改一段配置切换；可选 Redis，支持多副本部署
 - **管理界面**：动态菜单路由、按钮级权限、明暗主题、三套登录皮肤、中英双语，以及表格、表单、字典、上传、导入向导等常用组件
 

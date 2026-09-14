@@ -50,6 +50,7 @@ The frontend `web` service runs Caddy. Swap the site label in `web/Caddyfile` fr
 | **No `HEALTHCHECK` in the image** | The `aspnet` runtime image has neither `curl` nor `wget`, so a health-check instruction would just always fail. Health checking is left to the orchestration layer, probing `/health` (liveness) and `/health/ready` (DB + cache). |
 | **`.dockerignore` is a security item** | A dev machine's `data/` may hold a real `SmartAdmin.db` and a JWT signing key auto-generated in development (`dev-jwt.key`). The repo-root `.dockerignore` excludes it — without it, a single `COPY . .` bakes the signing key into an image layer, and once the image is pushed, anyone can forge a super-admin token. |
 | **Change `WorkerId` per replica** | Each instance needs a distinct value in 0–63, or same-millisecond issuance collides on the primary key; configuring Redis without giving it explicitly also refuses startup on the spot. See "Multiple replicas and WorkerId" below. |
+| **Share one `DataProtection:Key` across replicas** | Leave it unset and each replica generates its own throwaway in-process key; envelopes encrypted through `ISecretProtector` — TOTP seeds, AI provider API keys — become unreadable on any replica but the one that wrote them. See "Every replica needs the same `DataProtection:Key`" below. |
 
 ## Multiple replicas and WorkerId
 
@@ -81,6 +82,20 @@ The snowflake generator's machine bit comes from `SmartAdmin:Id:WorkerId` (0–6
 
 - **compose**: `--scale app=2` can't give replicas different environment variables, so split it into multiple explicit `app` services each configured on its own — `app2` in `docker-compose.scale.yml` explicitly sets `SmartAdmin__Id__WorkerId: "1"`, different from `app`'s `0`.
 - **k8s**: use a StatefulSet and inject from the Pod name's ordinal (`app-0`/`app-1`); a Deployment's random Pod names can't give you a stable ordinal.
+
+### Every replica needs the same `DataProtection:Key`
+
+Leave `SmartAdmin:Security:DataProtection:Key` unset and the kernel, in production, either refuses to start outright (when TOTP or cookie sessions are on) or falls back to a throwaway in-process key — never written to disk, a fresh one every restart and every replica. TOTP seeds and AI provider API keys — anything encrypted through `ISecretProtector` — get written on replica A with one key and read back on replica B with a different one, and decryption throws a `CryptographicException` outright. Saving an AI provider's key checks whether the current key is a throwaway one and refuses to persist it if so (error 49030), but that guard only catches "this replica can't read back what it wrote after a restart" — it does nothing for "each replica configured its own key."
+
+Generate one and give every replica the same value:
+
+```bash
+openssl rand -base64 32
+```
+
+```yaml
+SmartAdmin__Security__DataProtection__Key: "paste the command's output verbatim, identical on every replica"
+```
 
 ### Behind the proxy, `ForwardedHeaders` is required
 

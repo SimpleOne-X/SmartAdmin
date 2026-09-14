@@ -32,6 +32,7 @@ const enGuideSidebar = [
       { text: 'Add a Frontend Page', link: '/guide/frontend-page' },
       { text: 'Wire Import/Export on Your Entity', link: '/guide/import-export' },
       { text: 'Scheduled Jobs', link: '/guide/scheduled-jobs' },
+      { text: 'AI Models', link: '/guide/ai-models' },
     ],
   },
   {
@@ -204,6 +205,7 @@ const zhGuideSidebar = [
       { text: '加一个前端页面', link: '/zh/guide/frontend-page' },
       { text: '给自己的实体接导入导出', link: '/zh/guide/import-export' },
       { text: '定时任务', link: '/zh/guide/scheduled-jobs' },
+      { text: 'AI 模型', link: '/zh/guide/ai-models' },
     ],
   },
   {

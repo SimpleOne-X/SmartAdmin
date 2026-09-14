@@ -1,8 +1,13 @@
 # AI 管理模块开发计划
 
-> **状态**:待实施 · **拟定**:2026-09-13 · **设计图**:[`docs/design-mockups/ai-management.html`](../design-mockups/ai-management.html)(在线版:https://claude.ai/code/artifact/76b596b4-cc15-4db3-8277-411fb5c52219)
+> **状态**:已完成 · **拟定**:2026-09-13 · **完成**:2026-09-14 · **设计图**:[`docs/design-mockups/ai-management.html`](../design-mockups/ai-management.html)(在线版:https://claude.ai/code/artifact/76b596b4-cc15-4db3-8277-411fb5c52219)
 >
-> 本文是执行文档:按第 12 节的批次逐批实施、逐项勾选。做完后把「为什么这么定」沉淀成 ADR 0009,本文状态改为「已完成」留档。
+> 本文是执行文档:按第 12 节的批次逐批实施、逐项勾选。「为什么这么定」已沉淀成 [ADR 0009](../adr/0009-ai-gateway-in-kernel.md)。
+>
+> **与本文/设计图的偏离**(实施时发现,记录在此供复核):
+> - §7.1 服务层规则原文未明说 `SysAiModel.IsDefault` 的唯一范围,实施时定为**全库唯一**而非同厂商内唯一——网关在调用方未指定厂商/模型时按厂商遍历顺序取第一个默认模型,顺序不保证稳定,只有全局唯一才能让"全局默认模型"这个语义成立;已写进 [ADR 0009](../adr/0009-ai-gateway-in-kernel.md) 决策二与实体注释。
+> - §6 厂商预置表里的模型名是起草时的占位示例;批次 1 实施时按"逐家核对官方文档"的要求重新核对,`AiProviderPresets.cs` 落的是 2026-09-13 当天的真实模型目录,新增厂商或大版本更新时需要重新核对。
+> - §9 前端类型契约表(`AiModelPreset` 等)起草时漏了 `displayName` 字段,批次 5 前端联调时对照真实 OpenAPI schema 发现并补上,`types/api.ts` 现在和后端记录字段一一对应。
 
 ## 0. 一句话
 
@@ -405,12 +410,12 @@ e2e(可选):在 `web/e2e` 现有页面级冒烟模板上加「AI 模型页可渲
 
 ### 批次 6:文档、ADR、变更记录
 
-- [ ] `site/zh/guide/ai-models.md` + 英文页,`lint:prose` 过
-- [ ] 多副本部署页补 `DataProtection:Key`
-- [ ] `CHANGELOG.md`、`README.md`、`CONTEXT.md`
-- [ ] `docs/adr/0009-ai-gateway-in-kernel.md`,ADR README 索引加行
-- [ ] 本文状态改「已完成」,记录与设计图的偏离
-- [ ] **验收**:`ci.bat` 默认集全绿;推 `dev` 让 CI 跑方言腿
+- [x] `site/zh/guide/ai-models.md` + 英文页,`lint:prose` 过
+- [x] 多副本部署页补 `DataProtection:Key`
+- [x] `CHANGELOG.md`、`README.md`、`CONTEXT.md`
+- [x] `docs/adr/0009-ai-gateway-in-kernel.md`,ADR README 索引加行
+- [x] 本文状态改「已完成」,记录与设计图的偏离
+- [x] **验收**:`ci.bat` 默认集全绿;推 `dev` 让 CI 跑方言腿(留给用户决定何时推送)
 
 每批一个或几个提交,提交信息按 `skills/write-commit.md`(`feat(ai): …` / `test(ai): …` / `docs(site): …`)。
 

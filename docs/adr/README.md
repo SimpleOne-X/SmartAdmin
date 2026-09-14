@@ -14,6 +14,7 @@
 | [0006](0006-general-admin-optional-security.md) | 产品目标纠正:通用后台内核 + 可选安全能力(取代等保三级建设目标) | 已采纳(2026-07-30) |
 | [0007](0007-external-login-brand-ui-and-providers.md) | 外部登录品牌化 UI + GitHub / 个人微信可选包 | 已采纳(2026-07-31) |
 | [0008](0008-web-kernel-as-npm-package.md) | 前端内核以 npm 包分发:单包、预编译、插件式扩展 | 已采纳(2026-09-12) |
+| [0009](0009-ai-gateway-in-kernel.md) | AI 网关进内核:统一入口、按协议适配、直连不引 SDK | 已采纳(2026-09-13) |
 
 ## 什么时候写一份新的
 

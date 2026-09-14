@@ -50,6 +50,7 @@ SmartAdmin__Seed__AdminPassword: ${SMART_ADMIN_PASSWORD:?请先按 .env.example 
 | **镜像里没有 `HEALTHCHECK`** | `aspnet` 运行时镜像既没有 `curl` 也没有 `wget`，写了健康检查指令只会恒失败。健康检查交给编排层探 `/health`（存活）与 `/health/ready`（DB + 缓存）。 |
 | **`.dockerignore` 是安全项** | 开发机的 `data/` 里可能躺着真实的 `SmartAdmin.db` 和开发期自动生成的 JWT 签名密钥（`dev-jwt.key`）。仓库根的 `.dockerignore` 把它排除掉。没有它，一次 `COPY . .` 就能把签名密钥烤进镜像层，镜像一推，谁都能伪造超管令牌。 |
 | **多副本改 `WorkerId`** | 每实例 0–63 必须各不相同，否则同毫秒发号撞主键；配了 Redis 却没显式给还会当场拒绝启动。详见下面「多副本与 WorkerId」。 |
+| **多副本共享 `DataProtection:Key`** | 不显式配置时各副本各生成一把进程内临时密钥，互不相认；TOTP 种子、AI 厂商 API Key 等经 `ISecretProtector` 加密的信封换个副本就读不出来。详见下面「多副本必须共享同一把 `DataProtection:Key`」。 |
 
 ## 多副本与 WorkerId
 
@@ -81,6 +82,20 @@ bash scripts/smoke-multi-replica.sh http://localhost:8080   # 逐条验证下面
 
 - **compose**：`--scale app=2` 给不了各副本不同的环境变量，所以拆成多个显式的 `app` 服务各配各的。`docker-compose.scale.yml` 里 `app2` 就显式给了 `SmartAdmin__Id__WorkerId: "1"`，与 `app` 的 `0` 不同。
 - **k8s**：用 StatefulSet，从 Pod 名字的序号注入，比如 `app-0`、`app-1`。Deployment 的随机 Pod 名给不了稳定序号。
+
+### 多副本必须共享同一把 `DataProtection:Key`
+
+不显式配置 `SmartAdmin:Security:DataProtection:Key`，内核在生产环境要么直接拒绝启动（开了 TOTP 或 Cookie 会话时），要么退回一把进程内临时密钥，不落盘，重启或者换一个副本就是另一把。TOTP 种子、AI 厂商 API Key，凡经 `ISecretProtector` 加密落库的东西，写在副本 A、读在副本 B 就是两把不同的密钥，解密直接抛 `CryptographicException`。AI 厂商保存 Key 时会查这把密钥是否临时，是就拒绝落库（49030），但这道守卫只防得住「自己重启后读不回自己」，防不住「每个副本各配各的」。
+
+显式配一把主密钥，所有副本共用同一个值：
+
+```bash
+openssl rand -base64 32
+```
+
+```yaml
+SmartAdmin__Security__DataProtection__Key: "上面命令的输出，每个副本原样粘贴同一份"
+```
 
 ### 反代之后必须配 `ForwardedHeaders`
 
