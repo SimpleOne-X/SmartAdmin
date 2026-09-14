@@ -14,6 +14,12 @@
 
 ## Unreleased
 
+## 10.12.1 - 2026-09-14
+
+### Fixed
+
+- **AI 网关：厂商不支持 OpenAI `json_schema` 严格结构化输出时不再静默失效。** `OpenAiCompatibleAdapter` 此前对所有 openai 协议厂商一律透传 `response_format.type: "json_schema"`;智谱 GLM 等厂商官方协议只支持 `text` / `json_object`,收到该字段既不报错也不降级,只会忽略约束按自由文本作答(常见还会用 Markdown 代码块包裹结果),`ResponseSchema` 契约悄悄失效。厂商预设新增 `SupportsJsonSchema` 能力位(智谱标记为 `false`),网关在发起上游调用前按此直接拒绝(`49033`),不把一个对方读不懂的字段透传过去。（[#8](https://github.com/SmartCode-X/SmartAdmin/issues/8)）
+
 ## 10.12.0 - 2026-09-14
 
 ### Added
