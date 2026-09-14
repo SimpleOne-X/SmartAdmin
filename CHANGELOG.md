@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.11.0 - 2026-09-14
+
 ### Added
 
 - **AI 管理：统一大模型接入网关。** 新增 `IAiChatClient` 统一入口（`ChatAsync` / `StreamAsync`），按协议适配 OpenAI 兼容与 Anthropic 两套协议，覆盖 OpenAI、Azure OpenAI、Anthropic、DeepSeek、通义千问、智谱 GLM、Kimi、豆包、Gemini、Ollama 十个预置厂商及自定义厂商；不引入任何厂商 SDK，HttpClient 直连并套 SSRF 围栏（与定时任务共用同一套围栏实现）。后台新增「AI 管理」目录（AI 模型、用量统计两页），运维选厂商预设、填 Key 即可，Key 经 `ISecretProtector` 加密落库，接口只回脱敏尾四位；每次调用按厂商 / 模型 / 场景 / 用户记 Token 用量，用量页支持多维度聚合、占比与按天趋势。两个控制器挂 `[Module("Ai")]`，可用 `Api:DisabledModules` 整体下线（`IAiChatClient` 不受影响）；内置 `AiUsageLogCleanupJob` 按保留天数（默认 90 天）定期清理用量记录。用法与消费者调用示例见[文档](https://smartcode-x.github.io/SmartAdmin/zh/guide/ai-models)。
