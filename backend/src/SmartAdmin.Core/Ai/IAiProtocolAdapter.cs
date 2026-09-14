@@ -14,5 +14,13 @@ public interface IAiProtocolAdapter
     IAsyncEnumerable<AiChatChunk> StreamAsync(AiEndpoint endpoint, AiChatRequest request, CancellationToken cancellationToken);
 }
 
-/// <summary>网关解析好的调用端点(厂商配置 + 目标模型),已解密 Key 只在内存经过一次,不落日志</summary>
-public sealed record AiEndpoint(string ProviderCode, string BaseUrl, string? ApiKey, string AuthScheme, string Model);
+/// <summary>网关解析好的调用端点(厂商配置 + 目标模型),已解密 Key 只在内存经过一次,不落日志。
+/// <see cref="SupportsJsonSchema"/> 是厂商预设是否支持 OpenAI 的 json_schema 严格结构化输出,来自
+/// <c>AiProviderPreset.SupportsJsonSchema</c>;未知预设(如消费者自定义 Preset)按 true 处理,不影响现有行为</summary>
+public sealed record AiEndpoint(
+    string ProviderCode,
+    string BaseUrl,
+    string? ApiKey,
+    string AuthScheme,
+    string Model,
+    bool SupportsJsonSchema = true);

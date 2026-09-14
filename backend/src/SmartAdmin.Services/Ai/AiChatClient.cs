@@ -28,6 +28,7 @@ public class AiChatClient(
         var (provider, model) = await ResolveAsync(request.ProviderCode, request.Model, cancellationToken);
         var adapter = ResolveAdapter(provider.Protocol);
         var endpoint = BuildEndpoint(provider, model);
+        AdminException.ThrowIf(request.ResponseSchema.HasValue && !endpoint.SupportsJsonSchema, ErrorCode.AiStructuredOutputUnsupported);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));
@@ -60,6 +61,7 @@ public class AiChatClient(
         var (provider, model) = await ResolveAsync(request.ProviderCode, request.Model, cancellationToken);
         var adapter = ResolveAdapter(provider.Protocol);
         var endpoint = BuildEndpoint(provider, model);
+        AdminException.ThrowIf(request.ResponseSchema.HasValue && !endpoint.SupportsJsonSchema, ErrorCode.AiStructuredOutputUnsupported);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));
@@ -174,7 +176,7 @@ public class AiChatClient(
 
         var result = providers
             .Select(p => new CachedProvider(
-                p.Id, p.Code, p.Protocol, p.BaseUrl, p.AuthScheme, p.ApiKeyProtected, p.Enabled,
+                p.Id, p.Code, p.Preset, p.Protocol, p.BaseUrl, p.AuthScheme, p.ApiKeyProtected, p.Enabled,
                 models.Where(m => m.ProviderId == p.Id)
                     .Select(m => new CachedModel(m.Name, m.Enabled, m.IsDefault))
                     .ToList()))
@@ -189,7 +191,8 @@ public class AiChatClient(
     protected virtual AiEndpoint BuildEndpoint(CachedProvider provider, CachedModel model)
     {
         var apiKey = string.IsNullOrEmpty(provider.ApiKeyProtected) ? null : secretProtector.Unprotect(provider.ApiKeyProtected);
-        return new AiEndpoint(provider.Code, provider.BaseUrl, apiKey, provider.AuthScheme, model.Name);
+        var supportsJsonSchema = AiProviderPresets.Find(provider.Preset)?.SupportsJsonSchema ?? true;
+        return new AiEndpoint(provider.Code, provider.BaseUrl, apiKey, provider.AuthScheme, model.Name, supportsJsonSchema);
     }
 
     protected virtual IAiProtocolAdapter ResolveAdapter(string protocol)
@@ -248,7 +251,7 @@ public class AiChatClient(
 
     /// <summary>protected 而非 private:被同样 protected virtual 的 ResolveAsync/BuildEndpoint/GetProvidersAsync 用在签名里,可访问性必须能覆盖到子类。</summary>
     protected sealed record CachedProvider(
-        long Id, string Code, string Protocol, string BaseUrl, string AuthScheme,
+        long Id, string Code, string Preset, string Protocol, string BaseUrl, string AuthScheme,
         string? ApiKeyProtected, bool Enabled, IReadOnlyList<CachedModel> Models);
 
     protected sealed record CachedModel(string Name, bool Enabled, bool IsDefault);

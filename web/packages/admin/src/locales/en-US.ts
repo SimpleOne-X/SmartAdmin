@@ -1489,6 +1489,8 @@ export default {
       sceneRequired: 'A call scene is required',
       multimodalSystemUnsupported:
         'System messages do not support multi-part content such as images',
+      structuredOutputUnsupported:
+        'This provider does not support structured output (json_schema) constraints',
     },
     recycle: {
       notFound: 'Deleted record not found',

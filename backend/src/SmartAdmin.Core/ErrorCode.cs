@@ -551,6 +551,11 @@ public enum ErrorCode
     [MsgKey("error.ai.multimodalSystemUnsupported")]
     AiMultimodalSystemUnsupported = 49032,
 
+    /// <summary>请求携带 ResponseSchema,但目标厂商预设标记为不支持 OpenAI 的 json_schema 严格结构化输出;
+    /// 这类厂商即便收到该字段也不会报错,只会静默忽略约束按自由文本作答,网关在发起上游调用前直接拒绝,不做静默降级或估算解析</summary>
+    [MsgKey("error.ai.structuredOutputUnsupported")]
+    AiStructuredOutputUnsupported = 49033,
+
     // ── 50xxx 系统内部 ───────────────────────────────────────────────
 
     /// <summary>

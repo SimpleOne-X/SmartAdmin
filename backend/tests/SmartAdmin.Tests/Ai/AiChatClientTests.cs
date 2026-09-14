@@ -34,7 +34,7 @@ public class AiChatClientTests
     private static async Task<(SysAiProvider Provider, SysAiModel Model)> SeedProviderAsync(
         IServiceProvider sp, string protocol,
         string modelName = "test-model", bool providerEnabled = true, bool modelEnabled = true, bool isDefault = true,
-        string authScheme = "bearer", string? apiKey = "sk-test")
+        string authScheme = "bearer", string? apiKey = "sk-test", string? preset = null)
     {
         var providers = sp.GetRequiredService<IRepository<SysAiProvider>>();
         var models = sp.GetRequiredService<IRepository<SysAiModel>>();
@@ -44,7 +44,7 @@ public class AiChatClientTests
         {
             Code = $"test-{protocol}-{Guid.NewGuid():N}",
             Name = "Test Provider",
-            Preset = protocol,
+            Preset = preset ?? protocol,
             Protocol = protocol,
             BaseUrl = "https://fake-ai.test",
             AuthScheme = authScheme,
@@ -576,6 +576,36 @@ public class AiChatClientTests
         Assert.Equal("approval_summary", jsonSchema.GetProperty("name").GetString());
         Assert.True(jsonSchema.GetProperty("strict").GetBoolean());
         Assert.Equal("object", jsonSchema.GetProperty("schema").GetProperty("type").GetString());
+    }
+
+    /// <summary>回归测试(issue: 智谱 GLM 等厂商收到 json_schema 不会报错,只会静默忽略约束按自由文本作答)——
+    /// 厂商预设标记 SupportsJsonSchema=false 时,网关必须在发起上游调用前直接拒绝,不能把约束原样透传给一个读不懂它的厂商。</summary>
+    [Fact]
+    public async Task ResponseSchema_against_preset_without_json_schema_support_throws_before_calling_upstream()
+    {
+        var called = false;
+        using var f = Factory((req, ct) =>
+        {
+            called = true;
+            return Task.FromResult(Json(HttpStatusCode.OK, "{}"));
+        });
+        using var scope = f.Services.CreateScope();
+        var (provider, model) = await SeedProviderAsync(scope.ServiceProvider, "openai", preset: "zhipu");
+
+        var schema = JsonSerializer.SerializeToElement(new { type = "object" });
+
+        var client = scope.ServiceProvider.GetRequiredService<IAiChatClient>();
+        var ex = await Assert.ThrowsAsync<AdminException>(() => client.ChatAsync(new AiChatRequest
+        {
+            Scene = "unit.test",
+            Messages = [AiChatMessage.User("hi")],
+            ProviderCode = provider.Code,
+            Model = model.Name,
+            ResponseSchema = schema,
+        }));
+
+        Assert.Equal(ErrorCode.AiStructuredOutputUnsupported, ex.Code);
+        Assert.False(called);
     }
 
     [Fact]

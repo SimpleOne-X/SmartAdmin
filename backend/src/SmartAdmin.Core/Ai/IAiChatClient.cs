@@ -38,8 +38,10 @@ public sealed record AiChatRequest
     public IReadOnlyDictionary<string, string>? Metadata { get; init; }
 
     /// <summary>约束模型输出必须匹配的 JSON Schema;不填是现在的自由文本行为。协议适配器用它拼各自厂商的结构化输出字段
-    /// (OpenAI 兼容:response_format.json_schema;Anthropic:output_config.format);厂商/模型不支持时上游报错,
-    /// 按现有 49020 系列错误码映射,网关不做静默降级或估算解析。</summary>
+    /// (OpenAI 兼容:response_format.json_schema;Anthropic:output_config.format)。厂商预设已知不支持 OpenAI 的
+    /// json_schema 严格模式时(见 AiProviderPreset.SupportsJsonSchema),网关在发起上游调用前直接拒绝(49033)——这类
+    /// 厂商收到该字段不会报错,只会静默忽略约束按自由文本作答,不能指望"不支持就报错";未在此名单中的厂商/模型仍按
+    /// 协议原样透传,上游报错时按现有 49020 系列错误码映射,网关不做静默降级或估算解析。</summary>
     public JsonElement? ResponseSchema { get; init; }
 }
 

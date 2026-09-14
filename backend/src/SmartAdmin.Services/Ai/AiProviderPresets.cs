@@ -5,6 +5,9 @@ public sealed record AiModelPreset(string Name, string DisplayName, int? Context
 
 /// <summary>
 /// AI 厂商预置项:协议 / Base URL / 鉴权方式由预设带出,运维只填 Key(见 docs/plans/ai-management.md §6)。
+/// <see cref="SupportsJsonSchema"/> 是否支持 OpenAI 的 json_schema 严格结构化输出(<c>response_format.type == "json_schema"</c>);
+/// 只对 Protocol == "openai" 的厂商有意义,默认 true。标记为 false 的厂商收到该字段时不会报错,只会静默忽略约束按自由文本
+/// 作答——AiChatClient 据此在请求携带 ResponseSchema 时提前拒绝,不把一个对方读不懂的字段透传过去。
 /// </summary>
 public sealed record AiProviderPreset(
     string Code,
@@ -12,7 +15,8 @@ public sealed record AiProviderPreset(
     string Protocol,
     string BaseUrl,
     string AuthScheme,
-    IReadOnlyList<AiModelPreset> Models);
+    IReadOnlyList<AiModelPreset> Models,
+    bool SupportsJsonSchema = true);
 
 /// <summary>
 /// 厂商预置静态表。模型名变动快,这里只是起步清单,界面上可增删。
@@ -51,11 +55,12 @@ public static class AiProviderPresets
             new("qwen3.8-max", "Qwen3.8 Max"),
         ]),
 
+        // 官方 response_format.type 枚举只有 text / json_object,没有 json_schema;传了也不报错,只是不生效
         new("zhipu", "智谱 GLM", "openai", "https://open.bigmodel.cn/api/paas/v4", "bearer",
         [
             new("glm-4.6", "GLM-4.6"),
             new("glm-4.7-flash", "GLM-4.7 Flash"),
-        ]),
+        ], SupportsJsonSchema: false),
 
         new("moonshot", "Kimi", "openai", "https://api.moonshot.cn/v1", "bearer",
         [

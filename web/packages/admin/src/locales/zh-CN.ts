@@ -1460,6 +1460,7 @@ export default {
       dataProtectionKeyMissing: '数据保护密钥不可用,无法解密 API Key',
       sceneRequired: '必须指定调用场景(scene)',
       multimodalSystemUnsupported: 'System 角色消息不支持图片等多段内容',
+      structuredOutputUnsupported: '该厂商不支持结构化输出(json_schema)约束',
     },
     recycle: {
       notFound: '回收站中未找到该记录',
