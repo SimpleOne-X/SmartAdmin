@@ -37,6 +37,14 @@ public class AdminJobsOptions
     /// <summary>跨节点终止旗标(KillRequested)的轮询间隔(秒),默认 5</summary>
     public int KillPollSeconds { get; set; } = 5;
 
+    /// <summary>
+    /// 执行记录 <c>MessageText</c>/<c>ErrorText</c> 的落库上限(单位:字符,不是字节),默认 262144(约 256K 字符)。
+    /// ≤0 = 不限(列本身是 nvarchar(max)/longtext,能装;体量交给 <c>sys.job.logRetentionDays</c> 控制)。
+    /// 超限按「保留开头 + 保留结尾,截中间」处理,断点处插入标注原文长度的标记,不做静默裁切
+    /// (HTTP 任务响应体截断走独立的 <see cref="AdminJobsHttpOptions.MaxResponseLogBytes"/>,单位是字节)。
+    /// </summary>
+    public int MaxMessageChars { get; set; } = 262_144;
+
     /// <summary>HTTP 任务配置(SSRF 围栏与响应日志)</summary>
     public AdminJobsHttpOptions Http { get; set; } = new();
 

@@ -56,6 +56,8 @@ Interval jobs bottom out at 5 seconds; 4 is rejected with `47004`. A cron may pu
 
 Retention lives in the config center under `sys.job.logRetentionDays`, 30 days by default, and the kernel's own cleanup job deletes expired rows in batches at 03:30. It is itself a scheduled job: you can see it in the UI, pause it, change its schedule.
 
+A single record's total output from `context.Log?.Invoke(...)` has its own ceiling, `SmartAdmin:Jobs:MaxMessageChars` — a character count, roughly 262K by default, `<= 0` for unlimited. Going over it doesn't silently drop content: the head and tail are kept, only the middle gets cut, with a marker at the break noting the original length — a multi-step job's tail is usually its per-step conclusions, worth more than a long run of repeated detail lines in the middle.
+
 ## Three survival shapes, zero code changes
 
 "Jobs must not stop when the backend stops" is really three separate requirements:

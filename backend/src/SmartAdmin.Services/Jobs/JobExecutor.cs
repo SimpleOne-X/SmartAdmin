@@ -238,7 +238,7 @@ public class JobExecutor(
             ScheduledTime = log.ScheduledTime,
             FireTime = startedAt,
             Properties = ParseProps(job.PropsJson, messages),
-            Log = text => AppendCapped(messages, text),
+            Log = text => AppendMessage(messages, text),
         };
 
         try
@@ -249,22 +249,22 @@ public class JobExecutor(
             if (linked.IsCancellationRequested)
             {
                 var (lateStatus, lateNote) = Interpret(job, timeoutCts, ignoredToken: true);
-                await CloseLogAsync(log.Id, lateStatus, stopwatch.ElapsedMilliseconds, Render(messages), lateNote);
+                await CloseLogAsync(log.Id, lateStatus, stopwatch.ElapsedMilliseconds, Render(messages, options.MaxMessageChars), lateNote);
                 return (lateStatus, lateNote, false);
             }
-            await CloseLogAsync(log.Id, JobRunStatus.Success, stopwatch.ElapsedMilliseconds, Render(messages), null);
+            await CloseLogAsync(log.Id, JobRunStatus.Success, stopwatch.ElapsedMilliseconds, Render(messages, options.MaxMessageChars), null);
             return (JobRunStatus.Success, null, false);
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested)
         {
             var (status, note) = Interpret(job, timeoutCts, ignoredToken: false);
-            await CloseLogAsync(log.Id, status, stopwatch.ElapsedMilliseconds, Render(messages), note);
+            await CloseLogAsync(log.Id, status, stopwatch.ElapsedMilliseconds, Render(messages, options.MaxMessageChars), note);
             return (status, note, false);
         }
         catch (Exception ex)
         {
-            var error = Cap(ex.ToString(), 8192);
-            await CloseLogAsync(log.Id, JobRunStatus.Failed, stopwatch.ElapsedMilliseconds, Render(messages), error);
+            var error = TruncateKeepingHeadAndTail(ex.ToString(), options.MaxMessageChars);
+            await CloseLogAsync(log.Id, JobRunStatus.Failed, stopwatch.ElapsedMilliseconds, Render(messages, options.MaxMessageChars), error);
             return (JobRunStatus.Failed, ex.Message, true);
         }
         finally
@@ -435,28 +435,48 @@ public class JobExecutor(
         }
         catch (JsonException)
         {
-            AppendCapped(messages, "属性包 PropsJson 不是合法 JSON 字符串字典,按空属性包执行(47011 语义)。");
+            AppendMessage(messages, "属性包 PropsJson 不是合法 JSON 字符串字典,按空属性包执行(47011 语义)。");
             return new Dictionary<string, string?>();
         }
     }
 
-    /// <summary>追加一条处理器输出;只受 8KB 总量上限约束(不单独限制单条大小——单独设小上限会让 Http.MaxResponseLogBytes 调大后失效)。</summary>
-    private static void AppendCapped(StringBuilder messages, string text)
+    /// <summary>
+    /// 追加一条处理器输出。执行期间不做任何截断——处理器还没跑完,谁也不知道后面还有多少行,
+    /// 提前丢弃必然丢结尾;截断统一挪到 <see cref="Render"/>(执行结束、知道总长度之后)一次性做。
+    /// </summary>
+    private static void AppendMessage(StringBuilder messages, string text)
     {
         lock (messages)
         {
-            var room = 8192 - messages.Length;
-            if (room <= 0) return;
-            messages.AppendLine(Cap(text, room));
+            messages.AppendLine(text);
         }
     }
 
-    private static string? Render(StringBuilder messages)
+    /// <summary>渲染最终输出;超过 <paramref name="maxChars"/> 才截断(≤0 不限)。</summary>
+    private static string? Render(StringBuilder messages, int maxChars)
     {
+        string full;
         lock (messages)
         {
-            return messages.Length == 0 ? null : Cap(messages.ToString(), 8192);
+            if (messages.Length == 0) return null;
+            full = messages.ToString();
         }
+        return TruncateKeepingHeadAndTail(full, maxChars);
+    }
+
+    /// <summary>
+    /// 保留开头与结尾,截掉中间——多步任务的结尾通常是各步汇总和结束标记,比中间重复的逐行明细更有价值,
+    /// 不能像"先到先得"那样让前面的内容把后面的挤没。断点处插入的标记本身可读、不藏在字节里。
+    /// </summary>
+    private static string TruncateKeepingHeadAndTail(string text, int maxChars)
+    {
+        if (maxChars <= 0 || text.Length <= maxChars) return text;
+
+        var marker = $"{Environment.NewLine}……(中间省略 {text.Length - maxChars} 字符,原文共 {text.Length} 字符)……{Environment.NewLine}";
+        var budget = Math.Max(0, maxChars - marker.Length);
+        var headLen = (budget + 1) / 2;
+        var tailLen = budget - headLen;
+        return string.Concat(text.AsSpan(0, headLen), marker, text.AsSpan(text.Length - tailLen, tailLen));
     }
 
     private static string Cap(string text, int max) => text.Length <= max ? text : text[..max];

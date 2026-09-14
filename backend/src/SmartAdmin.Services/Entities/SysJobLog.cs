@@ -65,16 +65,19 @@ public class SysJobLog : AuditEntity
     [SugarColumn(ColumnDescription = "终止旗标(跨节点 kill)")]
     public bool KillRequested { get; set; }
 
-    /// <summary>处理器输出(截 8KB;HTTP 响应体截 Http.MaxResponseLogBytes)</summary>
+    /// <summary>
+    /// 处理器输出;超过 <see cref="AdminJobsOptions.MaxMessageChars"/>(字符数,≤0 不限)按「保留开头 + 结尾,截中间」
+    /// 截断,断点处留标记(HTTP 响应体截断走独立的 <see cref="AdminJobsHttpOptions.MaxResponseLogBytes"/>)。
+    /// </summary>
     /// <remarks>
     /// 禁止 <c>ColumnDataType="text"</c>:SqlServer 的 text 是非 Unicode,中文写入后读回成 ???。
     /// <see cref="StaticConfig.CodeFirst_BigString"/> 在 SqlServer 上解析为 nvarchar(max),其它方言仍是 longtext/text。
     /// </remarks>
-    [SugarColumn(ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true, ColumnDescription = "输出消息(截断)")]
+    [SugarColumn(ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true, ColumnDescription = "输出消息(超限截断,保留开头与结尾)")]
     public string? MessageText { get; set; }
 
-    /// <summary>失败异常信息(截 8KB)</summary>
+    /// <summary>失败异常信息;截断规则同 <see cref="MessageText"/>(共用 <see cref="AdminJobsOptions.MaxMessageChars"/>)。</summary>
     /// <remarks>同 <see cref="MessageText"/>:须走 CodeFirst_BigString,否则 SqlServer 丢中文。</remarks>
-    [SugarColumn(ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true, ColumnDescription = "异常信息(截断)")]
+    [SugarColumn(ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true, ColumnDescription = "异常信息(超限截断,保留开头与结尾)")]
     public string? ErrorText { get; set; }
 }
