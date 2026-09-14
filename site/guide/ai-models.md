@@ -45,6 +45,36 @@ public class ApprovalSummaryService(IAiChatClient ai)
 
 `Scene` is required — an empty string throws `49031`. The usage page groups by it, so dotted, hierarchical names like `approval.summary` or `ticket.reply` pay off when you later aggregate by prefix. Leave `ProviderCode`/`Model` unset and the gateway resolves the global default model; with neither configured it throws `49011` — go mark some model as default on the AI Models page.
 
+## Multimodal messages and structured output
+
+`AiChatMessage.User(parts)` accepts mixed text-and-image content instead of a plain string, and `AiChatRequest.ResponseSchema` constrains the model to return a result matching a given JSON Schema. Both are optional, additive fields — leave them out and you get the plain-text behavior above.
+
+```csharp
+var response = await ai.ChatAsync(new AiChatRequest
+{
+    Scene = "invoice.extract",
+    Messages =
+    [
+        AiChatMessage.User(
+        [
+            new AiChatContentPart.Text("Extract the amount and date from this invoice"),
+            new AiChatContentPart.Image(new AiImageSource.Base64("image/jpeg", base64Data)),
+        ]),
+    ],
+    ResponseSchema = JsonSerializer.SerializeToElement(new
+    {
+        type = "object",
+        properties = new { amount = new { type = "number" }, date = new { type = "string" } },
+        required = new[] { "amount", "date" },
+        additionalProperties = false,
+    }),
+}, cancellationToken);
+
+var invoice = JsonSerializer.Deserialize<InvoiceInfo>(response.Content);
+```
+
+Swap in `AiImageSource.Url` to point at a public image address instead of base64-encoding it. `System`-role messages don't support multi-part content — sending one throws `49032`, since both protocols' system field only accepts plain text. When a provider or model doesn't support images or structured output, the upstream error maps straight through to a `49020`-series code; the gateway never silently downgrades.
+
 ## Streaming and SSE
 
 `StreamAsync` returns `IAsyncEnumerable<AiChatChunk>` — a pure gateway-layer abstraction that assumes nothing about transport. Wiring it up as a browser-subscribable SSE stream uses .NET 10's native `TypedResults.ServerSentEvents`:

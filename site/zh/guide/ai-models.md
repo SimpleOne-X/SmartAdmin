@@ -45,6 +45,36 @@ public class ApprovalSummaryService(IAiChatClient ai)
 
 `Scene` 必填，空串直接抛 `49031`。用量统计页按它拆账，写 `approval.summary`、`ticket.reply` 这类点分层级的名字，方便按前缀聚合查询。不显式给 `ProviderCode` 或 `Model`，网关按全局默认模型解析；两者都没配置时抛 `49011`，去「AI 模型」页把某个模型设成默认再试。
 
+## 多模态与结构化输出
+
+`AiChatMessage.User(parts)` 接收文本与图片混排的内容；`AiChatRequest.ResponseSchema` 约束返回结果符合给定 JSON Schema。两者可选，不传即上面的纯文本行为。
+
+```csharp
+var response = await ai.ChatAsync(new AiChatRequest
+{
+    Scene = "invoice.extract",
+    Messages =
+    [
+        AiChatMessage.User(
+        [
+            new AiChatContentPart.Text("提取这张发票的金额与日期"),
+            new AiChatContentPart.Image(new AiImageSource.Base64("image/jpeg", base64Data)),
+        ]),
+    ],
+    ResponseSchema = JsonSerializer.SerializeToElement(new
+    {
+        type = "object",
+        properties = new { amount = new { type = "number" }, date = new { type = "string" } },
+        required = new[] { "amount", "date" },
+        additionalProperties = false,
+    }),
+}, cancellationToken);
+
+var invoice = JsonSerializer.Deserialize<InvoiceInfo>(response.Content);
+```
+
+图片来源换成 `AiImageSource.Url` 传公网地址，不用先转 base64。`System` 角色不支持多段内容，传了抛 `49032`；厂商或模型不支持时，上游报错映射成 `49020` 错误码，网关不做静默降级。
+
 ## 流式与 SSE
 
 `StreamAsync` 返回 `IAsyncEnumerable<AiChatChunk>`，是纯网关层的抽象，不假定任何传输方式。接成浏览器能订阅的 SSE，用 .NET 10 原生的 `TypedResults.ServerSentEvents`：

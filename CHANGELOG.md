@@ -14,6 +14,10 @@
 
 ## Unreleased
 
+### Added
+
+- **AI 网关：`IAiChatClient` 消息支持多模态内容（图片），对话请求支持结构化输出约束（JSON Schema）。** `AiChatMessage.User(parts)` 接收文本与图片混排的内容（`AiChatContentPart.Text` / `.Image`，图片来源支持 base64 或 URL），两个协议适配器分别按 OpenAI 兼容协议的 `image_url` 与 Anthropic 协议的 `image` 内容块序列化，DeepSeek、通义千问、智谱、Kimi、豆包等中国厂商与 OpenAI/DeepSeek 共用同一套 `OpenAiCompatibleAdapter`，无需单独适配。`AiChatRequest.ResponseSchema` 约束模型输出必须匹配给定 JSON Schema，OpenAI 兼容协议映射到 `response_format.json_schema`，Anthropic 映射到 `output_config.format`；`System` 角色消息不支持多段内容，传了直接抛 `49032`；厂商或模型不支持图片或结构化输出时，上游报错按现有 `49020` 系列错误码映射，网关不做静默降级。两条都是追加的可选字段，不传就是原有的纯文本行为，不影响现有调用方。（[#7](https://github.com/SmartCode-X/SmartAdmin/issues/7)）
+
 ## 10.11.0 - 2026-09-14
 
 ### Added
