@@ -1,0 +1,647 @@
+<title>AI 管理页面设计稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* ── SmartAdmin 角色令牌(与 web/packages/admin/src/styles/tokens.css 同名同值,默认 accent 青绿)── */
+  :root {
+    --color-primary: #14b8a6;
+    --color-primary-hover: #2dd4bf;
+    --color-primary-pressed: #0f766e;
+    --color-primary-light: rgba(20, 184, 166, 0.14);
+    --color-success: #00a43b;  --color-success-bg: #e0f4e7;
+    --color-warning: #a88400;  --color-warning-bg: #fff8e0;
+    --color-danger: #d15054;   --color-danger-bg: #ffeced;
+    --color-info: #0090b5;     --color-info-bg: #e0f2f6;
+    --color-bg-body: #f2f8f5;
+    --color-bg-app: linear-gradient(135deg, #f7fbf9 0%, #edf7f3 55%, #f7fbf9 100%);
+    --color-bg-container: rgba(255, 255, 255, 0.78);
+    --color-bg-container-solid: #fefefe;
+    --color-bg-elevated: #ffffff;
+    --color-bg-input: #ffffff;
+    --color-text-primary: #111827;
+    --color-text-secondary: #374151;
+    --color-text-tertiary: #6b7280;
+    --color-text-disabled: #9ca3af;
+    --color-border: #d7dbe0;
+    --color-border-strong: #bfc5cd;
+    --color-fill: #eef1f5;
+    --color-fill-hover: #e5e9ef;
+    --color-fill-disabled: #eef1f5;
+    --color-mask: rgba(24, 26, 42, 0.45);
+    --color-header-bg: rgba(255, 255, 255, 0.82);
+    --shadow-1: 0 1px 2px rgba(24, 26, 42, 0.05), 0 2px 6px rgba(24, 26, 42, 0.06);
+    --shadow-2: 0 10px 30px rgba(24, 26, 42, 0.12);
+    --shadow-3: 0 16px 48px rgba(24, 26, 42, 0.18);
+    /* 设计稿自身的页面底(稿纸),与 app 画布区分 */
+    --doc-bg: #e9efec;
+    --doc-ink: #1f2937;
+    --doc-muted: #5b6672;
+    --doc-line: #cfd8d3;
+    --callout: #f97316;
+    --font-family-base: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-family-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 12px; --radius-xl: 16px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-primary: #14b8a6; --color-primary-hover: #2dd4bf; --color-primary-pressed: #0f766e;
+      --color-primary-light: rgba(20, 184, 166, 0.16);
+      --color-success: #34d399; --color-success-bg: rgba(16, 185, 129, 0.14);
+      --color-warning: #fbbf24; --color-warning-bg: rgba(251, 191, 36, 0.14);
+      --color-danger: #fb7185;  --color-danger-bg: rgba(244, 63, 94, 0.16);
+      --color-info: #38bdf8;    --color-info-bg: rgba(56, 189, 248, 0.14);
+      --color-bg-body: #020617;
+      --color-bg-app: linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+      --color-bg-container: rgba(18, 28, 46, 0.9);
+      --color-bg-container-solid: #121c2e;
+      --color-bg-elevated: #182234;
+      --color-bg-input: #0f172a;
+      --color-text-primary: #f8fafc; --color-text-secondary: #cbd5e1;
+      --color-text-tertiary: #94a3b8; --color-text-disabled: #64748b;
+      --color-border: rgba(71, 85, 105, 0.4); --color-border-strong: rgba(100, 116, 139, 0.5);
+      --color-fill: #0f172a; --color-fill-hover: #1a2436; --color-fill-disabled: #1b2434;
+      --color-mask: rgba(2, 6, 23, 0.72); --color-header-bg: rgba(15, 23, 42, 0.7);
+      --shadow-1: 0 1px 0 rgba(255,255,255,0.04) inset, 0 2px 8px rgba(2,6,23,0.3);
+      --shadow-2: 0 10px 30px rgba(2,6,23,0.45), 0 0 0 1px rgba(51,65,85,0.35);
+      --shadow-3: 0 16px 48px rgba(2,6,23,0.55), 0 0 0 1px rgba(51,65,85,0.4);
+      --doc-bg: #0b1220; --doc-ink: #e5e7eb; --doc-muted: #9aa5b1; --doc-line: #243044;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --color-primary: #14b8a6; --color-primary-hover: #2dd4bf; --color-primary-pressed: #0f766e;
+    --color-primary-light: rgba(20, 184, 166, 0.16);
+    --color-success: #34d399; --color-success-bg: rgba(16, 185, 129, 0.14);
+    --color-warning: #fbbf24; --color-warning-bg: rgba(251, 191, 36, 0.14);
+    --color-danger: #fb7185;  --color-danger-bg: rgba(244, 63, 94, 0.16);
+    --color-info: #38bdf8;    --color-info-bg: rgba(56, 189, 248, 0.14);
+    --color-bg-body: #020617;
+    --color-bg-app: linear-gradient(135deg, #020617 0%, #0f172a 55%, #020617 100%);
+    --color-bg-container: rgba(18, 28, 46, 0.9);
+    --color-bg-container-solid: #121c2e;
+    --color-bg-elevated: #182234;
+    --color-bg-input: #0f172a;
+    --color-text-primary: #f8fafc; --color-text-secondary: #cbd5e1;
+    --color-text-tertiary: #94a3b8; --color-text-disabled: #64748b;
+    --color-border: rgba(71, 85, 105, 0.4); --color-border-strong: rgba(100, 116, 139, 0.5);
+    --color-fill: #0f172a; --color-fill-hover: #1a2436; --color-fill-disabled: #1b2434;
+    --color-mask: rgba(2, 6, 23, 0.72); --color-header-bg: rgba(15, 23, 42, 0.7);
+    --shadow-1: 0 1px 0 rgba(255,255,255,0.04) inset, 0 2px 8px rgba(2,6,23,0.3);
+    --shadow-2: 0 10px 30px rgba(2,6,23,0.45), 0 0 0 1px rgba(51,65,85,0.35);
+    --shadow-3: 0 16px 48px rgba(2,6,23,0.55), 0 0 0 1px rgba(51,65,85,0.4);
+    --doc-bg: #0b1220; --doc-ink: #e5e7eb; --doc-muted: #9aa5b1; --doc-line: #243044;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--doc-bg); color: var(--doc-ink);
+    font-family: var(--font-family-base); font-size: 14px; line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding-block: 28px 64px; padding-inline: 20px; }
+  .num { font-family: var(--font-family-mono); font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+  /* ── 稿头 ── */
+  .doc-head { display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; }
+  .eyebrow { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--doc-muted); }
+  .doc-head h1 { margin: 0 0 6px; font-size: 26px; line-height: 34px; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--doc-muted); }
+  .doc-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; padding: 3px; border: 1px solid var(--doc-line); border-radius: 999px; background: color-mix(in srgb, var(--doc-bg) 60%, transparent); }
+  .seg button { border: 0; background: transparent; color: var(--doc-muted); font: inherit; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--color-primary); color: #fff; }
+  .ghost { border: 1px solid var(--doc-line); background: transparent; color: var(--doc-ink); font: inherit; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  .ghost:hover { border-color: var(--color-primary); }
+
+  /* ── 稿面:每屏 = 页面框 + 右侧说明 ── */
+  .screen { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+  .screen + .screen { margin-top: 32px; }
+  .frame-title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 13px; color: var(--doc-muted); }
+  .frame-title b { color: var(--doc-ink); font-weight: 600; font-size: 15px; }
+  .notes { position: sticky; top: 16px; border: 1px solid var(--doc-line); border-radius: var(--radius-lg); padding: 16px 18px; background: color-mix(in srgb, var(--doc-bg) 70%, var(--color-bg-elevated)); }
+  .notes h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--doc-muted); }
+  .notes ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .notes li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 13px; line-height: 19px; color: var(--doc-ink); }
+  .notes li p { margin: 0; }
+  .notes li span { color: var(--doc-muted); }
+  .notes .perm { display: block; margin-top: 2px; font-family: var(--font-family-mono); font-size: 11px; color: var(--doc-muted); word-break: break-all; }
+  .callout { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--callout); color: #fff; font: 600 11px/1 var(--font-family-mono); flex: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--callout) 25%, transparent); vertical-align: middle; }
+  .co { position: absolute; z-index: 3; }
+
+  /* ── 后台外壳(侧栏 236 / 顶栏 62,与 DESIGN.md §3 一致)── */
+  .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 720px; border: 1px solid var(--doc-line); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg-app); box-shadow: var(--shadow-1); }
+  .sider { background: var(--color-bg-container); border-right: 1px solid var(--color-border); padding: 14px 10px; color: var(--color-text-secondary); backdrop-filter: blur(10px); }
+  .logo { display: flex; align-items: center; gap: 10px; padding: 6px 10px 16px; color: var(--color-text-primary); font-weight: 600; }
+  .logo i { width: 28px; height: 28px; border-radius: 8px; background: var(--color-primary); display: inline-block; }
+  .menu { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .menu li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+  .menu li svg { width: 18px; height: 18px; flex: none; opacity: .8; }
+  .menu li .chev { margin-left: auto; width: 14px; height: 14px; opacity: .55; }
+  .menu li.sub { padding-left: 40px; font-size: 13px; }
+  .menu li.on { background: var(--color-primary-light); color: var(--color-primary); position: relative; font-weight: 500; }
+  .menu li.on::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); }
+  .menu li.open { color: var(--color-text-primary); font-weight: 500; }
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { height: 62px; display: flex; align-items: center; gap: 14px; padding: 0 20px; background: var(--color-header-bg); backdrop-filter: blur(12px); border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); }
+  .crumb { display: flex; gap: 8px; align-items: center; color: var(--color-text-tertiary); font-size: 13px; }
+  .crumb b { color: var(--color-text-primary); font-weight: 500; }
+  .topbar .sp { flex: 1; }
+  .tool { width: 30px; height: 30px; border-radius: 8px; background: var(--color-fill); }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), #6366f1); }
+  .content { padding: 24px; display: grid; gap: 16px; align-content: start; }
+
+  /* ── Naive 风格通用件 ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-elevated); color: var(--color-text-secondary); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .btn.pri { background: var(--color-primary); border-color: var(--color-primary); color: #fff; font-weight: 500; }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 13px; }
+  .btn.text { border-color: transparent; background: transparent; color: var(--color-primary); padding: 0 6px; }
+  .btn.text.danger { color: var(--color-danger); }
+  .btn svg { width: 15px; height: 15px; }
+  .tag { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1; }
+  .tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .tag.ok { color: var(--color-success); background: var(--color-success-bg); }
+  .tag.warn { color: var(--color-warning); background: var(--color-warning-bg); }
+  .tag.off { color: var(--color-text-tertiary); background: var(--color-fill); }
+  .tag.err { color: var(--color-danger); background: var(--color-danger-bg); }
+  .tag.info { color: var(--color-info); background: var(--color-info-bg); }
+  .chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--color-border); font-size: 12px; color: var(--color-text-secondary); background: var(--color-bg-container-solid); }
+  .chip.def { border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); color: var(--color-primary); background: var(--color-primary-light); }
+  .switch { width: 36px; height: 20px; border-radius: 999px; background: var(--color-border-strong); position: relative; flex: none; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .switch.on { background: var(--color-primary); }
+  .switch.on::after { left: 18px; }
+  .card { background: var(--color-bg-container); border: 1px solid var(--color-border); border-radius: var(--radius-lg); backdrop-filter: blur(8px); }
+  .field { display: grid; gap: 6px; }
+  .field label { font-size: 13px; color: var(--color-text-secondary); }
+  .field label em { color: var(--color-danger); font-style: normal; margin-right: 4px; }
+  .input { height: 34px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-strong); background: var(--color-bg-input); color: var(--color-text-primary); display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
+  .input.ro { background: var(--color-fill-disabled); color: var(--color-text-tertiary); }
+  .input .ph { color: var(--color-text-disabled); }
+  .input .caret { margin-left: auto; width: 12px; height: 12px; border-right: 1.5px solid var(--color-text-tertiary); border-bottom: 1.5px solid var(--color-text-tertiary); transform: rotate(45deg) translateY(-3px); }
+  .hint { font-size: 12px; line-height: 18px; color: var(--color-text-tertiary); }
+  .table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  .table th { text-align: left; font-weight: 500; color: var(--color-text-secondary); background: var(--color-fill); padding: 0 12px; height: 40px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+  .table td { padding: 0 12px; height: 48px; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); white-space: nowrap; }
+  .table td.r, .table th.r { text-align: right; }
+  .table tr:hover td { background: var(--color-fill-hover); }
+  .table .sub { color: var(--color-text-tertiary); font-size: 12px; }
+  .scroller { overflow-x: auto; }
+  .pager { display: flex; justify-content: flex-end; align-items: center; gap: 6px; padding: 12px 16px; font-size: 13px; color: var(--color-text-secondary); }
+  .pager span { min-width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--color-border); }
+  .pager span.cur { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+  /* ── 页 1:AI 模型 ── */
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .summary { font-size: 13px; color: var(--color-text-secondary); display: flex; gap: 14px; flex-wrap: wrap; }
+  .summary b { color: var(--color-text-primary); font-weight: 500; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .pcard { position: relative; display: grid; gap: 12px; padding: 16px 16px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-container); backdrop-filter: blur(8px); transition: box-shadow .15s ease, border-color .15s ease; }
+  .pcard:hover { box-shadow: var(--shadow-2); }
+  .pcard.on { border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border)); }
+  .pcard.na { border-style: dashed; opacity: .82; }
+  .pcard.off { opacity: .78; }
+  .phead { display: flex; align-items: flex-start; gap: 12px; }
+  .plogo { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #fff; font: 600 13px/1 var(--font-family-mono); flex: none; letter-spacing: .02em; }
+  .pname { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 500; color: var(--color-text-primary); }
+  .pmeta { font-size: 12px; color: var(--color-text-tertiary); margin-top: 3px; font-family: var(--font-family-mono); }
+  .phead .switch { margin-left: auto; margin-top: 4px; }
+  .prow { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); flex-wrap: wrap; }
+  .prow .k { color: var(--color-text-tertiary); min-width: 44px; }
+  .models { display: flex; gap: 6px; flex-wrap: wrap; }
+  .usage { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--color-border); }
+  .usage .v { font: 500 18px/24px var(--font-family-mono); color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+  .usage .k { font-size: 12px; color: var(--color-text-tertiary); }
+  .usage svg { width: 96px; height: 30px; }
+  .pact { display: flex; justify-content: flex-end; gap: 2px; border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: -2px; }
+
+  /* ── 抽屉 ── */
+  .drawer-frame { display: grid; grid-template-columns: minmax(0, 1fr) 640px; min-height: 620px; border: 1px solid var(--doc-line); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-mask); }
+  .drawer-frame .ghosted { background: var(--color-bg-app); opacity: .6; padding: 24px; display: grid; gap: 14px; align-content: start; filter: saturate(.7); }
+  .drawer { background: var(--color-bg-elevated); box-shadow: var(--shadow-3); display: flex; flex-direction: column; min-width: 0; }
+  .dhead { display: flex; align-items: center; gap: 10px; padding: 16px 24px; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); font-size: 16px; font-weight: 600; }
+  .dhead .sp { flex: 1; }
+  .dbody { padding: 20px 24px; display: grid; gap: 16px; overflow: auto; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .mlist { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .mrow { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 12px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--color-border); font-size: 13px; color: var(--color-text-primary); }
+  .mrow:last-child { border-bottom: 0; }
+  .mrow .mono { font-family: var(--font-family-mono); font-size: 12px; color: var(--color-text-secondary); }
+  .cb { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--color-border-strong); background: var(--color-bg-input); }
+  .cb.on { background: var(--color-primary); border-color: var(--color-primary); position: relative; }
+  .cb.on::after { content: ''; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); }
+  .radio { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--color-border-strong); display: inline-block; vertical-align: -2px; margin-right: 6px; }
+  .radio.on { border: 4px solid var(--color-primary); }
+  .mrow .def { font-size: 12px; color: var(--color-text-tertiary); }
+  .mrow .def.cur { color: var(--color-primary); }
+  .madd { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--color-primary); font-size: 13px; background: var(--color-fill); }
+  .dfoot { margin-top: auto; padding: 14px 24px; border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: 10px; }
+  .keyline { display: flex; align-items: center; gap: 8px; }
+  .keyline .input { flex: 1; }
+  .testres { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-success-bg); color: var(--color-success); font-size: 13px; }
+  .testres .num { color: var(--color-text-secondary); }
+
+  /* ── 页 2:用量统计 ── */
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 16px; }
+  .filters .input { width: 170px; height: 32px; font-size: 13px; }
+  .quick { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  .quick span { padding: 0 12px; height: 32px; display: inline-flex; align-items: center; font-size: 13px; color: var(--color-text-secondary); border-right: 1px solid var(--color-border); }
+  .quick span:last-child { border-right: 0; }
+  .quick span.cur { background: var(--color-primary-light); color: var(--color-primary); font-weight: 500; }
+  .filters .sp { flex: 1; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .tile { padding: 16px 18px; display: grid; gap: 4px; }
+  .tile .k { font-size: 13px; color: var(--color-text-secondary); }
+  .tile .v { font: 500 26px/32px var(--font-family-mono); color: var(--color-text-primary); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .tile .v small { font-size: 14px; color: var(--color-text-tertiary); font-weight: 400; margin-left: 2px; }
+  .tile .d { font-size: 12px; color: var(--color-text-tertiary); display: flex; gap: 8px; align-items: center; }
+  .tile .d .up { color: var(--color-success); }
+  .tile .d .dn { color: var(--color-danger); }
+  .tile .bar { height: 5px; border-radius: 999px; background: var(--color-fill); overflow: hidden; margin-top: 6px; }
+  .tile .bar i { display: block; height: 100%; width: 85%; background: var(--color-primary); border-radius: 999px; }
+  .chart-card { padding: 16px 18px 12px; display: grid; gap: 10px; }
+  .chart-head { display: flex; align-items: center; gap: 12px; }
+  .chart-head h4 { margin: 0; font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+  .legend { margin-left: auto; display: flex; gap: 14px; font-size: 12px; color: var(--color-text-secondary); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  #trend { width: 100%; height: auto; display: block; }
+  .two { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; }
+  .tabs { display: flex; gap: 22px; padding: 0 16px; border-bottom: 1px solid var(--color-border); }
+  .tabs span { padding: 12px 0 10px; font-size: 14px; color: var(--color-text-secondary); position: relative; }
+  .tabs span.cur { color: var(--color-primary); font-weight: 500; }
+  .tabs span.cur::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--color-primary); border-radius: 2px; }
+  .share { display: inline-block; height: 6px; border-radius: 999px; background: var(--color-primary); vertical-align: middle; margin-right: 8px; }
+
+  .caption { font-size: 12px; color: var(--doc-muted); margin: 8px 0 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  @media (max-width: 1080px) {
+    .screen { grid-template-columns: 1fr; }
+    .notes { position: static; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .two { grid-template-columns: 1fr; }
+    .drawer-frame { grid-template-columns: 1fr; }
+    .drawer-frame .ghosted { display: none; }
+  }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .sider { display: none; }
+    .row2 { grid-template-columns: 1fr; }
+    .content { padding: 16px; }
+  }
+  @media (max-width: 520px) {
+    .tiles { grid-template-columns: 1fr; }
+    .wrap { padding-inline: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="doc-head">
+    <div>
+      <p class="eyebrow">SmartAdmin · 页面设计稿 · 数据均为示例</p>
+      <h1>AI 管理</h1>
+      <p class="lede">顶层目录「AI 管理」下的两页。页面沿用内核的侧栏骨架、卡片与表格样式；橙色圆点是设计说明的编号，实施时不会出现。</p>
+    </div>
+    <div class="doc-tools">
+      <div class="seg" role="tablist" aria-label="切换页面">
+        <button id="tab-model" role="tab" aria-pressed="true" data-target="screen-model">页 1 · AI 模型</button>
+        <button id="tab-usage" role="tab" aria-pressed="false" data-target="screen-usage">页 2 · 用量统计</button>
+      </div>
+      <button id="theme-btn" class="ghost" type="button">预览暗色</button>
+    </div>
+  </header>
+
+  <!-- ═══════════════ 页 1:AI 模型 ═══════════════ -->
+  <section id="screen-model" class="screen" aria-labelledby="tab-model">
+    <div>
+      <p class="frame-title"><b>AI 模型</b> <span>/system/ai-model · 厂商卡片 + 抽屉编辑</span></p>
+      <div class="shell">
+        <aside class="sider">
+          <div class="logo"><i></i>SmartAdmin</div>
+          <ul class="menu">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>工作台</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/></svg>组织管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-2-2z"/></svg>系统运维<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>任务调度<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/></svg>日志审计<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>文件管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li class="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 4h8M9 14h.01M15 14h.01"/></svg>AI 管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transform:rotate(90deg)"><path d="m9 6 6 6-6 6"/></svg><span class="callout co" style="position:static;margin-left:4px">1</span></li>
+            <li class="sub on">AI 模型</li>
+            <li class="sub">用量统计</li>
+          </ul>
+        </aside>
+        <div class="main">
+          <div class="topbar">
+            <span class="tool" aria-hidden="true"></span>
+            <div class="crumb">AI 管理 <span>/</span> <b>AI 模型</b></div>
+            <span class="sp"></span>
+            <span class="tool" aria-hidden="true"></span><span class="tool" aria-hidden="true"></span><span class="avatar" aria-hidden="true"></span>
+          </div>
+          <div class="content">
+            <div class="toolbar">
+              <div class="summary"><span class="callout">2</span><span><b>6</b> 个厂商</span><span><b>4</b> 个启用</span><span>默认模型 <b>deepseek-chat</b></span><span>本月合计 <b class="num">3.41M</b> Token</span></div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn" type="button">刷新</button>
+                <button class="btn pri" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>新增厂商</button>
+                <span class="callout">3</span>
+              </div>
+            </div>
+
+            <div class="grid">
+              <article class="pcard on">
+                <div class="phead">
+                  <div class="plogo" style="background:#4d6bfe">DS</div>
+                  <div><div class="pname">DeepSeek <span class="tag ok">已启用</span></div><div class="pmeta">openai-compatible · api.deepseek.com</div></div>
+                  <span class="switch on" role="switch" aria-checked="true" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span class="num">sk-••••••••ab12</span><span class="tag info" style="padding-left:6px">已配置</span><span class="callout">4</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip def">deepseek-chat · 默认</span><span class="chip">deepseek-reasoner</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">1,284,320</div></div><svg data-spark="1" viewBox="0 0 96 30" aria-hidden="true"></svg><span class="callout" style="position:absolute;right:12px;bottom:52px">5</span></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+
+              <article class="pcard on">
+                <div class="phead">
+                  <div class="plogo" style="background:#615ced">通义</div>
+                  <div><div class="pname">通义千问 <span class="tag ok">已启用</span></div><div class="pmeta">openai-compatible · dashscope.aliyuncs.com</div></div>
+                  <span class="switch on" role="switch" aria-checked="true" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span class="num">sk-••••••••9f3e</span><span class="tag info">已配置</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip">qwen-plus</span><span class="chip">qwen-max</span><span class="chip">qwen-turbo</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">1,102,480</div></div><svg data-spark="2" viewBox="0 0 96 30" aria-hidden="true"></svg></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+
+              <article class="pcard on">
+                <div class="phead">
+                  <div class="plogo" style="background:#10a37f">OA</div>
+                  <div><div class="pname">OpenAI <span class="tag ok">已启用</span></div><div class="pmeta">openai-compatible · api.openai.com</div></div>
+                  <span class="switch on" role="switch" aria-checked="true" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span class="num">sk-••••••••Kq7A</span><span class="tag info">已配置</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip">gpt-4.1</span><span class="chip">gpt-4.1-mini</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">612,900</div></div><svg data-spark="3" viewBox="0 0 96 30" aria-hidden="true"></svg></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+
+              <article class="pcard na">
+                <div class="phead">
+                  <div class="plogo" style="background:#c9653f">AN</div>
+                  <div><div class="pname">Anthropic <span class="tag warn">待配置 Key</span></div><div class="pmeta">anthropic · api.anthropic.com</div></div>
+                  <span class="switch" role="switch" aria-checked="false" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span style="color:var(--color-text-tertiary)">未配置，无法启用</span><span class="callout">6</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip">claude-sonnet-5</span><span class="chip">claude-haiku-4-5</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">0</div></div><svg data-spark="0" viewBox="0 0 96 30" aria-hidden="true"></svg></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+
+              <article class="pcard off">
+                <div class="phead">
+                  <div class="plogo" style="background:#2c5cff">智谱</div>
+                  <div><div class="pname">智谱 GLM <span class="tag off">已停用</span></div><div class="pmeta">openai-compatible · open.bigmodel.cn</div></div>
+                  <span class="switch" role="switch" aria-checked="false" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span class="num">••••••••.7xQm</span><span class="tag info">已配置</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip">glm-4-plus</span><span class="chip">glm-4-flash</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">86,140</div></div><svg data-spark="4" viewBox="0 0 96 30" aria-hidden="true"></svg></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+
+              <article class="pcard on">
+                <div class="phead">
+                  <div class="plogo" style="background:#374151">OL</div>
+                  <div><div class="pname">Ollama（本地） <span class="tag ok">已启用</span></div><div class="pmeta">openai-compatible · localhost:11434</div></div>
+                  <span class="switch on" role="switch" aria-checked="true" aria-label="启用"></span>
+                </div>
+                <div class="prow"><span class="k">Key</span><span style="color:var(--color-text-tertiary)">本地服务，无需 Key</span></div>
+                <div class="prow"><span class="k">模型</span><div class="models"><span class="chip">qwen2.5:14b</span><span class="chip">llama3.1:8b</span></div></div>
+                <div class="usage"><div><div class="k">本月 Token</div><div class="v">325,040</div></div><svg data-spark="5" viewBox="0 0 96 30" aria-hidden="true"></svg></div>
+                <div class="pact"><button class="btn sm text" type="button">测试连接</button><button class="btn sm text" type="button">编辑</button><button class="btn sm text danger" type="button">删除</button></div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="frame-title" style="margin-top:22px"><b>抽屉 · 编辑厂商</b> <span>FormContainer variant="drawer" · 宽 640 · 新增与编辑共用</span></p>
+      <div class="drawer-frame">
+        <div class="ghosted" aria-hidden="true">
+          <div class="toolbar"><div class="summary"><span><b>6</b> 个厂商</span><span><b>4</b> 个启用</span></div></div>
+          <div class="grid" style="grid-template-columns:1fr 1fr">
+            <div class="pcard on" style="min-height:150px"></div><div class="pcard on" style="min-height:150px"></div><div class="pcard na" style="min-height:150px"></div><div class="pcard off" style="min-height:150px"></div>
+          </div>
+        </div>
+        <div class="drawer" role="dialog" aria-label="编辑厂商">
+          <div class="dhead">编辑厂商 <span class="sp"></span><button class="btn sm" type="button">测试连接</button><span class="callout">7</span><span style="width:10px"></span><span aria-hidden="true" style="color:var(--color-text-tertiary);font-size:18px">×</span></div>
+          <div class="dbody">
+            <div class="row2">
+              <div class="field"><label><em>*</em>厂商预设</label><div class="input ro">DeepSeek<span class="caret"></span></div><div class="hint">新增时选预设即自动带出协议、Base URL 和模型清单；保存后不可改。<span class="callout">8</span></div></div>
+              <div class="field"><label><em>*</em>显示名称</label><div class="input">DeepSeek</div></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label>协议</label><div class="input ro">OpenAI 兼容<span class="caret"></span></div></div>
+              <div class="field"><label><em>*</em>Base URL</label><div class="input num" style="font-size:13px">https://api.deepseek.com/v1</div><div class="hint">走代理或自建网关时改这里；内网与云元数据地址会被拒绝。</div></div>
+            </div>
+            <div class="field">
+              <label>API Key</label>
+              <div class="keyline"><div class="input"><span class="ph">留空表示不修改</span></div><span class="tag info">当前 sk-••••••••ab12</span><span class="callout">9</span></div>
+              <div class="hint">明文只在保存这一次经过服务器，落库前用 AES-GCM 加密；任何接口都不会回传完整 Key。</div>
+            </div>
+            <div class="testres"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L20 7"/></svg>连接正常 · deepseek-chat 已响应 · 耗时 <span class="num">812 ms</span> · 消耗 <span class="num">23</span> Token</div>
+            <div class="field">
+              <label>模型清单 <span class="hint" style="display:inline">勾选启用，单选一个作为全局默认</span><span class="callout">10</span></label>
+              <div class="mlist">
+                <div class="mrow"><span class="cb on"></span><div>DeepSeek Chat <div class="mono">deepseek-chat</div></div><span class="def cur"><span class="radio on"></span>全局默认</span><span class="mono">128K</span></div>
+                <div class="mrow"><span class="cb on"></span><div>DeepSeek Reasoner <div class="mono">deepseek-reasoner</div></div><span class="def"><span class="radio"></span>设为默认</span><span class="mono">128K</span></div>
+                <div class="madd">＋ 添加自定义模型名</div>
+              </div>
+            </div>
+            <div class="row2">
+              <div class="field"><label>排序</label><div class="input num">1</div></div>
+              <div class="field"><label>启用</label><div style="display:flex;align-items:center;gap:10px;height:34px"><span class="switch on"></span><span class="hint">未配置 Key 时不能启用</span></div></div>
+            </div>
+            <div class="field"><label>备注</label><div class="input" style="height:60px;align-items:flex-start;padding-top:6px"><span class="ph">选填</span></div></div>
+          </div>
+          <div class="dfoot"><button class="btn" type="button">取消</button><button class="btn pri" type="button">保存</button></div>
+        </div>
+      </div>
+      <p class="caption">抽屉高度随内容；保存时先校验再提交，失败不关闭（FormContainer 的 onConfirm 协议）。</p>
+    </div>
+
+    <aside class="notes" aria-label="页 1 设计说明">
+      <h3>设计说明 · AI 模型</h3>
+      <ol>
+        <li><span class="callout">1</span><p>顶层目录「AI 管理」，Id 700，排在文件管理之后；下挂两页 710 / 720。</p></li>
+        <li><span class="callout">2</span><p>汇总行：厂商数、启用数、全局默认模型、本月合计。合计与卡片小字同源，都来自用量日志。</p></li>
+        <li><span class="callout">3</span><p>「新增厂商」打开同一个抽屉；不做平铺表格，厂商数量个位数，卡片一眼看全。<span class="perm">v-auth POST:/api/v1/sys/ai/provider/add</span></p></li>
+        <li><span class="callout">4</span><p>Key 只显示脱敏尾四位 + 「已配置」标签，接口永不回传完整值。</p></li>
+        <li><span class="callout">5</span><p>本月 Token 带近 30 天迷你趋势；详细拆分去「用量统计」。</p></li>
+        <li><span class="callout">6</span><p>三种卡片态：启用（主色描边）、停用（降透明）、待配置 Key（虚线框，开关禁用）。</p></li>
+        <li><span class="callout">7</span><p>「测试连接」对当前 Base URL + Key 发一条最小对话，回耗时与 Token；结果也记入用量日志，场景 system.test。<span class="perm">POST:/api/v1/sys/ai/provider/{id}/test</span></p></li>
+        <li><span class="callout">8</span><p>预设决定协议与默认 Base URL；「自定义（OpenAI 兼容）」预设留给未列出的厂商。</p></li>
+        <li><span class="callout">9</span><p>编辑态 Key 框留空即不改；新增态为必填（Ollama 预设除外）。生产环境未配置 DataProtection 主密钥时，保存被拒并提示配置项。</p></li>
+        <li><span class="callout">10</span><p>模型按厂商挂子行；全局只有一个默认模型，业务调用不指定模型时用它。</p></li>
+      </ol>
+    </aside>
+  </section>
+
+  <!-- ═══════════════ 页 2:用量统计 ═══════════════ -->
+  <section id="screen-usage" class="screen" aria-labelledby="tab-usage" hidden>
+    <div>
+      <p class="frame-title"><b>用量统计</b> <span>/system/ai-usage · 筛选 + 指标 + 趋势 + 分组 + 明细</span></p>
+      <div class="shell">
+        <aside class="sider">
+          <div class="logo"><i></i>SmartAdmin</div>
+          <ul class="menu">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>工作台</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/></svg>组织管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-2-2z"/></svg>系统运维<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>任务调度<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/></svg>日志审计<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>文件管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li class="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 4h8M9 14h.01M15 14h.01"/></svg>AI 管理<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transform:rotate(90deg)"><path d="m9 6 6 6-6 6"/></svg></li>
+            <li class="sub">AI 模型</li>
+            <li class="sub on">用量统计</li>
+          </ul>
+        </aside>
+        <div class="main">
+          <div class="topbar">
+            <span class="tool" aria-hidden="true"></span>
+            <div class="crumb">AI 管理 <span>/</span> <b>用量统计</b></div>
+            <span class="sp"></span>
+            <span class="tool" aria-hidden="true"></span><span class="tool" aria-hidden="true"></span><span class="avatar" aria-hidden="true"></span>
+          </div>
+          <div class="content">
+            <div class="card filters">
+              <div class="quick"><span>今日</span><span>7 天</span><span class="cur">30 天</span><span>本月</span></div>
+              <div class="input"><span class="num" style="font-size:12px">08-14 → 09-13</span><span class="caret"></span></div>
+              <div class="input"><span class="ph">全部厂商</span><span class="caret"></span></div>
+              <div class="input"><span class="ph">全部模型</span><span class="caret"></span></div>
+              <div class="input"><span class="ph">全部场景</span><span class="caret"></span></div>
+              <span class="callout">1</span>
+              <span class="sp"></span>
+              <button class="btn" type="button">导出</button>
+            </div>
+
+            <div class="tiles">
+              <div class="card tile"><div class="k">总 Token</div><div class="v">3,412,880</div><div class="d"><span class="up">▲ 18.2%</span>较前 30 天</div><div class="bar"><i style="width:85%"></i></div></div>
+              <div class="card tile"><div class="k">输入 / 输出</div><div class="v">2.91M <small>/ 0.51M</small></div><div class="d">输出占比 <span class="num">14.9%</span></div><div class="bar"><i style="width:15%"></i></div></div>
+              <div class="card tile"><div class="k">调用次数</div><div class="v">4,318</div><div class="d">平均每次 <span class="num">790</span> Token · P95 耗时 <span class="num">2.4s</span></div><div class="bar"><i style="width:62%"></i></div></div>
+              <div class="card tile" style="position:relative"><div class="k">失败</div><div class="v">12 <small>0.28%</small></div><div class="d"><span class="dn">▼ 0.1 pt</span>限流 7 · 超时 4 · 鉴权 1</div><div class="bar"><i style="width:3%;background:var(--color-danger)"></i></div><span class="callout" style="position:absolute;right:12px;top:12px">2</span></div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="chart-head"><h4>每日 Token</h4><span class="callout">3</span><div class="legend"><span><i style="background:var(--color-primary)"></i>输入</span><span><i style="background:#6366f1"></i>输出</span></div></div>
+              <svg id="trend" viewBox="0 0 900 260" role="img" aria-label="近 30 天每日输入与输出 Token 折线图"></svg>
+            </div>
+
+            <div class="two">
+              <div class="card">
+                <div class="tabs"><span>按厂商</span><span>按模型</span><span class="cur">按场景</span><span>按用户</span><span class="callout" style="margin:10px 0 0 auto">4</span></div>
+                <div class="scroller"><table class="table">
+                  <thead><tr><th>场景</th><th class="r">Token</th><th class="r">占比</th><th class="r">调用</th><th class="r">均耗时</th></tr></thead>
+                  <tbody>
+                    <tr><td>approval.summary <div class="sub">审批摘要</div></td><td class="r num">1,988,210</td><td class="r"><span class="share" style="width:58px"></span><span class="num">58.3%</span></td><td class="r num">2,412</td><td class="r num">1.9s</td></tr>
+                    <tr><td>approval.risk <div class="sub">审批风险提示</div></td><td class="r num">1,021,600</td><td class="r"><span class="share" style="width:30px"></span><span class="num">29.9%</span></td><td class="r num">1,305</td><td class="r num">2.6s</td></tr>
+                    <tr><td>notice.draft <div class="sub">公告草拟</div></td><td class="r num">386,930</td><td class="r"><span class="share" style="width:11px"></span><span class="num">11.3%</span></td><td class="r num">577</td><td class="r num">3.1s</td></tr>
+                    <tr><td>system.test <div class="sub">测试连接</div></td><td class="r num">16,140</td><td class="r"><span class="share" style="width:1px"></span><span class="num">0.5%</span></td><td class="r num">24</td><td class="r num">0.8s</td></tr>
+                  </tbody>
+                </table></div>
+              </div>
+              <div class="card">
+                <div class="tabs"><span class="cur">调用明细</span><span class="callout" style="margin:10px 0 0 auto">5</span></div>
+                <div class="scroller"><table class="table">
+                  <thead><tr><th>时间</th><th>场景</th><th>用户</th><th>厂商 / 模型</th><th class="r">输入</th><th class="r">输出</th><th class="r">耗时</th><th>状态</th></tr></thead>
+                  <tbody>
+                    <tr><td class="num">09-13 10:42:07</td><td>approval.summary</td><td>张晓</td><td>DeepSeek <div class="sub">deepseek-chat</div></td><td class="r num">1,204</td><td class="r num">186</td><td class="r num">1.6s</td><td><span class="tag ok">成功</span></td></tr>
+                    <tr><td class="num">09-13 10:41:52</td><td>approval.risk</td><td>张晓</td><td>DeepSeek <div class="sub">deepseek-reasoner</div></td><td class="r num">2,890</td><td class="r num">642</td><td class="r num">4.2s</td><td><span class="tag ok">成功</span></td></tr>
+                    <tr><td class="num">09-13 10:40:18</td><td>notice.draft</td><td>李文</td><td>通义千问 <div class="sub">qwen-plus</div></td><td class="r num">640</td><td class="r num">318</td><td class="r num">2.8s</td><td><span class="tag ok">成功</span></td></tr>
+                    <tr><td class="num">09-13 10:39:44</td><td>approval.summary</td><td>王琪</td><td>OpenAI <div class="sub">gpt-4.1-mini</div></td><td class="r num">—</td><td class="r num">—</td><td class="r num">30.0s</td><td><span class="tag err">超时</span></td></tr>
+                    <tr><td class="num">09-13 10:38:03</td><td>approval.summary</td><td>王琪</td><td>DeepSeek <div class="sub">deepseek-chat</div></td><td class="r num">986</td><td class="r num">151</td><td class="r num">1.3s</td><td><span class="tag ok">成功</span></td></tr>
+                    <tr><td class="num">09-13 10:36:29</td><td>system.test</td><td>admin</td><td>Ollama <div class="sub">qwen2.5:14b</div></td><td class="r num">18</td><td class="r num">5</td><td class="r num">0.7s</td><td><span class="tag ok">成功</span></td></tr>
+                  </tbody>
+                </table></div>
+                <div class="pager">共 <span class="num" style="border:0">4,318</span> 条 <span>‹</span><span class="cur">1</span><span>2</span><span>3</span><span>…</span><span>216</span><span>›</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="notes" aria-label="页 2 设计说明">
+      <h3>设计说明 · 用量统计</h3>
+      <ol>
+        <li><span class="callout">1</span><p>筛选四项：时间（快捷 + 自定义范围）、厂商、模型、场景；改动即刷新下方全部区块。</p></li>
+        <li><span class="callout">2</span><p>指标四格：总 Token、输入/输出、调用次数、失败。失败拆原因，是排障入口。</p></li>
+        <li><span class="callout">3</span><p>趋势图走内核 LineChart（echarts），暗色自动跟随主题。按天聚合，输入与输出两条线。</p></li>
+        <li><span class="callout">4</span><p>分组表四个维度切换，共用一个接口，参数 groupBy。占比条按最大值归一。<span class="perm">GET:/api/v1/sys/ai/usage/summary</span></p></li>
+        <li><span class="callout">5</span><p>明细分页表：每次调用一行，失败行显示错误类型。默认保留 90 天，由定时任务清理。<span class="perm">GET:/api/v1/sys/ai/usage/page</span></p></li>
+        <li><span class="callout" style="background:var(--color-text-tertiary)">·</span><p><span>本页只有「查询」一颗权限按钮，可以单独授给只看用量的角色。费用估算、配额告警放二期，表结构已预留。</span></p></li>
+      </ol>
+    </aside>
+  </section>
+</div>
+
+<script>
+  (function () {
+    // ── 页面切换 ──
+    var tabs = document.querySelectorAll('.seg button');
+    tabs.forEach(function (b) {
+      b.addEventListener('click', function () {
+        tabs.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        document.querySelectorAll('.screen').forEach(function (s) { s.hidden = s.id !== b.dataset.target; });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+    // ── 明暗预览:在 <html> 上打 data-theme,与真实应用同一机制 ──
+    var root = document.documentElement, btn = document.getElementById('theme-btn');
+    function isDark() { return root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches); }
+    function label() { btn.textContent = isDark() ? '预览亮色' : '预览暗色'; }
+    btn.addEventListener('click', function () { root.dataset.theme = isDark() ? 'light' : 'dark'; label(); });
+    label();
+
+    // ── 示例数据:近 30 天每日 Token ──
+    var inp = [72300,68900,81200,90400,88100,64200,47800,95600,102300,99800,110400,104900,70100,52300,118700,121900,115200,127400,119800,80200,58900,131600,138200,129500,134800,140100,92400,66300,136900,143600];
+    var out = [11800,10900,13200,15100,14600,10400,7800,16200,17900,17100,19400,18300,11600,8700,20900,21600,20200,22800,21100,13900,9900,23400,24600,22900,24100,25200,16100,11200,24700,25900];
+    var dates = []; var d0 = new Date(2026, 7, 15);
+    for (var i = 0; i < 30; i++) { var d = new Date(d0); d.setDate(d0.getDate() + i); dates.push((d.getMonth() + 1) + '-' + String(d.getDate()).padStart(2, '0')); }
+
+    // ── 折线图:按数据定刻度,标签只标图里够得到的值 ──
+    var svg = document.getElementById('trend');
+    var W = 900, H = 260, L = 64, R = 16, T = 16, B = 34;
+    var maxV = Math.max.apply(null, inp), step = 40000, yMax = Math.ceil(maxV / step) * step;
+    var x = function (i) { return L + i * (W - L - R) / (inp.length - 1); };
+    var y = function (v) { return T + (H - T - B) * (1 - v / yMax); };
+    var ns = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs, text) { var e = document.createElementNS(ns, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+    for (var v = 0; v <= yMax; v += step) {
+      svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: 'var(--color-border)', 'stroke-dasharray': v === 0 ? '0' : '3 4' }));
+      svg.appendChild(el('text', { x: L - 10, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'JetBrains Mono, monospace', fill: 'var(--color-text-tertiary)' }, v === 0 ? '0' : (v / 1000) + 'k'));
+    }
+    dates.forEach(function (dt, i) { if (i % 5 === 0 || i === 29) svg.appendChild(el('text', { x: x(i), y: H - 12, 'text-anchor': 'middle', 'font-size': 11, 'font-family': 'JetBrains Mono, monospace', fill: 'var(--color-text-tertiary)' }, dt)); });
+    function path(arr) { return arr.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' '); }
+    svg.appendChild(el('path', { d: path(inp) + ' L' + x(29).toFixed(1) + ' ' + y(0) + ' L' + x(0) + ' ' + y(0) + ' Z', fill: 'var(--color-primary)', opacity: 0.12 }));
+    svg.appendChild(el('path', { d: path(inp), fill: 'none', stroke: 'var(--color-primary)', 'stroke-width': 2.2, 'stroke-linejoin': 'round' }));
+    svg.appendChild(el('path', { d: path(out), fill: 'none', stroke: '#6366f1', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    svg.appendChild(el('circle', { cx: x(29), cy: y(inp[29]), r: 4, fill: 'var(--color-primary)', stroke: 'var(--color-bg-elevated)', 'stroke-width': 2 }));
+    svg.appendChild(el('circle', { cx: x(29), cy: y(out[29]), r: 4, fill: '#6366f1', stroke: 'var(--color-bg-elevated)', 'stroke-width': 2 }));
+    svg.appendChild(el('text', { x: x(29) - 8, y: y(inp[29]) - 10, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'JetBrains Mono, monospace', fill: 'var(--color-text-secondary)' }, '143.6k'));
+
+    // ── 卡片迷你趋势:同一份形状按厂商缩放 ──
+    var seeds = { '0': null, '1': inp, '2': inp.map(function (v, i) { return v * 0.86 + (i % 3) * 3000; }), '3': inp.map(function (v, i) { return v * 0.48 + (i % 4) * 2500; }), '4': inp.map(function (v, i) { return i < 18 ? v * 0.2 : 0; }), '5': inp.map(function (v, i) { return v * 0.25 + (i % 5) * 1200; }) };
+    document.querySelectorAll('svg[data-spark]').forEach(function (s) {
+      var arr = seeds[s.dataset.spark];
+      if (!arr) { s.appendChild(el('line', { x1: 0, x2: 96, y1: 26, y2: 26, stroke: 'var(--color-border)', 'stroke-dasharray': '2 3' })); return; }
+      var m = Math.max.apply(null, arr) || 1;
+      var pts = arr.map(function (v, i) { return (i * 96 / (arr.length - 1)).toFixed(1) + ',' + (28 - 26 * v / m).toFixed(1); }).join(' ');
+      s.appendChild(el('polyline', { points: pts + ' 96,30 0,30', fill: 'var(--color-primary)', opacity: 0.12 }));
+      s.appendChild(el('polyline', { points: pts, fill: 'none', stroke: 'var(--color-primary)', 'stroke-width': 1.6, 'stroke-linejoin': 'round' }));
+    });
+  })();
+</script>
