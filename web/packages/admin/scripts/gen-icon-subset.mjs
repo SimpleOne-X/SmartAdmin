@@ -25,8 +25,10 @@ const WEB_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const SEED_ICONS = [
   'ph:bell-duotone',
   'ph:book-open-text-duotone',
+  'ph:brain-duotone',
   'ph:broadcast-duotone',
   'ph:buildings-duotone',
+  'ph:chart-line-up-duotone',
   'ph:clipboard-text-duotone',
   'ph:clock-countdown-duotone',
   'ph:database-duotone',
@@ -38,6 +40,7 @@ const SEED_ICONS = [
   'ph:list-dashes-duotone',
   'ph:pulse-duotone',
   'ph:qr-code-duotone',
+  'ph:robot-duotone',
   'ph:scroll-duotone',
   'ph:shield-check-duotone',
   'ph:sign-in-duotone',

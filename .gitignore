@@ -13,6 +13,8 @@ artifacts/
 data/
 *.db
 *.db-journal
+# dotnet test（MTP/xUnit v3）默认把 .trx 报告写到运行目录下的 TestResults/
+TestResults/
 # 文件日志（SmartAdmin:Logging:File，默认关闭）；无前导斜杠 → 匹配任何宿主下的 logs/
 logs/
 # 含内部斜杠的模式会锚定到仓库根目录；只有 **/ 前缀才能匹配任何宿主下的上传目录

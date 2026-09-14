@@ -19,7 +19,7 @@ public static class ReplaceabilityContract
     public static readonly Type[] MultiImplementation =
     [
         typeof(ISeedData), typeof(IAdminJob), typeof(ICaptchaProvider), typeof(IExternalAuthProvider),
-        typeof(IDatabaseReadyHook),
+        typeof(IDatabaseReadyHook), typeof(IAiProtocolAdapter),
     ];
 
     /// <summary>开放泛型扩展点:造不出 DispatchProxy(要先闭合),由 <c>PreRegisteredRepository_ShouldWin</c> 单测。</summary>
@@ -105,6 +105,11 @@ public static class ReplaceabilityContract
         (typeof(IJobService), ServiceLifetime.Scoped),
         (typeof(IJobLogService), ServiceLifetime.Scoped),
         (typeof(IJobHandlerResolver), ServiceLifetime.Singleton),
+
+        // AI 网关
+        (typeof(IAiChatClient), ServiceLifetime.Scoped),
+        (typeof(IAiUsageService), ServiceLifetime.Scoped),
+        (typeof(IAiProviderService), ServiceLifetime.Scoped),
     ];
 
     /// <summary>用 <see cref="DispatchProxy"/> 现造一个接口的假实现:不必为 60 个接口各写一个 Fake 类。</summary>

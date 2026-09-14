@@ -4,6 +4,161 @@
  */
 
 export interface paths {
+    "/api/v1/sys/ai/provider/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询 AI 厂商(含模型清单) */
+        get: operations["AiProvider_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/provider/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 厂商详情(含模型清单) */
+        get: operations["AiProvider_Get"];
+        /** 更新 AI 厂商(不含厂商预设/协议,创建后不可改) */
+        put: operations["AiProvider_Update"];
+        post?: never;
+        /** 软删除 AI 厂商(级联软删其下模型) */
+        delete: operations["AiProvider_Delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/provider/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 厂商预置清单(协议/BaseUrl/鉴权方式/起步模型),新增页选预设时展示 */
+        get: operations["AiProvider_Presets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/provider/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增 AI 厂商,返回新 Id */
+        post: operations["AiProvider_Add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/provider/{id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 启停 AI 厂商(启用时若未配置 Key 会被拒绝) */
+        put: operations["AiProvider_SetEnabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/provider/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 测试连接:取该厂商默认/首个可用模型发一条极短对话,失败原因在返回体里展示,不抛异常 */
+        post: operations["AiProvider_Test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用量汇总:时间区间内的总计 + 按厂商/模型/场景/用户维度的分组聚合 */
+        get: operations["AiUsage_Summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/usage/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用量趋势:按天聚合的 Token/调用数,区间内无数据的日期补 0 */
+        get: operations["AiUsage_Trend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/ai/usage/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用量明细分页(不聚合) */
+        get: operations["AiUsage_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/captcha": {
         parameters: {
             query?: never;
@@ -2384,6 +2539,188 @@ export interface components {
             initialPassword: string;
         };
         /**
+         * @description AI 模型入参(厂商新增/编辑时随模型清单整体提交)。long? AiModelInput.Id 为 `null` 表示新增该行;
+         *     有值表示更新该行;厂商原有模型行中不在入参列表里的按软删处理(见 AiProviderService)。
+         */
+        AiModelInput: {
+            /** Format: int64 */
+            id: null | number | string;
+            name: string;
+            displayName: string;
+            enabled: boolean;
+            isDefault: boolean;
+            /** Format: int32 */
+            contextWindow: null | number | string;
+            /** Format: double */
+            inputPrice: null | number | string;
+            /** Format: double */
+            outputPrice: null | number | string;
+        };
+        /** @description AI 厂商预置里的一个起步模型 */
+        AiModelPreset: {
+            name: string;
+            displayName: string;
+            /** Format: int32 */
+            contextWindow?: null | number | string;
+        };
+        /** @description AI 模型出参(挂在某个厂商下)。 */
+        AiModelView: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
+            displayName: string;
+            enabled: boolean;
+            isDefault: boolean;
+            /** Format: int32 */
+            contextWindow: null | number | string;
+            /** Format: double */
+            inputPrice: null | number | string;
+            /** Format: double */
+            outputPrice: null | number | string;
+        };
+        /** @description AI 厂商新增入参。string? AiProviderAddInput.ApiKey 为空表示不配置 Key(string AiProviderAddInput.AuthScheme != none 时不能启用)。 */
+        AiProviderAddInput: {
+            code: string;
+            name: string;
+            preset: string;
+            baseUrl: string;
+            authScheme: string;
+            apiKey: null | string;
+            /** Format: int32 */
+            sort: number | string;
+            remark: null | string;
+            models: components["schemas"]["AiModelInput"][];
+        };
+        /** @description AI 厂商预置项:协议 / Base URL / 鉴权方式由预设带出,运维只填 Key(见 docs/plans/ai-management.md §6)。 */
+        AiProviderPreset: {
+            code: string;
+            name: string;
+            protocol: string;
+            baseUrl: string;
+            authScheme: string;
+            models: components["schemas"]["AiModelPreset"][];
+        };
+        /**
+         * @description AI 厂商编辑入参。<b>没有</b>`Preset`/`Protocol` 字段——这两项创建后不可改,入参类型层面就不给改的机会。
+         *     string? AiProviderUpdateInput.ApiKey 为 `null`/空串表示不改动原有 Key;非空则重新加密覆盖。
+         */
+        AiProviderUpdateInput: {
+            code: string;
+            name: string;
+            baseUrl: string;
+            authScheme: string;
+            apiKey: null | string;
+            /** Format: int32 */
+            sort: number | string;
+            remark: null | string;
+            models: components["schemas"]["AiModelInput"][];
+        };
+        /**
+         * @description AI 厂商出参。<b>不含</b>明文 Key——只有 string? AiProviderView.ApiKeyHint(尾四位)+ bool AiProviderView.HasApiKey,
+         *     明文只在保存那一次经过内存(见 AiProviderService)。
+         */
+        AiProviderView: {
+            /** Format: int64 */
+            id: number | string;
+            code: string;
+            name: string;
+            preset: string;
+            protocol: string;
+            baseUrl: string;
+            authScheme: string;
+            apiKeyHint: null | string;
+            hasApiKey: boolean;
+            enabled: boolean;
+            /** Format: int32 */
+            sort: number | string;
+            remark: null | string;
+            models: components["schemas"]["AiModelView"][];
+        };
+        /**
+         * @description 测试连接结果。bool AiTestResult.Ok 为 `false` 时 string? AiTestResult.Error 携带排障文案——
+         *     这是给运维在「测试连接」按钮下直接展示的诊断信息,不是走 ErrorCode 信封的业务错误,
+         *     所以不受"错误一律用数字 ErrorCode"的约束(Task&lt;AiTestResult&gt; AiProviderService.TestAsync(long id) 从不让异常冒泡出这个方法)。
+         */
+        AiTestResult: {
+            ok: boolean;
+            model: null | string;
+            /** Format: int32 */
+            latencyMs: number | string;
+            usage: null | components["schemas"]["AiUsage"];
+            error: null | string;
+        };
+        /** @description Token 用量 */
+        AiUsage: {
+            /** Format: int32 */
+            inputTokens: number | string;
+            /** Format: int32 */
+            outputTokens: number | string;
+            source: components["schemas"]["AiUsageSource"];
+            /**
+             * Format: int32
+             * @description 输入 + 输出
+             */
+            totalTokens?: number | string;
+        };
+        /** @description 用量汇总的分组维度。 */
+        AiUsageGroupBy: number;
+        /**
+         * @description 某个分组维度下一行聚合数据。`Key` 是分组键的原始值(厂商编码/模型名/场景标签,或用户 Id 的字符串形式;
+         *     用户为空时为 `"0"`);`Label` 是展示名,仅 AiUsageGroupBy.User 分组尝试回填用户名,查不到或其它维度为 null;
+         *     `SharePercent` 是该组 (InputTokens+OutputTokens) 占总 Token 的百分比,0~100,总量为 0 时给 0。
+         */
+        AiUsageGroupRow: {
+            key: string;
+            label: null | string;
+            /** Format: int64 */
+            inputTokens: number | string;
+            /** Format: int64 */
+            outputTokens: number | string;
+            /** Format: int64 */
+            callCount: number | string;
+            /** Format: double */
+            sharePercent: number | string;
+            /** Format: double */
+            avgLatencyMs: number | string;
+        };
+        /** @description 用量数据的来源 */
+        AiUsageSource: number;
+        /** @description 用量汇总结果:总计 + 按 AiUsageGroupBy AiUsageSummaryInput.GroupBy 维度的分组列表。 */
+        AiUsageSummary: {
+            totals: components["schemas"]["AiUsageTotals"];
+            groups: components["schemas"]["AiUsageGroupRow"][];
+        };
+        /**
+         * @description 时间区间内的用量总计。`FailuresByErrorCode`:失败按内核错误码分类计数,
+         *     int? SysAiUsageLog.ErrorCode 为 null 的失败行归到约定 key `0`。
+         */
+        AiUsageTotals: {
+            /** Format: int64 */
+            totalTokens: number | string;
+            /** Format: int64 */
+            inputTokens: number | string;
+            /** Format: int64 */
+            outputTokens: number | string;
+            /** Format: int64 */
+            callCount: number | string;
+            /** Format: int64 */
+            failureCount: number | string;
+            failuresByErrorCode: {
+                [key: string]: number | string;
+            };
+        };
+        /** @description 按天聚合的一个趋势点。区间内没有数据的日期也会补 0(供前端画连续折线)。 */
+        AiUsageTrendPoint: {
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            inputTokens: number | string;
+            /** Format: int64 */
+            outputTokens: number | string;
+            /** Format: int64 */
+            callCount: number | string;
+        };
+        /**
          * @description 批量删除入参:目标 Id 集合。各模块的 `POST .../batch-delete` 端点统一收此形状,
          *     服务层 `DeleteBatchAsync` 复用单删的守卫/软删/失效逻辑逐个处理。空集合视为无操作。
          */
@@ -2993,12 +3330,12 @@ export interface components {
             mustChangePassword?: boolean;
             /**
              * @description 会话交付模式。`body`=刷新令牌在 JSON 体(默认);
-             *     `cookie`=刷新令牌在 HttpOnly Cookie。null 表示未声明(旧客户端可忽略)。
+             *     `cookie`=刷新令牌在 HttpOnly Cookie。null 表示未声明(不认该字段的客户端忽略即可)。
              */
             sessionMode?: null | string;
             /**
              * @description 是否要求双提交 CSRF(`X-Smart-CSRF` + `smart_csrf` Cookie)。
-             *     Cookie 会话模式为 true;默认模式为 null/false。旧客户端可忽略。
+             *     Cookie 会话模式为 true;默认模式为 null/false。不认该字段的客户端忽略即可。
              */
             csrfRequired?: null | boolean;
             /** @description 是否超管;前端据此在 profile 接口故障时仍能正确 fail-open v-auth。 */
@@ -3230,6 +3567,34 @@ export interface components {
          * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
          *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
          */
+        PagedListOfAiProviderView: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["AiProviderView"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
         PagedListOfNoticeMineItem: {
             /**
              * Format: int32
@@ -3309,6 +3674,34 @@ export interface components {
             pages?: number | string;
             /** @description 当前页数据 */
             items?: components["schemas"]["RecycleBinItem"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
+        PagedListOfSysAiUsageLog: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["SysAiUsageLog"][];
         };
         /**
          * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
@@ -3792,6 +4185,69 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfAiProviderView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["AiProviderView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfAiTestResult: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["AiTestResult"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfAiUsageSummary: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["AiUsageSummary"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfboolean: {
             /**
              * Format: int32
@@ -4043,6 +4499,50 @@ export interface components {
             message?: null | string;
             /** @description 业务数据载荷 */
             data?: null | string[];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfAiProviderPreset: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["AiProviderPreset"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfAiUsageTrendPoint: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["AiUsageTrendPoint"][];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -4424,6 +4924,27 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfPagedListOfAiProviderView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfAiProviderView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfPagedListOfNoticeMineItem: {
             /**
              * Format: int32
@@ -4479,6 +5000,27 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["PagedListOfRecycleBinItem"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfPagedListOfSysAiUsageLog: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfSysAiUsageLog"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5174,7 +5716,7 @@ export interface components {
             copyright?: null | string;
             /** @description 版权链接(版权名的超链接;留空则纯文本) */
             copyrightUrl?: null | string;
-            /** @description 站点 Logo 图片地址(登录页品牌 logo;留空则前端回退内置矢量 logo) */
+            /** @description 站点 Logo 图片地址(登录页、侧栏、顶栏、应用选择页统一显示;留空则前端回退内置矢量 logo) */
             logo?: null | string;
             /** @description 是否启用登录验证码(运行时配置驱动;前端据此决定登录页是否展示验证码)。 */
             captchaEnabled?: boolean;
@@ -5205,6 +5747,76 @@ export interface components {
              * @description 重发最小间隔(秒)
              */
             resendSeconds?: number | string;
+        };
+        /**
+         * @description AI 调用记录——只增、物理删(对齐 SysJobLog),按 string AiConfigKeys.KEY_USAGE_RETENTION_DAYS 定期清理。
+         *     <b>不记 prompt 与回复正文</b>:审批等业务内容属于业务数据,不进内核日志。
+         */
+        SysAiUsageLog: {
+            /**
+             * Format: int64
+             * @description 厂商 Id
+             */
+            providerId?: number | string;
+            /** @description 厂商编码快照(冗余;厂商删了也能读) */
+            providerCode?: string;
+            model?: string;
+            /** @description 业务场景标签,如 approval.summary;测试连接固定 system.test */
+            scene?: string;
+            /**
+             * Format: int64
+             * @description 发起用户;后台任务里可能为空
+             */
+            userId?: null | number | string;
+            /** Format: int32 */
+            inputTokens?: number | string;
+            /** Format: int32 */
+            outputTokens?: number | string;
+            /** Format: int32 */
+            totalTokens?: number | string;
+            /**
+             * Format: int32
+             * @description 用量来源:1=上游回报,2=上游未回报(流式且厂商不支持 include_usage)
+             */
+            usageSource?: number | string;
+            /** Format: int32 */
+            latencyMs?: number | string;
+            success?: boolean;
+            /**
+             * Format: int32
+             * @description 失败时的内核错误码
+             */
+            errorCode?: null | number | string;
+            /** @description 上游错误摘要,截断;不含请求内容 */
+            errorMessage?: null | string;
+            streamed?: boolean;
+            /** @description 上游返回的请求 id,排障用 */
+            requestId?: null | string;
+            /**
+             * Format: date-time
+             * @description 创建时间;插入时由审计 AOP 自动填充。
+             */
+            createTime?: string;
+            /**
+             * Format: int64
+             * @description 创建人用户 Id;插入时由审计 AOP 从当前登录用户填充,系统写入为 null。
+             */
+            createUserId?: null | number | string;
+            /**
+             * Format: date-time
+             * @description 最后更新时间;每次更新由审计 AOP 自动刷新。
+             */
+            updateTime?: null | string;
+            /**
+             * Format: int64
+             * @description 最后更新人用户 Id;每次更新由审计 AOP 从当前登录用户填充。
+             */
+            updateUserId?: null | number | string;
+            /**
+             * Format: int64
+             * @description 主键(雪花 ID;种子数据可用固定小整数)。插入时为 0 则由审计 AOP 自动生成。
+             */
+            id?: number | string;
         };
         /**
          * @description 系统配置表——键值对形式的全局配置项(如站点名称、默认密码策略等),支持按 string? SysConfig.GroupCode 分组管理。
@@ -5939,9 +6551,9 @@ export interface components {
             enabled?: boolean;
             remark?: null | string;
             /**
-             * @description 是否可被非超管转授给他人(角色委派)。可空以兼容存量库的无损升级:
-             *     数据库 NULL(功能上线前的存量角色)与显式 `false` 同判定为"不可转授",只有显式 `true` 才放行——
-             *     安全默认(未标注的旧角色一律收紧,不因升级静默放宽)。演进列必须可空:MSSQL 无法对有数据的表
+             * @description 是否可被非超管转授给他人(角色委派)。可空,存量库补列时无损:
+             *     数据库 NULL(存量角色)与显式 `false` 同判定为"不可转授",只有显式 `true` 才放行——
+             *     安全默认(未标注的角色一律收紧,补列不会静默放宽)。演进列必须可空:MSSQL 无法对有数据的表
              *     ADD 无 DEFAULT 的 NOT NULL 列(同 bool SysUser.ForceTotp 的成法)。
              */
             isDelegatable?: null | boolean;
@@ -6029,7 +6641,7 @@ export interface components {
             account?: string;
             /** @description 当前密码(必填;缺失/错误一律拒绝写 seed) */
             currentPassword?: string;
-            /** @description 历史字段:曾表示邀请/InitGrant token。<b>ADR 0006 后忽略</b>;保留以免旧客户端反序列化失败。 */
+            /** @description 服务端忽略此字段;留着它,是为了仍在请求里带 `token` 的客户端反序列化不失败。 */
             token?: null | string;
         };
         /** @description 绑定启动出参:临时挑战 + otpauth URI(种子暂存缓存,完成前不落库)。 */
@@ -6197,6 +6809,315 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    AiProvider_Page: {
+        parameters: {
+            query?: {
+                /** @description 关键字(模糊匹配 Code 或 Name,可选) */
+                Keyword?: string;
+                /** @description 启用状态精确过滤(可选) */
+                Enabled?: boolean;
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfAiProviderView"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfAiProviderView"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfAiProviderView"];
+                };
+            };
+        };
+    };
+    AiProvider_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfAiProviderView"];
+                    "application/json": components["schemas"]["ResultOfAiProviderView"];
+                    "text/json": components["schemas"]["ResultOfAiProviderView"];
+                };
+            };
+        };
+    };
+    AiProvider_Update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiProviderUpdateInput"];
+                "text/json": components["schemas"]["AiProviderUpdateInput"];
+                "application/*+json": components["schemas"]["AiProviderUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    AiProvider_Delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    AiProvider_Presets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfAiProviderPreset"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfAiProviderPreset"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfAiProviderPreset"];
+                };
+            };
+        };
+    };
+    AiProvider_Add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiProviderAddInput"];
+                "text/json": components["schemas"]["AiProviderAddInput"];
+                "application/*+json": components["schemas"]["AiProviderAddInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOflong"];
+                    "application/json": components["schemas"]["ResultOflong"];
+                    "text/json": components["schemas"]["ResultOflong"];
+                };
+            };
+        };
+    };
+    AiProvider_SetEnabled: {
+        parameters: {
+            query?: {
+                enabled?: boolean;
+            };
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    AiProvider_Test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfAiTestResult"];
+                    "application/json": components["schemas"]["ResultOfAiTestResult"];
+                    "text/json": components["schemas"]["ResultOfAiTestResult"];
+                };
+            };
+        };
+    };
+    AiUsage_Summary: {
+        parameters: {
+            query?: {
+                From?: string;
+                To?: string;
+                ProviderCode?: string;
+                Model?: string;
+                Scene?: string;
+                UserId?: number | string;
+                GroupBy?: components["schemas"]["AiUsageGroupBy"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfAiUsageSummary"];
+                    "application/json": components["schemas"]["ResultOfAiUsageSummary"];
+                    "text/json": components["schemas"]["ResultOfAiUsageSummary"];
+                };
+            };
+        };
+    };
+    AiUsage_Trend: {
+        parameters: {
+            query?: {
+                From?: string;
+                To?: string;
+                ProviderCode?: string;
+                Model?: string;
+                Scene?: string;
+                UserId?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfAiUsageTrendPoint"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfAiUsageTrendPoint"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfAiUsageTrendPoint"];
+                };
+            };
+        };
+    };
+    AiUsage_Page: {
+        parameters: {
+            query?: {
+                /** @description 起始时间(含,按 `CreateTime` 过滤;可选) */
+                From?: string;
+                /** @description 截止时间(含,按 `CreateTime` 过滤;可选) */
+                To?: string;
+                /** @description 厂商编码(精确匹配,可选) */
+                ProviderCode?: string;
+                /** @description 模型名(精确匹配,可选) */
+                Model?: string;
+                /** @description 业务场景标签(精确匹配,可选) */
+                Scene?: string;
+                /** @description 发起用户 Id(精确匹配,可选) */
+                UserId?: number | string;
+                /** @description 是否成功(精确匹配,可选) */
+                Success?: boolean;
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfSysAiUsageLog"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfSysAiUsageLog"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfSysAiUsageLog"];
+                };
+            };
+        };
+    };
     Auth_Captcha: {
         parameters: {
             query?: never;

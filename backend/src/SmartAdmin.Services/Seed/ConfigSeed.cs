@@ -77,6 +77,9 @@ public class ConfigSeed : ISeedData<SysConfig>
         new SysConfig { Id = 27, ConfigKey = JobConfigKeys.KEY_LOG_RETENTION_DAYS, ConfigValue = "30", Name = "执行记录保留天数", GroupCode = JobConfigKeys.GROUP, Sort = 60, Remark = "JobLogCleanupJob 按此清理 sys_job_log;≤0 不清理" },
         new SysConfig { Id = 28, ConfigKey = JobConfigKeys.KEY_ALERT_EMAILS, ConfigValue = "", Name = "任务告警收件人", GroupCode = JobConfigKeys.GROUP, Sort = 61, Remark = "连败告警邮件的全局兜底收件人(逗号分隔);任务行自带收件人时优先任务行" },
 
+        // AI 网关(GroupCode=ai):运行期可调旋钮;厂商/Key/模型走 sys_ai_provider / sys_ai_model,不在配置中心。
+        new SysConfig { Id = 35, ConfigKey = AiConfigKeys.KEY_USAGE_RETENTION_DAYS, ConfigValue = "90", Name = "AI 用量记录保留天数", GroupCode = AiConfigKeys.GROUP, Sort = 90, Remark = "AiUsageLogCleanupJob 按此清理 sys_ai_usage_log;≤0 不清理" },
+
         // 第三方登录运营开关(GroupCode=externalauth):登录页 GET providers 读 IsEnabledAsync;缺省 true=配了连接即显示。
         // 配置中心「第三方登录」Tab 结构化开关;密钥仍在 appsettings。
         new SysConfig { Id = 31, ConfigKey = "sys.externalauth.wecom.enabled", ConfigValue = "true", Name = "企业微信-登录页显示", GroupCode = "externalauth", Sort = 70, Remark = "关闭后登录页不显示该按钮;authorize 同步拒绝" },

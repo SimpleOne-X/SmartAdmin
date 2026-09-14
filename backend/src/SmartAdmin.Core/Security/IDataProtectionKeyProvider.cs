@@ -19,4 +19,11 @@ public interface IDataProtectionKeyProvider
 
     /// <summary>按版本取解密密钥;未知版本抛 <see cref="System.Security.Cryptography.CryptographicException"/></summary>
     DataProtectionKeyMaterial GetKey(int version);
+
+    /// <summary>
+    /// 当前密钥是否为进程内临时密钥(未显式配置主密钥、非开发环境自动生成、不落盘,重启即失效)。
+    /// 默认 false;LocalDataProtectionKeyProvider(SmartAdmin.Services)在该分支返回 true。
+    /// 要落库"重启后必须仍可解密"的凭据(如 AI 厂商 Key)前应先查本属性,为 true 时拒绝保存。
+    /// </summary>
+    bool IsEphemeral => false;
 }

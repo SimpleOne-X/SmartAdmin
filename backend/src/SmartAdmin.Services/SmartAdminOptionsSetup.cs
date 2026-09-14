@@ -42,6 +42,7 @@ public static class SmartAdminOptionsSetup
         services.TryAddSingleton(options.Excel);
         services.TryAddSingleton(options.Jobs);
         services.TryAddSingleton(options.Logging);
+        services.TryAddSingleton(options.Ai);
 
         // 分页上限是静态的(扩展方法拿不到 DI),在此从配置写入
         if (options.Api.MaxPageSize <= 0)

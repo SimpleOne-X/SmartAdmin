@@ -19,6 +19,7 @@ namespace SmartAdmin.Core;
 ///   <item><term>46000–46999</term><description>导入 / 导出</description></item>
 ///   <item><term>47000–47999</term><description>定时任务</description></item>
 ///   <item><term>48000–48999</term><description>请求参数</description></item>
+///   <item><term>49000–49999</term><description>AI 模型</description></item>
 ///   <item><term>50000–50999</term><description>系统内部错误</description></item>
 /// </list>
 /// </summary>
@@ -471,6 +472,80 @@ public enum ErrorCode
     /// <summary>每页条数超过 SmartAdmin:Api:MaxPageSize 上限(args: size / max)</summary>
     [MsgKey("error.request.pageSizeExceeded")]
     PageSizeExceeded = 48001,
+
+    // ── 49xxx AI 模型 ────────────────────────────────────────────────
+
+    /// <summary>AI 厂商不存在</summary>
+    [MsgKey("error.ai.providerNotFound")]
+    AiProviderNotFound = 49001,
+
+    /// <summary>AI 厂商编码已存在(编码唯一,含软删行)</summary>
+    [MsgKey("error.ai.providerCodeExists")]
+    AiProviderCodeExists = 49002,
+
+    /// <summary>AI 厂商已停用</summary>
+    [MsgKey("error.ai.providerDisabled")]
+    AiProviderDisabled = 49003,
+
+    /// <summary>AI 厂商未配置 API Key(AuthScheme != none 时,启用与调用前都必须先配置)</summary>
+    [MsgKey("error.ai.apiKeyMissing")]
+    AiApiKeyMissing = 49004,
+
+    /// <summary>Base URL 被 SSRF 围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单);保存与每次调用前都过</summary>
+    [MsgKey("error.ai.baseUrlBlocked")]
+    AiBaseUrlBlocked = 49005,
+
+    /// <summary>指定的厂商预设不存在</summary>
+    [MsgKey("error.ai.presetNotFound")]
+    AiPresetNotFound = 49006,
+
+    /// <summary>厂商预设与协议保存后不可改</summary>
+    [MsgKey("error.ai.presetImmutable")]
+    AiPresetImmutable = 49007,
+
+    /// <summary>AI 模型不存在</summary>
+    [MsgKey("error.ai.modelNotFound")]
+    AiModelNotFound = 49010,
+
+    /// <summary>未设置全局默认模型,且请求未显式指定厂商/模型</summary>
+    [MsgKey("error.ai.noDefaultModel")]
+    AiNoDefaultModel = 49011,
+
+    /// <summary>AI 模型已停用</summary>
+    [MsgKey("error.ai.modelDisabled")]
+    AiModelDisabled = 49012,
+
+    /// <summary>同一厂商下模型名已存在(含软删行)</summary>
+    [MsgKey("error.ai.modelNameExists")]
+    AiModelNameExists = 49013,
+
+    /// <summary>上游返回非 2xx 且不属于下列细分类型的通用错误;ErrorMessage 记状态码与响应前 512 字</summary>
+    [MsgKey("error.ai.upstreamError")]
+    AiUpstreamError = 49020,
+
+    /// <summary>调用上游超时(SmartAdmin:Ai:TimeoutSeconds)或客户端 TaskCanceledException(非调用方主动取消)</summary>
+    [MsgKey("error.ai.upstreamTimeout")]
+    AiUpstreamTimeout = 49021,
+
+    /// <summary>上游限流(HTTP 429)</summary>
+    [MsgKey("error.ai.upstreamRateLimited")]
+    AiUpstreamRateLimited = 49022,
+
+    /// <summary>上游鉴权失败(HTTP 401/403,通常是 Key 失效或权限不足)</summary>
+    [MsgKey("error.ai.upstreamAuthFailed")]
+    AiUpstreamAuthFailed = 49023,
+
+    /// <summary>上游响应无法解析,或找不到匹配 Protocol 的适配器</summary>
+    [MsgKey("error.ai.upstreamBadResponse")]
+    AiUpstreamBadResponse = 49024,
+
+    /// <summary>当前数据保护密钥是进程内临时密钥(重启即失效),拒绝保存会随重启解不开的 Key(IDataProtectionKeyProvider.IsEphemeral)</summary>
+    [MsgKey("error.ai.dataProtectionKeyMissing")]
+    AiDataProtectionKeyMissing = 49030,
+
+    /// <summary>调用请求未携带 Scene(用量统计按它拆账,禁止匿名场景)</summary>
+    [MsgKey("error.ai.sceneRequired")]
+    AiSceneRequired = 49031,
 
     // ── 50xxx 系统内部 ───────────────────────────────────────────────
 

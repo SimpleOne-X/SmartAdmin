@@ -57,6 +57,10 @@ public static class HighSensitivityPermissions
         // 回收站彻底删除:不可逆
         "DELETE:/api/v1/sys/recycle/{type}/{id}",
 
+        // AI 厂商写操作:API Key 经手,新增/更新都要求再认证
+        "POST:/api/v1/sys/ai/provider/add",
+        "PUT:/api/v1/sys/ai/provider/{id}",
+
         MfaClear,
         HighSensAdd,
         HighSensDelete,

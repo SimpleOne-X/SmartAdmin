@@ -7,6 +7,14 @@ import type { components } from './schema'
 import type {
   AddUserInput,
   AddUserOutput,
+  AiProviderAddInput,
+  AiProviderPreset,
+  AiProviderUpdateInput,
+  AiProviderView,
+  AiTestResult,
+  AiUsageGroupBy,
+  AiUsageSummary,
+  AiUsageTrendPoint,
   ChunkInitOutput,
   ConfigInput,
   CronPreviewOutput,
@@ -37,6 +45,7 @@ import type {
   PositionInput,
   RoleInput,
   ServerInfoOutput,
+  SysAiUsageLog,
   SysConfig,
   SysDictItem,
   SysDictType,
@@ -1274,4 +1283,123 @@ export const recycleApi = {
     client
       .DELETE('/api/v1/sys/recycle/{type}/{id}', { params: { path: { type, id } } })
       .then(r => unwrap<boolean>(r)),
+}
+
+// ── AI 管理:厂商/模型 ────────────────────────────────────────────
+
+export const aiProviderApi = {
+  /** 厂商分页(含模型清单);搜索键 keyword/enabled → PascalCase 查询参。 */
+  page: (params: { page: number; pageSize: number; keyword?: string; enabled?: boolean }) =>
+    client
+      .GET('/api/v1/sys/ai/provider/page', {
+        params: {
+          query: {
+            ...pageParams(params),
+            Keyword: params.keyword,
+            Enabled: params.enabled,
+          },
+        },
+      })
+      .then(r => toPage<AiProviderView>(r)),
+  get: (id: number) =>
+    client
+      .GET('/api/v1/sys/ai/provider/{id}', { params: { path: { id } } })
+      .then(r => unwrap<AiProviderView>(r)),
+  /** 厂商预置清单(协议/BaseUrl/鉴权方式/起步模型),新增抽屉选预设用。 */
+  presets: () =>
+    client.GET('/api/v1/sys/ai/provider/presets', {}).then(r => unwrap<AiProviderPreset[]>(r)),
+  add: (body: AiProviderAddInput) =>
+    client.POST('/api/v1/sys/ai/provider/add', { body }).then(r => unwrap<number>(r)),
+  /** 更新入参没有 preset/protocol 字段——这两项创建后不可改,类型层面就不给改的机会。 */
+  update: (id: number, body: AiProviderUpdateInput) =>
+    client
+      .PUT('/api/v1/sys/ai/provider/{id}', { params: { path: { id } }, body })
+      .then(r => unwrap<boolean>(r)),
+  /** 启用时若未配置 Key 会被后端拒绝(49004),调用方按 StatusSwitch 模式处理失败回弹。 */
+  setEnabled: (id: number, enabled: boolean) =>
+    client
+      .PUT('/api/v1/sys/ai/provider/{id}/enabled', { params: { path: { id }, query: { enabled } } })
+      .then(r => unwrap<boolean>(r)),
+  remove: (id: number) =>
+    client
+      .DELETE('/api/v1/sys/ai/provider/{id}', { params: { path: { id } } })
+      .then(r => unwrap<boolean>(r)),
+  /** 测试连接:用库里当前配置发一条最小对话;失败原因在返回体里,不抛异常。 */
+  test: (id: number) =>
+    client
+      .POST('/api/v1/sys/ai/provider/{id}/test', { params: { path: { id } } })
+      .then(r => unwrap<AiTestResult>(r)),
+}
+
+// ── AI 管理:用量统计 ────────────────────────────────────────────
+
+interface AiUsageFilter {
+  from: string
+  to: string
+  providerCode?: string
+  model?: string
+  scene?: string
+  userId?: number
+}
+
+export const aiUsageApi = {
+  /** 区间总计 + 按维度分组聚合(groupBy 切换四个 Tab 共用这一个接口)。 */
+  summary: (params: AiUsageFilter & { groupBy: AiUsageGroupBy }) =>
+    client
+      .GET('/api/v1/sys/ai/usage/summary', {
+        params: {
+          query: {
+            From: params.from,
+            To: params.to,
+            ProviderCode: params.providerCode,
+            Model: params.model,
+            Scene: params.scene,
+            UserId: params.userId,
+            GroupBy: params.groupBy,
+          },
+        },
+      })
+      .then(r => unwrap<AiUsageSummary>(r)),
+  /** 按天趋势;区间内无数据的日期后端已补 0,前端直接画连续折线。 */
+  trend: (params: AiUsageFilter) =>
+    client
+      .GET('/api/v1/sys/ai/usage/trend', {
+        params: {
+          query: {
+            From: params.from,
+            To: params.to,
+            ProviderCode: params.providerCode,
+            Model: params.model,
+            Scene: params.scene,
+            UserId: params.userId,
+          },
+        },
+      })
+      .then(r => unwrap<AiUsageTrendPoint[]>(r)),
+  /** 明细分页(不聚合);from/to 在这里是可选的(不筛日期就是全量分页)。 */
+  page: (
+    params: Omit<AiUsageFilter, 'from' | 'to'> & {
+      page: number
+      pageSize: number
+      from?: string
+      to?: string
+      success?: boolean
+    },
+  ) =>
+    client
+      .GET('/api/v1/sys/ai/usage/page', {
+        params: {
+          query: {
+            ...pageParams(params),
+            From: params.from,
+            To: params.to,
+            ProviderCode: params.providerCode,
+            Model: params.model,
+            Scene: params.scene,
+            UserId: params.userId,
+            Success: params.success,
+          },
+        },
+      })
+      .then(r => toPage<SysAiUsageLog>(r)),
 }

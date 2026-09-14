@@ -111,6 +111,9 @@ public static class CacheKeys
     /// <summary>某用户在某模块下的侧边栏菜单树(门户导航;随 <see cref="PortalGeneration"/> 代际失效)</summary>
     public static string PortalMenuTree(long userId, long moduleId, long generation) => $"portal:menu:{userId}:{moduleId}:{generation}";
 
+    /// <summary>启用状态的 AI 厂商(含模型)列表,AiChatClient 解析路径读它;厂商增删改/启停时整体失效</summary>
+    public static string AiProviders() => "ai:providers";
+
     /// <summary>
     /// 会话活动回写节流标记:存在则跳过 DB 回写,TTL = 节流窗口。
     /// 值可为最近回写时刻;与 <see cref="Session"/> 热路径缓存分离,避免污染活跃校验结构。

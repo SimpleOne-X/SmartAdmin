@@ -190,6 +190,15 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, SqlAdminJob>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, JobLogCleanupJob>());
 
+        // AI 网关:命名 HttpClient 超时设为 Infinite,真正超时由网关的 CancellationTokenSource 控制(流式要按整段计)。
+        // 围栏 handler 批次 4 接入(ConfigurePrimaryHttpMessageHandler 用 HttpFence.CreateHandler)。
+        services.AddHttpClient(AiHttpClient.Name, c => c.Timeout = Timeout.InfiniteTimeSpan);
+        services.TryAddScoped<IAiChatClient, AiChatClient>();
+        services.TryAddScoped<IAiUsageService, AiUsageService>();
+        services.TryAddScoped<IAiProviderService, AiProviderService>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, OpenAiCompatibleAdapter>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, AnthropicAdapter>());
+
         // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞
         services.AddHostedService<WorkerIdLeaseGuard>();
 

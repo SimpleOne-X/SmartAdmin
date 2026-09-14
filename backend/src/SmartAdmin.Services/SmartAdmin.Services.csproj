@@ -15,5 +15,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <!-- ICacheProvider 默认实现 MemoryCacheProvider 用 IMemoryCache(Microsoft.* 合规) -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <!-- AI 网关协议适配器用 IHttpClientFactory 取命名 HttpClient(Microsoft.* 合规,版本见 Directory.Packages.props) -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 </Project>

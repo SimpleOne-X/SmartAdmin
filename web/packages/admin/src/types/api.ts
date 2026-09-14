@@ -784,3 +784,179 @@ export interface JobDashboard {
   upcoming: JobUpcomingItem[]
   nodes: JobNodeItem[]
 }
+
+// ── AI 管理(与后端 AiProviderModels/AiUsageModels 对齐;错误码文案在 error.ai.*,别重复) ──
+
+/** 厂商下的一个模型(后端 AiModelView)。 */
+export interface AiModelView {
+  id: number
+  name: string
+  displayName: string
+  enabled: boolean
+  isDefault: boolean
+  contextWindow: number | null
+  inputPrice: number | null
+  outputPrice: number | null
+}
+
+/** 厂商行(后端 AiProviderView;列表/详情共用,apiKey 只回 hasApiKey + 掩码提示,不回明文)。 */
+export interface AiProviderView {
+  id: number
+  code: string
+  name: string
+  preset: string
+  protocol: string
+  baseUrl: string
+  authScheme: string
+  apiKeyHint: string | null
+  hasApiKey: boolean
+  enabled: boolean
+  sort: number
+  remark: string | null
+  models: AiModelView[]
+}
+
+/**
+ * 模型新增/编辑入参(后端 AiModelInput;id 为 `null` = 新增该行)。
+ * 后端定义为位置式 record——字段在请求体里必须都存在(可以是 null),不能整键省略,
+ * 这里特意都不带 `?`,免得页面代码漏填导致类型能过编译、实际发请求时字段缺失。
+ */
+export interface AiModelInput {
+  id: number | null
+  name: string
+  displayName: string
+  enabled: boolean
+  isDefault: boolean
+  contextWindow: number | null
+  inputPrice: number | null
+  outputPrice: number | null
+}
+
+/** 厂商新增入参(后端 AiProviderAddInput;code 仅新增时填,apiKey 传 null 由后端拒绝/提示未配置)。 */
+export interface AiProviderAddInput {
+  code: string
+  name: string
+  preset: string
+  baseUrl: string
+  authScheme: string
+  apiKey: string | null
+  sort: number
+  remark: string | null
+  models: AiModelInput[]
+}
+
+/** 厂商编辑入参(后端 AiProviderUpdateInput;无 code——编辑禁用;apiKey 传 null = 不修改现有 Key)。 */
+export interface AiProviderUpdateInput {
+  code: string
+  name: string
+  baseUrl: string
+  authScheme: string
+  apiKey: string | null
+  sort: number
+  remark: string | null
+  models: AiModelInput[]
+}
+
+/** 厂商预置(GET /api/v1/sys/ai/provider/presets,静态表,表单下拉用)。 */
+export interface AiModelPreset {
+  name: string
+  displayName: string
+  contextWindow?: number | null
+}
+
+/** 厂商预置(后端 AiProviderPresets.cs 落定的 11 个 code)。 */
+export interface AiProviderPreset {
+  code: string
+  name: string
+  protocol: string
+  baseUrl: string
+  authScheme: string
+  models: AiModelPreset[]
+}
+
+/**
+ * 后端 AiUsageSource 是普通枚举,没配 JsonStringEnumConverter,序列化按数字下发(System.Text.Json 默认行为)。
+ * 1=Reported(上游上报的真实用量),2=Missing(上游没给,记 0 或估算兜底)。
+ */
+export const AI_USAGE_SOURCE = { Reported: 1, Missing: 2 } as const
+export type AiUsageSourceValue = 1 | 2
+
+/** 一次调用的 Token 用量(后端 AiUsage;source 标记数值是上游上报还是估算兜底)。 */
+export interface AiUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  source: AiUsageSourceValue
+}
+
+/** 测试连接结果(后端 AiTestResult)。 */
+export interface AiTestResult {
+  ok: boolean
+  model?: string | null
+  latencyMs: number
+  usage?: AiUsage | null
+  error?: string | null
+}
+
+/**
+ * 用量统计分组维度(后端 AiUsageGroupBy,普通枚举,查询参按数字下发/上送)。
+ * 1=Provider、2=Model、3=Scene、4=User。
+ */
+export const AI_USAGE_GROUP_BY = { Provider: 1, Model: 2, Scene: 3, User: 4 } as const
+export type AiUsageGroupBy = 1 | 2 | 3 | 4
+
+/** 用量统计四格指标(后端 AiUsageTotals;failuresByErrorCode 键为 ErrorCode 数值)。 */
+export interface AiUsageTotals {
+  totalTokens: number
+  inputTokens: number
+  outputTokens: number
+  callCount: number
+  failureCount: number
+  failuresByErrorCode: Record<number, number>
+}
+
+/** 分组维度下的一行(后端 AiUsageGroupRow)。 */
+export interface AiUsageGroupRow {
+  key: string
+  label?: string | null
+  inputTokens: number
+  outputTokens: number
+  callCount: number
+  sharePercent: number
+  avgLatencyMs: number
+}
+
+/** 用量统计汇总(后端 AiUsageSummary)。 */
+export interface AiUsageSummary {
+  totals: AiUsageTotals
+  groups: AiUsageGroupRow[]
+}
+
+/** 用量趋势的一天(后端 AiUsageTrendPoint)。 */
+export interface AiUsageTrendPoint {
+  date: string
+  inputTokens: number
+  outputTokens: number
+  callCount: number
+}
+
+/** 用量明细行(后端 SysAiUsageLog;只读,分页项已含全字段)。 */
+export interface SysAiUsageLog {
+  id: number
+  providerId: number
+  providerCode: string
+  model: string
+  scene: string
+  userId?: number | null
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  usageSource: AiUsageSourceValue
+  latencyMs: number
+  success: boolean
+  errorCode?: number | null
+  errorMessage?: string | null
+  streamed: boolean
+  requestId?: string | null
+  createTime: string
+}

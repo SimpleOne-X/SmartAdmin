@@ -16,6 +16,7 @@ public class LocalDataProtectionKeyProvider : IDataProtectionKeyProvider
 
     private readonly DataProtectionKeyMaterial _current;
     private readonly Dictionary<int, DataProtectionKeyMaterial> _byVersion;
+    private readonly bool _ephemeral;
 
     /// <summary>
     /// 构造并解析密钥材料。
@@ -81,6 +82,7 @@ public class LocalDataProtectionKeyProvider : IDataProtectionKeyProvider
             // 非开发且未启用 TOTP/Cookie:仍生成进程内临时密钥(不落盘),仅保证 ISecretProtector 可构造;
             // 重启后旧信封不可解密——适合从未真正启用秘密保护的默认部署。
             keyBytes = RandomNumberGenerator.GetBytes(32);
+            _ephemeral = true;
             logger?.LogWarning(
                 "SmartAdmin: 未配置 DataProtection:Key 且非开发环境,已使用进程内临时密钥;" +
                 "重启后既有信封将无法解密。请显式配置主密钥。");
@@ -99,4 +101,7 @@ public class LocalDataProtectionKeyProvider : IDataProtectionKeyProvider
         if (_byVersion.TryGetValue(version, out var key)) return key;
         throw new CryptographicException($"未知的数据保护密钥版本: {version}");
     }
+
+    /// <inheritdoc />
+    public virtual bool IsEphemeral => _ephemeral;
 }
