@@ -357,51 +357,51 @@ e2e(可选):在 `web/e2e` 现有页面级冒烟模板上加「AI 模型页可渲
 
 ### 批次 1:契约、错误码、实体、预置
 
-- [ ] `Core/Ai/*.cs`:第 5 节全部契约与 record
-- [ ] `Core/Options/AdminAiOptions.cs` + `SmartAdminOptions.Ai` + `HttpFenceOptions`(先定义,批次 4 再接围栏)
-- [ ] `ErrorCode.cs`:49xxx 段 + 头部分段表
-- [ ] `CacheKeys.AiProviders()`;`IDataProtectionKeyProvider.IsEphemeral` + `LocalDataProtectionKeyProvider` 实现
-- [ ] 三个实体(第 4 节),`Services/Ai/AiProviderPresets.cs`(逐家核对官方文档后落表)
-- [ ] `ConfigSeed` 加 `sys.ai.usageRetentionDays`
-- [ ] **验收**:`dotnet build backend/SmartAdmin.slnx -c Release` 零警告;`dotnet test` 全绿(现有测试不受影响);`MinimalHost` 启动建出三张表
+- [x] `Core/Ai/*.cs`:第 5 节全部契约与 record
+- [x] `Core/Options/AdminAiOptions.cs` + `SmartAdminOptions.Ai` + `HttpFenceOptions`(先定义,批次 4 再接围栏)
+- [x] `ErrorCode.cs`:49xxx 段 + 头部分段表
+- [x] `CacheKeys.AiProviders()`;`IDataProtectionKeyProvider.IsEphemeral` + `LocalDataProtectionKeyProvider` 实现
+- [x] 三个实体(第 4 节),`Services/Ai/AiProviderPresets.cs`(逐家核对官方文档后落表)
+- [x] `ConfigSeed` 加 `sys.ai.usageRetentionDays`
+- [x] **验收**:`dotnet build backend/SmartAdmin.slnx -c Release` 零警告;`dotnet test` 全绿(现有测试不受影响);`MinimalHost` 启动建出三张表
 
 ### 批次 2:协议适配器与网关(不含控制器)
 
-- [ ] `Services/Ai/Protocols/OpenAiCompatibleAdapter.cs`、`AnthropicAdapter.cs`(先读 `claude-api` skill 的 curl 示例核对字段)
-- [ ] `Services/Ai/AiHttpClient.cs`(命名客户端常量与注册;围栏 handler 批次 4 接)
-- [ ] `Services/Ai/AiUsageService.cs`(先做 `RecordAsync`)、`AiChatClient.cs`
-- [ ] `ServicesSetup`:`TryAddScoped<IAiChatClient>`、`TryAddScoped<IAiUsageService>`、`TryAddEnumerable` 两个适配器、`AddHttpClient`
-- [ ] `ReplaceabilityContract` 登记 `IAiChatClient`、`IAiUsageService`、`IAiProtocolAdapter`
-- [ ] 测试:`AiChatClientTests`(桩 handler)
-- [ ] **验收**:`dotnet test backend/SmartAdmin.slnx -- --filter-class "*AiChatClient*"` 全绿;`ReplaceabilityTests` 全绿
+- [x] `Services/Ai/Protocols/OpenAiCompatibleAdapter.cs`、`AnthropicAdapter.cs`(先读 `claude-api` skill 的 curl 示例核对字段)
+- [x] `Services/Ai/AiHttpClient.cs`(命名客户端常量与注册;围栏 handler 批次 4 接)
+- [x] `Services/Ai/AiUsageService.cs`(先做 `RecordAsync`)、`AiChatClient.cs`
+- [x] `ServicesSetup`:`TryAddScoped<IAiChatClient>`、`TryAddScoped<IAiUsageService>`、`TryAddEnumerable` 两个适配器、`AddHttpClient`
+- [x] `ReplaceabilityContract` 登记 `IAiChatClient`、`IAiUsageService`、`IAiProtocolAdapter`
+- [x] 测试:`AiChatClientTests`(桩 handler)
+- [x] **验收**:`dotnet test backend/SmartAdmin.slnx -- --filter-class "*AiChatClient*"` 全绿;`ReplaceabilityTests` 全绿
 
 ### 批次 3:厂商服务、控制器、菜单种子
 
-- [ ] `Services/Ai/AiModels.cs`(DTO)、`IAiProviderService.cs`、`AiProviderService.cs`(第 7.1 节)、`AiProviderChangedEvent`
-- [ ] `AiUsageService` 补 `SummaryAsync / TrendAsync / PageAsync`
-- [ ] `AiProviderController.cs`、`AiUsageController.cs`
-- [ ] `DefaultMenuSeed` 7xx 段 + 头部分区表
-- [ ] `ReplaceabilityContract` 登记 `IAiProviderService`
-- [ ] 测试:`AiProviderCrudTests`、`AiUsageQueryTests`、`AiModuleDisableTests`
-- [ ] **验收**:`dotnet test` 全绿(含 `PermissionCodeConsistencyTests`、`MenuSeedIdLayoutTests`);`/openapi/v1.json` 里 11 个端点齐全
+- [x] `Services/Ai/AiModels.cs`(DTO)、`IAiProviderService.cs`、`AiProviderService.cs`(第 7.1 节)、`AiProviderChangedEvent`
+- [x] `AiUsageService` 补 `SummaryAsync / TrendAsync / PageAsync`
+- [x] `AiProviderController.cs`、`AiUsageController.cs`
+- [x] `DefaultMenuSeed` 7xx 段 + 头部分区表
+- [x] `ReplaceabilityContract` 登记 `IAiProviderService`
+- [x] 测试:`AiProviderCrudTests`、`AiUsageQueryTests`、`AiModuleDisableTests`
+- [x] **验收**:`dotnet test` 全绿(含 `PermissionCodeConsistencyTests`、`MenuSeedIdLayoutTests`);`/openapi/v1.json` 里 11 个端点齐全
 
 ### 批次 4:清理任务、缓存与事件、围栏、密钥守卫
 
-- [ ] 确认 / 补齐 `JobHttpFence` 测试 → 抽 `HttpFence` + `HttpFenceOptions`,`JobHttpFence` 转发 → 接到 `AiHttpClient` 的 handler
-- [ ] `AiProviderService` 的缓存读穿透 + 变更失效 + 事件;`AiChatClient` 改用缓存
-- [ ] `IsEphemeral` 守卫接入保存 Key 路径
-- [ ] `Jobs/AiUsageLogCleanupJob.cs` + `DefaultJobSeed` Id 2 + `TryAddEnumerable`
-- [ ] 测试:`AiUsageLogCleanupJobTests`、`AiDataProtectionGuardTests`、`HttpFenceTests`
-- [ ] **验收**:`dotnet test` 全绿;`ci.bat`(默认集)绿
+- [x] 确认 / 补齐 `JobHttpFence` 测试 → 抽 `HttpFence` + `HttpFenceOptions`,`JobHttpFence` 转发 → 接到 `AiHttpClient` 的 handler
+- [x] `AiProviderService` 的缓存读穿透 + 变更失效 + 事件;`AiChatClient` 改用缓存(批次 3 顺手做了)
+- [x] `IsEphemeral` 守卫接入保存 Key 路径(批次 3 顺手做了)
+- [x] `Jobs/AiUsageLogCleanupJob.cs` + `DefaultJobSeed` Id 2 + `TryAddEnumerable`
+- [x] 测试:`AiUsageLogCleanupJobTests`、`AiDataProtectionGuardTests`、`HttpFenceTests`
+- [x] **验收**:`dotnet test` 全绿(1008/1008);`ci.bat`(默认集)绿
 
 ### 批次 5:前端两页
 
-- [ ] 后端跑起来 → `npm run gen:api`
-- [ ] `types/api.ts`、`api/index.ts`
-- [ ] `views/system/ai-model/`(index + ProviderCard + ProviderForm + presets.ts)
-- [ ] `views/system/ai-usage/index.vue`
-- [ ] 语言包三段(zh / en);`npm run gen:icons`
-- [ ] **验收**:`npm run typecheck && npm run lint && npm run format:check && npm test` 全绿;`npm run dev` 手工走查:新增 / 编辑 / 留空不改 Key / 测试连接 / 启停回弹 / 删除 / 无权限按钮隐藏 / 用量页筛选联动 / 暗色
+- [x] 后端跑起来 → `npm run gen:api`
+- [x] `types/api.ts`、`api/index.ts`
+- [x] `views/system/ai-model/`(index + ProviderCard + ProviderForm + presets.ts)
+- [x] `views/system/ai-usage/index.vue`
+- [x] 语言包三段(zh / en);`npm run gen:icons`
+- [x] **验收**:`npm run typecheck && npm run lint && npm run format:check && npm test` 全绿;`npm run dev` 手工走查:新增 / 编辑 / 留空不改 Key / 测试连接 / 启停回弹 / 删除 / 无权限按钮隐藏 / 用量页筛选联动 / 暗色
 
 ### 批次 6:文档、ADR、变更记录
 

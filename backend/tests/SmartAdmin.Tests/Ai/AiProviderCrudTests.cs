@@ -219,4 +219,16 @@ public class AiProviderCrudTests
             NewCode("badurl"), "Bad Url", "custom", "not-a-url", "bearer", "sk-1", 1, null, [])));
         Assert.Equal(ErrorCode.AiBaseUrlBlocked, ex.Code);
     }
+
+    [Fact]
+    public async Task Cloud_metadata_base_url_is_rejected_by_the_ssrf_fence()
+    {
+        using var f = new AdminAppFactory();
+        using var scope = f.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IAiProviderService>();
+
+        var ex = await Assert.ThrowsAsync<AdminException>(() => service.AddAsync(new AiProviderAddInput(
+            NewCode("ssrf"), "SSRF", "custom", "http://169.254.169.254/latest/meta-data/", "bearer", "sk-1", 1, null, [])));
+        Assert.Equal(ErrorCode.AiBaseUrlBlocked, ex.Code);
+    }
 }

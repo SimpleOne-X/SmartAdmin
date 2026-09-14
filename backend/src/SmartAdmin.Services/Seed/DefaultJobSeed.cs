@@ -11,6 +11,9 @@ public class DefaultJobSeed : ISeedData<SysJob>
     /// <summary>内置清理任务的编码(排障/文档的稳定锚点)</summary>
     internal const string LOG_CLEANUP_CODE = "sys-job-log-cleanup";
 
+    /// <summary>AI 用量记录清理任务的编码</summary>
+    internal const string AI_USAGE_CLEANUP_CODE = "sys-ai-usage-cleanup";
+
     /// <summary>
     /// <b>刻意 false(与菜单种子相反),理由留档:</b>job 行是运行态可变数据——NextRunTime/计数器/
     /// 用户改过的 cron 全在同一行,升级刷回种子值 = 清空运行态 + 吞掉用户调参。
@@ -39,6 +42,23 @@ public class DefaultJobSeed : ISeedData<SysJob>
             IsSystem = true,
             AlertByNotice = true,
             Remark = "删除过期执行记录(保留天数见配置 sys.job.logRetentionDays),并顺手清理失联超 24h 的调度节点行",
+        },
+        new SysJob
+        {
+            Id = 2,
+            Code = AI_USAGE_CLEANUP_CODE,
+            Name = "AI 用量记录清理",
+            HandlerKind = JobHandlerKind.Compiled,
+            HandlerName = typeof(AiUsageLogCleanupJob).FullName!,
+
+            TriggerKind = JobTriggerKind.Cron,
+            CronExpression = "0 40 3 * * ?",   // 每天 03:40,错开执行记录清理(03:30)
+            MisfireStrategy = JobMisfireStrategy.Skip,
+            ConcurrencyMode = JobConcurrencyMode.SerialSkip,
+            Status = JobStatus.Ready,
+            IsSystem = true,
+            AlertByNotice = true,
+            Remark = "删除过期 AI 调用用量记录(保留天数见配置 sys.ai.usageRetentionDays)",
         },
     ];
 }

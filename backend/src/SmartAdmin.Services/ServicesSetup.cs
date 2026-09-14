@@ -189,10 +189,12 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, HttpAdminJob>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, SqlAdminJob>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, JobLogCleanupJob>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAdminJob, AiUsageLogCleanupJob>());
 
-        // AI 网关:命名 HttpClient 超时设为 Infinite,真正超时由网关的 CancellationTokenSource 控制(流式要按整段计)。
-        // 围栏 handler 批次 4 接入(ConfigurePrimaryHttpMessageHandler 用 HttpFence.CreateHandler)。
-        services.AddHttpClient(AiHttpClient.Name, c => c.Timeout = Timeout.InfiniteTimeSpan);
+        // AI 网关:命名 HttpClient 超时设为 Infinite,真正超时由网关的 CancellationTokenSource 控制(流式要按整段计);
+        // 围栏 handler 与 JobHttpClient 共用同一套 HttpFence(见 Http/HttpFence.cs),配置节各自独立(SmartAdmin:Ai:Http)。
+        services.AddHttpClient(AiHttpClient.Name, c => c.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(sp => HttpFence.CreateHandler(sp.GetRequiredService<AdminAiOptions>().Http));
         services.TryAddScoped<IAiChatClient, AiChatClient>();
         services.TryAddScoped<IAiUsageService, AiUsageService>();
         services.TryAddScoped<IAiProviderService, AiProviderService>();

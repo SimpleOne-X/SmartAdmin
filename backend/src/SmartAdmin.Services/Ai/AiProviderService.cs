@@ -20,7 +20,8 @@ public class AiProviderService(
     ISecretProtector secretProtector,
     ICacheProvider cache,
     IEventBus events,
-    IAiChatClient chatClient) : IAiProviderService
+    IAiChatClient chatClient,
+    AdminAiOptions aiOptions) : IAiProviderService
 {
     /// <inheritdoc />
     public virtual async Task<PagedList<AiProviderView>> PageAsync(AiProviderPageInput input)
@@ -189,13 +190,11 @@ public class AiProviderService(
         AdminException.ThrowIf(exists, ErrorCode.AiModelNameExists);
     }
 
-    /// <summary>Base URL 必须是合法的 http(s) 绝对地址。SSRF 围栏(HttpFence)是批次 4 的工作,这里只做格式校验。</summary>
-    protected virtual void EnsureValidBaseUrl(string baseUrl)
-    {
-        var valid = Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
-        AdminException.ThrowIf(!valid, ErrorCode.AiBaseUrlBlocked);
-    }
+    /// <summary>Base URL 必须是合法的 http(s) 绝对地址,且不命中 SSRF 围栏(§7.1:保存与测试都先过 HttpFence.ValidateUrl)。
+    /// 实际出站调用还会在 <see cref="AiHttpClient"/> 的 ConnectCallback 里对解析后的 IP 再复检一次(防 DNS rebinding),
+    /// 这里的校验是保存时的快速拒绝,不是唯一防线。</summary>
+    protected virtual void EnsureValidBaseUrl(string baseUrl) =>
+        HttpFence.ValidateUrl(baseUrl, aiOptions.Http, ErrorCode.AiBaseUrlBlocked);
 
     /// <summary>
     /// Key 规则:<paramref name="apiKey"/> 为 null/空串 → 不改动;非空 → 先查数据保护密钥是否为进程内临时密钥
