@@ -9,7 +9,7 @@
 
 # SmartAdmin
 
-*可替换的现代企业后台管理内核：AI 辅助开发，简单高效；装上即用，升级只改版本号。*
+*AI+企业后台管理内核：内置 AI 网关，AI 辅助开发；开箱即用，升级只改版本号。*
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
 [![Stars](https://img.shields.io/github/stars/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/stargazers)
@@ -25,9 +25,11 @@
 
 ---
 
+![SmartAdmin 运行时架构图](https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/docs/architecture/smart-runtime.zh-CN.svg)
+
 ## 这是什么
 
-SmartAdmin 是给 .NET 10 / ASP.NET Core 项目用的企业后台底座。登录、用户、角色、菜单权限、机构与数据权限、字典、配置、日志、文件、定时任务，这些每个后台都要做的功能已经做好，连同管理界面一起发成两个包：
+SmartAdmin 是给 .NET 10 / ASP.NET Core 项目用的企业后台底座。登录、用户、角色、菜单权限、机构与数据权限、字典、配置、日志、文件、定时任务、AI 网关，这些常见后台功能已经做好，连同管理界面一起发成两个包：
 
 - 后端：NuGet 包 `SmartAdmin`
 - 前端：npm 包 `smart-admin-web`（Vue 3 + Naive UI）

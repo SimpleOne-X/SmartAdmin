@@ -6,7 +6,7 @@ English | [简体中文](https://github.com/SmartCode-X/SmartAdmin/blob/main/REA
 
 # SmartAdmin
 
-*The replaceable, modern admin kernel for .NET. Simple, efficient, AI-assisted development. Install and go, upgrade by bumping a version.*
+*AI+ enterprise admin kernel for .NET. Built-in AI gateway, AI-assisted development. Install and go, upgrade by bumping a version.*
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
 [![Stars](https://img.shields.io/github/stars/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/stargazers)
@@ -22,9 +22,11 @@ English | [简体中文](https://github.com/SmartCode-X/SmartAdmin/blob/main/REA
 
 ---
 
+![SmartAdmin runtime architecture](https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/docs/architecture/smart-runtime.en.svg)
+
 ## What is it
 
-SmartAdmin is a ready-made enterprise back-office foundation for .NET 10 / ASP.NET Core projects. Login, users, roles, menu permissions, organizations and data permissions, dictionaries, config, logs, files and scheduled jobs are the features every back office has to build; they are already done and ship, admin UI included, as two packages:
+SmartAdmin is a ready-made enterprise back-office foundation for .NET 10 / ASP.NET Core projects. Login, users, roles, menu permissions, organizations and data permissions, dictionaries, config, logs, files, scheduled jobs and an AI gateway are common back-office features; they are already done and ship, admin UI included, as two packages:
 
 - Backend: the NuGet package `SmartAdmin`
 - Frontend: the npm package `smart-admin-web` (Vue 3 + Naive UI)

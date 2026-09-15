@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: SmartAdmin
-  text: 可替换的现代企业后台管理内核
-  tagline: AI 辅助开发，简单高效；装上即用，升级只改版本号
+  text: AI+企业后台管理内核
+  tagline: 内置 AI 网关，AI 辅助开发；开箱即用，升级只改版本号
   image:
     src: /icon-128.png
     alt: SmartAdmin

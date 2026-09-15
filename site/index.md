@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: SmartAdmin
-  text: The replaceable, modern admin kernel for .NET
-  tagline: Simple, efficient, AI-assisted development. Install and go. Upgrade by bumping a version.
+  text: AI+ enterprise admin kernel for .NET
+  tagline: Built-in AI gateway, AI-assisted development. Install and go, upgrade by bumping a version.
   image:
     src: /icon-128.png
     alt: SmartAdmin
