@@ -13,6 +13,7 @@ import {
   NPopconfirm,
   NDropdown,
   NInput,
+  NSpin,
   NTooltip,
   useMessage,
   type TreeOption,
@@ -79,6 +80,8 @@ const directorOptions = ref<{ label: string; value: number }[]>([])
 // 面板交互对齐内核 layout.css 的 .side-filter 约定(机构管理页搜索/展开收起用的同一套):
 // 搜索走 NTree 自带 pattern/filter;展开受控,进页面全折叠,选中节点自动展开其祖先链。
 const orgFlat = ref<SysOrg[]>([])
+// 拉取期间给树位占位(见下方 n-spin),避免树从空白直接跳成展开好的一整棵——那一下比慢半拍更扎眼。
+const orgLoading = ref(true)
 const orgTree = computed(() => buildTree(orgFlat.value))
 const selectedOrgId = ref<number | null>(null)
 const tableParams = computed(() =>
@@ -107,6 +110,8 @@ const allOrgExpanded = computed(
 function toggleExpandAllOrg() {
   orgExpandedKeys.value = allOrgExpanded.value ? [] : [...expandableOrgKeys.value]
 }
+// 受控展开:一旦传了 expanded-keys,naive 就以它为准,不会自己默认展开——进页面全展开得自己播种。
+watch(expandableOrgKeys, keys => (orgExpandedKeys.value = keys), { immediate: true })
 
 // 选中的机构可能藏在收起的父级里(典型:切换搜索结果后选中项被折叠的祖先挡住),把祖先链补进展开集。
 watch(selectedOrgId, id => {
@@ -144,6 +149,8 @@ onMounted(async () => {
     orgFlat.value = await orgApi.list()
   } catch {
     // 静默:机构树是筛选辅助,拉取失败不打断列表
+  } finally {
+    orgLoading.value = false
   }
 })
 
@@ -369,17 +376,17 @@ const columns: SmartTableColumn<UserItem>[] = [
   <div class="user-layout side-page">
     <!-- 左侧机构树筛选:面板外观/交互对齐内核 .side-filter 约定(机构管理页搜索、展开收起同款) -->
     <aside class="side-filter">
-      <div v-if="expandableOrgKeys.length" class="side-filter__head">
+      <div class="side-filter__head">
         <div class="side-filter__actions">
-          <n-tooltip>
+          <n-tooltip v-if="expandableOrgKeys.length">
             <template #trigger>
-              <n-button quaternary circle size="tiny" @click="toggleExpandAllOrg">
+              <n-button quaternary circle size="small" @click="toggleExpandAllOrg">
                 <template #icon>
                   <AppIcon
                     :icon="
                       allOrgExpanded ? 'ph:arrows-in-line-vertical' : 'ph:arrows-out-line-vertical'
                     "
-                    :size="14"
+                    :size="18"
                   />
                 </template>
               </n-button>
@@ -410,23 +417,25 @@ const columns: SmartTableColumn<UserItem>[] = [
 
       <div class="side-filter__divider" />
 
-      <n-tree
-        class="side-tree"
-        block-line
-        selectable
-        show-line
-        key-field="id"
-        label-field="name"
-        children-field="children"
-        :data="orgTree"
-        :pattern="orgPattern"
-        :filter="filterOrg"
-        :show-irrelevant-nodes="false"
-        :selected-keys="selectedOrgId == null ? [] : [selectedOrgId]"
-        :expanded-keys="orgExpandedKeys"
-        @update:selected-keys="onOrgSelect"
-        @update:expanded-keys="keys => (orgExpandedKeys = keys as unknown as number[])"
-      />
+      <n-spin :show="orgLoading" class="fill-pass">
+        <n-tree
+          class="side-tree"
+          block-line
+          selectable
+          show-line
+          key-field="id"
+          label-field="name"
+          children-field="children"
+          :data="orgTree"
+          :pattern="orgPattern"
+          :filter="filterOrg"
+          :show-irrelevant-nodes="false"
+          :selected-keys="selectedOrgId == null ? [] : [selectedOrgId]"
+          :expanded-keys="orgExpandedKeys"
+          @update:selected-keys="onOrgSelect"
+          @update:expanded-keys="keys => (orgExpandedKeys = keys as unknown as number[])"
+        />
+      </n-spin>
     </aside>
 
     <SmartTable
@@ -495,3 +504,10 @@ const columns: SmartTableColumn<UserItem>[] = [
     @confirm="onExport"
   />
 </template>
+
+<style scoped>
+/* 树形比平铺分类宽一点:缩进和展开箭头要留出空间,默认 --side-filter-width(224px)偏窄。 */
+.user-layout {
+  --side-filter-width: 248px;
+}
+</style>
