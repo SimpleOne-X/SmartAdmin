@@ -99,6 +99,8 @@ public static class ReplaceabilityContract
         (typeof(ICacheAdminService), ServiceLifetime.Scoped),
         (typeof(IPersonalService), ServiceLifetime.Scoped),
         (typeof(IDashboardService), ServiceLifetime.Scoped),
+        (typeof(IWorkbenchTodoProvider), ServiceLifetime.Scoped),
+        (typeof(IUserShortcutService), ServiceLifetime.Scoped),
         (typeof(IRecycleBinService), ServiceLifetime.Scoped),
 
         // 定时任务

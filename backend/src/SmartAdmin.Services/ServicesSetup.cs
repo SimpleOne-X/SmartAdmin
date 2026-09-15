@@ -222,6 +222,12 @@ public static class ServicesSetup
         // 工作台首页统计:四个计数 + 近 7 日登录趋势,每步一个 virtual 方法可单独覆写
         services.TryAddScoped<IDashboardService, DashboardService>();
 
+        // 工作台待办:内核不产生审批/工单数据,默认空实现,消费者接入真实业务系统后整体替换(机制一)
+        services.TryAddScoped<IWorkbenchTodoProvider, NullWorkbenchTodoProvider>();
+
+        // 工作台快捷方式:用户手动置顶 + 高频访问自动补位,持久化在 sys_user_shortcut
+        services.TryAddScoped<IUserShortcutService, UserShortcutService>();
+
         // 种子:多实现集合,TryAddEnumerable 按实现类型防重
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, SuperAdminSeed>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultRoleSeed>());

@@ -19,7 +19,9 @@ public class PersonalService(
     ISessionService? sessions = null,
     ICurrentUser? currentUser = null,
     // 头像 URL 校验(默认只放行 null/空白或本地签名直链);未注入(纯 Services 宿主)时跳过校验
-    IAvatarUrlValidator? avatarValidator = null) : IPersonalService
+    IAvatarUrlValidator? avatarValidator = null,
+    // 上一次登录信息查询用;尾随可选,消费者子类省略也能编译,未注入时 GetLastLoginAsync 直接返回 null
+    IRepository<SysLoginLog>? loginLogs = null) : IPersonalService
 {
     // LastPasswordChangeTime 是与审计字段同类的持久化业务时间戳,走本地时钟(与 SqlSugarSetup 的 GetLocalNow 审计口径一致)
     private DateTime Now => (time ?? TimeProvider.System).GetLocalNow().DateTime;
@@ -123,5 +125,23 @@ public class PersonalService(
 
         user.DefaultModuleId = input.ModuleId;
         await users.UpdateAsync(user);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 取该用户最近 2 条成功登录记录里的第二条(第一条是本次);不足 2 条(首次登录)返回 null。
+    /// 索引 idx_sys_login_log_create 已按 CreateTime desc 建好,加 UserId 过滤走该索引前缀查询。
+    /// </remarks>
+    public virtual async Task<LastLoginOutput?> GetLastLoginAsync(long userId)
+    {
+        if (loginLogs is null) return null;
+        var recent = await loginLogs.AsQueryable()
+            .Where(l => l.UserId == userId && l.Success)
+            .OrderByDescending(l => l.CreateTime)
+            .Take(2)
+            .ToListAsync();
+        if (recent.Count < 2) return null;
+        var previous = recent[1];
+        return new LastLoginOutput { Time = previous.CreateTime, Ip = previous.Ip, UserAgent = previous.UserAgent };
     }
 }

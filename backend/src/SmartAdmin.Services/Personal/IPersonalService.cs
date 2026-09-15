@@ -22,4 +22,15 @@ public interface IPersonalService
 
     /// <summary>设当前用户默认应用;须校验用户确有该模块访问权,否则抛 <see cref="ErrorCode.ModuleAccessDenied"/>。</summary>
     Task SetDefaultModuleAsync(long userId, SetDefaultModuleInput input);
+
+    /// <summary>取当前用户上一次成功登录的信息(排除本次);不足两条成功登录记录(首次登录)时返回 null。</summary>
+    Task<LastLoginOutput?> GetLastLoginAsync(long userId);
+}
+
+/// <summary>上一次成功登录的信息(时间/IP/UA)。</summary>
+public record LastLoginOutput
+{
+    public DateTime Time { get; init; }
+    public string? Ip { get; init; }
+    public string? UserAgent { get; init; }
 }
