@@ -65,6 +65,36 @@ export interface MySessionItem {
   isCurrent: boolean
 }
 
+/** 上一次成功登录的信息(后端 LastLoginOutput;排除本次,首次登录时接口整体返回 null)。 */
+export interface LastLoginInfo {
+  time: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+/** 工作台待办单条(后端 WorkbenchTodoItem)。 */
+export interface WorkbenchTodoItem {
+  id: number
+  title: string
+  description?: string | null
+  url?: string | null
+  createTime: string
+}
+
+/** 工作台待办摘要(后端 WorkbenchTodoSummary;内核默认恒空)。 */
+export interface WorkbenchTodoSummary {
+  totalCount: number
+  items: WorkbenchTodoItem[]
+}
+
+/** 工作台快捷方式项(后端 UserShortcutItem;后端已按"置顶优先+高频补位"排好序)。 */
+export interface UserShortcutItem {
+  menuPath: string
+  pinned: boolean
+  title: string
+  icon?: string | null
+}
+
 /** 后端统一分页结果 PagedList<T>。 */
 export interface PagedList<T> {
   current: number
