@@ -39,6 +39,12 @@ public class AdminDatabaseConnectionOptions
     public bool ApplyAuditAop { get; set; }
 
     /// <summary>
+    /// 是否挂租户隔离全局过滤器(<c>ITenantScoped</c>)。
+    /// <para><b>默认 false</b>:副库通常不按 TenantId 建模;主库固定开启,不受本项影响。</para>
+    /// </summary>
+    public bool ApplyTenantFilter { get; set; }
+
+    /// <summary>
     /// 慢 SQL 告警阈值(毫秒)。语义同主库 <see cref="AdminDatabaseOptions.SlowSqlMillis"/>:
     /// ≤0 关闭(默认 0);失败 SQL 的 Error 日志不受本项控制、始终开启。
     /// </summary>

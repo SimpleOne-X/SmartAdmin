@@ -145,6 +145,15 @@ public static class SqlSugarSetup
                         || (dataScope.Current.IncludeSelf == true && e.CreateUserId == dataScope.Current.UserId));
                 }
 
+                if (policy.ApplyTenantFilter)
+                {
+                    // 租户隔离(硬边界):刻意不设 IsUnrestricted 式逃逸条件——机构数据范围回答
+                    // "同租户内我能看多少",这里回答"我根本不该看见别的租户",两者不能共用同一个开关。
+                    // e.TenantId 与 currentUser.TenantId 都可能是 null(升级补列未回填 / 系统上下文无租户);
+                    // SQL 的 NULL = NULL 恒非真,天然拒绝而不是意外放行,不需要额外判空。
+                    client.QueryFilter.AddTableFilter<ITenantScoped>(e => e.TenantId == currentUser.TenantId);
+                }
+
                 if (policy.ApplyAuditAop)
                 {
                     // 审计字段自动填充:业务代码只管业务字段,基建字段框架兜底(见 BaseEntity 注释)
@@ -169,6 +178,10 @@ public static class SqlSugarSetup
                                 // 按接口而非 DataEntity 基类匹配,故不软删的机构实体(OrgAuditEntity)同样自动填充。
                                 else if (info is { PropertyName: nameof(IOrgScoped.CreateOrgId), EntityValue: IOrgScoped { CreateOrgId: null } } && currentUser.OrgId is { } insOrgId)
                                     info.SetValue(insOrgId);
+                                // TenantId 未指定(实现 ITenantScoped 的实体)→ 填当前用户所属租户;
+                                // 无租户上下文(系统写入/未登录)则留空,交给 TenantBackfillHook 在升级期统一处理。
+                                else if (info is { PropertyName: nameof(ITenantScoped.TenantId), EntityValue: ITenantScoped { TenantId: null } } && currentUser.TenantId is { } insTenantId)
+                                    info.SetValue(insTenantId);
                                 break;
 
                             case DataFilterType.UpdateByObject:
@@ -381,16 +394,17 @@ public static class SqlSugarSetup
         bool ApplySoftDeleteFilter,
         bool ApplyDataScopeFilter,
         bool ApplyAuditAop,
-        int SlowSqlMillis)
+        int SlowSqlMillis,
+        bool ApplyTenantFilter)
     {
         public static HookPolicy ForMain(int slowSqlMillis) =>
-            new(ApplySoftDeleteFilter: true, ApplyDataScopeFilter: true, ApplyAuditAop: true, SlowSqlMillis: slowSqlMillis);
+            new(ApplySoftDeleteFilter: true, ApplyDataScopeFilter: true, ApplyAuditAop: true, SlowSqlMillis: slowSqlMillis, ApplyTenantFilter: true);
 
         public static HookPolicy ForAdditional(AdminDatabaseConnectionOptions o) =>
-            new(o.ApplySoftDeleteFilter, o.ApplyDataScopeFilter, o.ApplyAuditAop, o.SlowSqlMillis);
+            new(o.ApplySoftDeleteFilter, o.ApplyDataScopeFilter, o.ApplyAuditAop, o.SlowSqlMillis, o.ApplyTenantFilter);
 
         /// <summary>未知 ConfigId 的安全兜底:不挂业务钩子。</summary>
         public static HookPolicy ForAdditionalBare() =>
-            new(ApplySoftDeleteFilter: false, ApplyDataScopeFilter: false, ApplyAuditAop: false, SlowSqlMillis: 0);
+            new(ApplySoftDeleteFilter: false, ApplyDataScopeFilter: false, ApplyAuditAop: false, SlowSqlMillis: 0, ApplyTenantFilter: false);
     }
 }
