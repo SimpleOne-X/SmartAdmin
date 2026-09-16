@@ -11,13 +11,44 @@ namespace SmartAdmin.Services;
 /// <para>迁移更多实体到 TenantEntity 时(见 Task 9/10),回这个类加对应的 IRepository&lt;T&gt; 构造参数
 /// 与一行 UpdateAsync 调用——这里刻意不用反射遍历所有 ITenantScoped 类型,保持每个实体显式可见。</para>
 /// </summary>
-public class TenantBackfillHook(IRepository<SysUser> users) : IDatabaseReadyHook
+public class TenantBackfillHook(
+    IRepository<SysUser> users,
+    IRepository<SysOrg> orgs,
+    IRepository<SysRole> roles,
+    IRepository<SysUserRole> userRoles,
+    IRepository<SysRoleMenu> roleMenus,
+    IRepository<SysRoleDataScope> roleDataScopes,
+    IRepository<SysPosition> positions) : IDatabaseReadyHook
 {
     public virtual async Task OnDatabaseReadyAsync(DatabaseReadyContext context, CancellationToken cancellationToken)
     {
         await users.Db.Updateable<SysUser>()
             .SetColumns(u => u.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
             .Where(u => u.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await orgs.Db.Updateable<SysOrg>()
+            .SetColumns(o => o.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(o => o.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await roles.Db.Updateable<SysRole>()
+            .SetColumns(r => r.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(r => r.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await userRoles.Db.Updateable<SysUserRole>()
+            .SetColumns(ur => ur.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(ur => ur.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await roleMenus.Db.Updateable<SysRoleMenu>()
+            .SetColumns(rm => rm.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(rm => rm.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await roleDataScopes.Db.Updateable<SysRoleDataScope>()
+            .SetColumns(rds => rds.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(rds => rds.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await positions.Db.Updateable<SysPosition>()
+            .SetColumns(p => p.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(p => p.TenantId == null)
             .ExecuteCommandAsync(cancellationToken);
     }
 }

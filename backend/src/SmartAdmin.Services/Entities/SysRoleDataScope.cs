@@ -10,7 +10,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_role_data_scope", TableDescription = "角色数据范围")]
 [SugarIndex("idx_sys_role_data_scope_role", nameof(RoleId), OrderByType.Asc, IsUnique = true)]
-public class SysRoleDataScope : BaseEntity
+public class SysRoleDataScope : TenantEntity
 {
     [SugarColumn(ColumnDescription = "角色 Id(唯一)")]
     public long RoleId { get; set; }

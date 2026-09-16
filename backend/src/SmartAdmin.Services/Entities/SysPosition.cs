@@ -10,7 +10,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_position", TableDescription = "职位")]
 [SugarIndex("idx_sys_position_code", nameof(Code), OrderByType.Asc, IsUnique = true)]
-public class SysPosition : BaseEntity
+public class SysPosition : TenantEntity
 {
     [SugarColumn(Length = 64, ColumnDescription = "职位名称")]
     public string Name { get; set; } = "";

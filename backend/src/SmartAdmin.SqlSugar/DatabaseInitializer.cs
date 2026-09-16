@@ -362,16 +362,26 @@ internal sealed class DatabaseInitializer(
         // 连接表:代理主键会漂(运行时授权发雪花号),按业务唯一键判存——该键已存在就跳过,
         // 无论它挂的是种子 Id 还是雪花 Id。不这么做,种子会拿固定 Id 把同一业务键再插一遍 → 撞唯一索引 → 启动崩。
         // WhereColumns 让 Storageable 按这些列(而非主键)分流;这类种子无业务字段可覆盖,故不参与 SyncOnUpgrade。
-        // (连接行按 RbacService 语义是物理删除,库里不存在软删行,故无需 ClearFilter。)
+        // (连接行按 RbacService 语义是物理删除,库里不存在软删行,本不需要管软删过滤器。)
+        // DisableFilters() 必须显式挂:Storageable 内部的存在性判断也是一次普通查询,同样会经过全局过滤器——
+        // Task 9 起 SysUserRole/SysRoleDataScope 都是 ITenantScoped,种子在系统上下文(无租户)下跑,
+        // 过滤器谓词要求 currentUser.TenantId != null,系统上下文恒为 null ⇒ 恒判"不存在"。
+        // 不禁用的话,已经落库的连接行会被误判成"缺失"而重新插入,直接撞唯一索引——
+        // 这在"从模板库克隆已播种的库、宿主再起一次"的路径上(见 AdminAppFactory/TestDb.CloneFromTemplate)
+        // 每次都会触发,不是偶发。判存必须看**物理**行,与下面 PK 分支同一诉求,只是 Storageable 走的是
+        // 自己的 DisableFilters() 而非 Queryable 那一套 ClearFilter()。
         if (seed.DedupColumns is { Length: > 0 } dedup)
         {
-            var joinStorage = await db.Storageable(rows).WhereColumns(dedup).ToStorageAsync();
+            // DisableFilters() 必须排在 WhereColumns(dedup) 之前:WhereColumns 内部立即同步查一次库
+            // (填充 dbDataList 判存),不是等 ToStorageAsync() 才查——挂晚了,存在性判断已经跑完、
+            // 过滤器早就生效过了,等于没挂。
+            var joinStorage = await db.Storageable(rows).DisableFilters().WhereColumns(dedup).ToStorageAsync();
             var n = joinStorage.InsertList.Count == 0 ? 0 : await joinStorage.AsInsertable.ExecuteCommandAsync();
             return (n, 0);
         }
 
         // 按主键分流。不用 Storageable 而是自己查:存在性判断必须看**物理**行,
-        // 而 ClearFilter 挂不到 Storageable 上 —— 全局软删过滤器会让用户软删掉的内置菜单查不到,
+        // 全局软删过滤器会让用户软删掉的内置菜单查不到,
         // 判成"不存在"→ 走 INSERT → 撞主键(软删一条内置菜单,应用就再也起不来)。
         var ids = rows.Select(r => r.Id).ToList();
         var existing = await db.Queryable<TEntity>().ClearFilter()

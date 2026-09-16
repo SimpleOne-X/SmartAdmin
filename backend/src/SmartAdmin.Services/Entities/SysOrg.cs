@@ -9,7 +9,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_org", TableDescription = "机构")]
 [SugarIndex("idx_sys_org_code", nameof(Code), OrderByType.Asc, IsUnique = true)]
-public class SysOrg : BaseEntity
+public class SysOrg : TenantEntity
 {
     /// <summary>父机构 Id(0=根,即顶级机构无父)</summary>
     [SugarColumn(ColumnDescription = "父机构 Id(0=根)")]
