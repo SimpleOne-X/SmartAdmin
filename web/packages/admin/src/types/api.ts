@@ -45,6 +45,9 @@ export interface UserProfile {
   orgName?: string | null
   /** 职位名称(未分配/已删则 null) */
   positionName?: string | null
+  tenantId?: number | null
+  /** 所属租户名称(已删则 null);只读展示,不参与任何切换交互。 */
+  tenantName?: string | null
   nickname?: string | null
   phone?: string | null
   email?: string | null

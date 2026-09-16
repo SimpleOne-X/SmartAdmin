@@ -7072,6 +7072,10 @@ export interface components {
             orgName?: null | string;
             /** @description 职位名称(已删/未分配则为 null) */
             positionName?: null | string;
+            /** Format: int64 */
+            tenantId?: null | number | string;
+            /** @description 所属租户名称(已删则为 null)。前端只读展示,不参与任何切换交互(spec §6.3)。 */
+            tenantName?: null | string;
             nickname?: null | string;
             phone?: null | string;
             email?: null | string;

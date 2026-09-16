@@ -37,6 +37,8 @@ public class PersonalService(
             OrgId = user.OrgId,
             PositionId = user.PositionId,
             OrgName = await OrgNameAsync(user.OrgId),
+            TenantId = user.TenantId,
+            TenantName = await TenantNameAsync(user.TenantId),
             PositionName = await PositionNameAsync(user.PositionId),
             Nickname = user.Nickname,
             Phone = user.Phone,
@@ -60,6 +62,10 @@ public class PersonalService(
     /// <summary>取职位名称(未分配/已删则 null)。同上,<c>SysPosition</c> 亦非机构范围实体。</summary>
     protected virtual async Task<string?> PositionNameAsync(long? positionId) =>
         positionId is null ? null : await users.Db.Queryable<SysPosition>().Where(p => p.Id == positionId.Value).Select(p => p.Name).FirstAsync();
+
+    /// <summary>取租户名称(未分配/已删则 null)。同 OrgNameAsync,SysTenant 亦非机构范围实体。</summary>
+    protected virtual async Task<string?> TenantNameAsync(long? tenantId) =>
+        tenantId is null ? null : await users.Db.Queryable<SysTenant>().Where(t => t.Id == tenantId.Value).Select(t => t.Name).FirstAsync();
 
     /// <inheritdoc />
     public virtual async Task UpdateProfileAsync(long userId, UpdateProfileInput input)

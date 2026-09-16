@@ -11,6 +11,8 @@ interface UserInfo {
   mustChangePassword: boolean
   /** 登录时快照的超管标记;profile 故障时 v-auth 用此值 fail-open。 */
   isSuperAdmin?: boolean
+  /** 所属租户名称,登录后经 /personal/profile 回填;只读展示,不参与任何切换交互。 */
+  tenantName?: string | null
 }
 
 /**

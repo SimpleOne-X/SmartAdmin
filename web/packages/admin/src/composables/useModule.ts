@@ -43,8 +43,8 @@ export function useModule() {
         .catch(() => ({ ok: false, codes: [] as string[] })),
       personalApi
         .profile()
-        .then(p => ({ sadm: p.isSuperAdmin, avatar: p.avatar ?? null }))
-        .catch(() => ({ sadm: useUserStore().userInfo?.isSuperAdmin ?? false, avatar: null })),
+        .then(p => ({ sadm: p.isSuperAdmin, avatar: p.avatar ?? null, tenantName: p.tenantName ?? null }))
+        .catch(() => ({ sadm: useUserStore().userInfo?.isSuperAdmin ?? false, avatar: null, tenantName: null })),
     ])
     auth.modules = modules
     auth.defaultModuleId = defaultModuleId ?? null
@@ -53,7 +53,10 @@ export function useModule() {
     auth.isSuperAdmin = profile.sadm
     // 顶栏头像:登录出参不含 avatar,这里回填(取不到按无头像处理,顶栏回落图标)
     const user = useUserStore()
-    if (user.userInfo) user.userInfo.avatar = profile.avatar
+    if (user.userInfo) {
+      user.userInfo.avatar = profile.avatar
+      user.userInfo.tenantName = profile.tenantName
+    }
     if (modules.length === 0) return { chooser: true } // 空态:选择器里提示未分配应用
     // F5/深链优先重建"上次所在应用"(持久化的 currentModuleId),让其动态路由复活,跨应用深链不落 404。
     const remembered = auth.currentModuleId

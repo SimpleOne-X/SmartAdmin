@@ -59,6 +59,16 @@ public class UserProfileFieldsTests
     }
 
     [Fact]
+    public async Task Profile_includes_tenant_name()
+    {
+        using var f = new AdminAppFactory();
+        var c = await SuperAdminClient(f);
+
+        var profile = (await (await c.GetAsync("/api/v1/personal/profile")).ReadEnvelope()).GetProperty("data");
+        Assert.Equal("默认租户", profile.GetProperty("tenantName").GetString());
+    }
+
+    [Fact]
     public async Task Update_overwrites_profile_fields()
     {
         using var f = new AdminAppFactory();

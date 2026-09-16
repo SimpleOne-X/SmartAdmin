@@ -15,6 +15,11 @@ public record UserProfile
     /// <summary>职位名称(已删/未分配则为 null)</summary>
     public string? PositionName { get; init; }
 
+    public long? TenantId { get; init; }
+
+    /// <summary>所属租户名称(已删则为 null)。前端只读展示,不参与任何切换交互(spec §6.3)。</summary>
+    public string? TenantName { get; init; }
+
     public string? Nickname { get; init; }
     public string? Phone { get; init; }
     public string? Email { get; init; }
