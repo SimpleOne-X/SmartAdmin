@@ -370,6 +370,11 @@ internal sealed class DatabaseInitializer(
         // 这在"从模板库克隆已播种的库、宿主再起一次"的路径上(见 AdminAppFactory/TestDb.CloneFromTemplate)
         // 每次都会触发,不是偶发。判存必须看**物理**行,与下面 PK 分支同一诉求,只是 Storageable 走的是
         // 自己的 DisableFilters() 而非 Queryable 那一套 ClearFilter()。
+        // DisableFilters() 是总闸:等价于 ClearFilter()(不带类型参数),会把 ISoftDelete/IOrgScoped/
+        // ITenantScoped 三个全局过滤器一并关掉,不是只关软删除。当前只对 SysUserRole/SysRoleDataScope
+        // 这两个走 DedupColumns 的连接表种子生效,它们都不是 IOrgScoped,所以眼下等价于只关了
+        // ITenantScoped;以后若有人把 DedupColumns 这个模式用到 DataEntity / TenantDataEntity 上
+        // (机构数据范围实体),机构范围过滤器会被一并关掉,判存会看到范围外的行——留意这一点。
         if (seed.DedupColumns is { Length: > 0 } dedup)
         {
             // DisableFilters() 必须排在 WhereColumns(dedup) 之前:WhereColumns 内部立即同步查一次库

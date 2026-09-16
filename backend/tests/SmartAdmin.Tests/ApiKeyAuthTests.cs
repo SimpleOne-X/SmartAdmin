@@ -159,6 +159,98 @@ public class ApiKeyAuthTests
         Assert.Equal(40006, (await userOnly.ReadEnvelope()).GetProperty("code").GetInt32());
     }
 
+    /// <summary>
+    /// 建"设备接口"目录 + 权限按钮(GET:/api/v1/diag/machine-perm)+ 角色 + 用户,角色已授予该按钮权限。
+    /// 供下面几条"绑定用户的 key 在各种用户状态下该怎么表现"用例共享,减少重复的四段式建库代码。
+    /// </summary>
+    private static async Task<long> SetUpGrantedDeviceUserAsync(HttpClient admin)
+    {
+        var suffix = Guid.CreateVersion7().ToString("N")[..8];
+        var groupId = (await (await admin.PostJson("/api/v1/sys/menu/add",
+            new { parentId = 0, type = 1, title = "设备接口" + suffix, permission = "", sort = 99, enabled = true, moduleId = 1, visible = false }))
+            .ReadEnvelope()).GetProperty("data").GetInt64();
+        var buttonId = (await (await admin.PostJson("/api/v1/sys/menu/add",
+            new { parentId = groupId, type = 3, title = "机器权限" + suffix, permission = "GET:/api/v1/diag/machine-perm", sort = 1, enabled = true }))
+            .ReadEnvelope()).GetProperty("data").GetInt64();
+        var roleId = (await (await admin.PostJson("/api/v1/sys/role/add",
+            new { name = "设备" + suffix, code = "device-" + suffix, sort = 0, enabled = true })).ReadEnvelope()).GetProperty("data").GetInt64();
+        var userId = (await (await admin.PostJson("/api/v1/sys/user",
+            new { account = "device-" + suffix, password = "Test@123456", name = "设备用户" + suffix, enabled = true, roleIds = new[] { roleId } }))
+            .ReadEnvelope()).GetProperty("data").GetProperty("id").GetInt64();
+        await admin.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds = new[] { buttonId } });
+        return userId;
+    }
+
+    /// <summary>
+    /// 停用的用户绑定 key:API Key 没有 sid 会话,不受 [ActiveSession] 强退检查约束,
+    /// 停用检查只能在 AttachBoundUserClaimsAsync 里做——账号停用后即便角色还挂着权限,也必须表现得
+    /// 跟未绑定用户一样(fail-closed),不是 500,也不是继续放行。
+    /// </summary>
+    [Fact]
+    public async Task Disabled_bound_user_key_has_no_rbac_claims()
+    {
+        var bound = new BoundValidator();
+        using var f = new AdminAppFactory
+        {
+            Overrides = s => s.Replace(ServiceDescriptor.Singleton<IApiKeyValidator>(bound)),
+        };
+        var admin = await SuperAdminClient(f);
+        var userId = await SetUpGrantedDeviceUserAsync(admin);
+        Assert.Equal(0, (await (await admin.PutJson($"/api/v1/sys/user/{userId}/enabled", new { enabled = false })).ReadEnvelope())
+            .GetProperty("code").GetInt32());
+        bound.UserId = userId;
+
+        // 故意不在停用前先调一次断言"授权确实生效"——那次调用会把这个 userId 的权限码结果暖进
+        // IPermissionProvider 的缓存(RbacPermissionProvider.GetPermissionCodesAsync),而停用用户这个
+        // 动作不invalidate 这份缓存,下面的断言会命中陈旧缓存拿到 200,变成假阳性。
+        // "授予的权限本来会生效"已经由 Bound_key_reuses_the_users_rbac 锁住,这里只测"停用之后"这一件事,
+        // 让这次调用成为该 userId 的第一次调用(缓存未命中→查库),干净地测 AttachBoundUserClaimsAsync。
+        var res = await Machine(f, KEY_PDA).GetAsync("/api/v1/diag/machine-perm");
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        Assert.Equal(41001, (await res.ReadEnvelope()).GetProperty("code").GetInt32());
+    }
+
+    /// <summary>UserId 指向不存在的用户(配置野指针/用户后续被清理)→ 同样按未绑定处理,不炸 500。</summary>
+    [Fact]
+    public async Task Bound_key_to_nonexistent_user_has_no_rbac_claims()
+    {
+        var bound = new BoundValidator { UserId = 999_999_999_999 };
+        using var f = new AdminAppFactory
+        {
+            Overrides = s => s.Replace(ServiceDescriptor.Singleton<IApiKeyValidator>(bound)),
+        };
+
+        var res = await Machine(f, KEY_PDA).GetAsync("/api/v1/diag/machine-perm");
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        Assert.Equal(41001, (await res.ReadEnvelope()).GetProperty("code").GetInt32());
+    }
+
+    /// <summary>
+    /// 软删用户绑定的 key:按用户 Id 查询不清 ISoftDelete 过滤器,软删用户本就查不到、自然早退。
+    /// 这是当前代码结构自带的行为,锁住它,防止以后有人为了"对称"给这条查询加上
+    /// ClearFilter&lt;ISoftDelete&gt;() 而不小心让软删用户的 key 重新拿到 RBAC claim。
+    /// </summary>
+    [Fact]
+    public async Task Bound_key_to_soft_deleted_user_has_no_rbac_claims()
+    {
+        var bound = new BoundValidator();
+        using var f = new AdminAppFactory
+        {
+            Overrides = s => s.Replace(ServiceDescriptor.Singleton<IApiKeyValidator>(bound)),
+        };
+        var admin = await SuperAdminClient(f);
+        var userId = await SetUpGrantedDeviceUserAsync(admin);
+        Assert.Equal(0, (await (await admin.DeleteAsync($"/api/v1/sys/user/{userId}")).ReadEnvelope())
+            .GetProperty("code").GetInt32());   // 软删
+        bound.UserId = userId;
+
+        // 同 Disabled_bound_user_key_has_no_rbac_claims:故意不在软删前先调一次暖缓存的断言,
+        // 让这次调用成为该 userId 的第一次调用,干净地测 AttachBoundUserClaimsAsync 的早退。
+        var res = await Machine(f, KEY_PDA).GetAsync("/api/v1/diag/machine-perm");
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        Assert.Equal(41001, (await res.ReadEnvelope()).GetProperty("code").GetInt32());
+    }
+
     [Fact]
     public async Task Skip_envelope_returns_the_bare_dto()
     {
