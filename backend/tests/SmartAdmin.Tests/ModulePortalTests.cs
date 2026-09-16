@@ -27,15 +27,21 @@ public class ModulePortalTests
         var rbac = sp.GetRequiredService<IRbacService>();
         var users = sp.GetRequiredService<IUserService>();
 
-        var role = new SysRole { Name = "门户测试角色", Code = "portal-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
-        await roles.InsertAsync(role);
-        if (menuId is not null)
-            await rbac.SetRoleMenusAsync(role.Id, [menuId.Value]);
+        // 后台 DI 作用域没有 HttpContext,没有租户上下文;SysRole/SysUser 都是 ITenantScoped,插入 AOP
+        // 填不了 TenantId。借 TestTenantContext 让这段建库过程"看起来"像默认租户下的已认证请求,
+        // 落出来的角色/用户才与下面真实登录后拿到的 tid=1 令牌一致,RBAC/权限码解析才对得上。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
+        {
+            var role = new SysRole { Name = "门户测试角色", Code = "portal-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
+            await roles.InsertAsync(role);
+            if (menuId is not null)
+                await rbac.SetRoleMenusAsync(role.Id, [menuId.Value]);
 
-        var account = "portal-" + Guid.CreateVersion7().ToString("N")[..8];
-        const string password = "Portal@123456";
-        await users.AddAsync(new AddUserInput { Account = account, Password = password, Name = "门户用户", Enabled = true, RoleIds = [role.Id] });
-        return (account, password);
+            var account = "portal-" + Guid.CreateVersion7().ToString("N")[..8];
+            const string password = "Portal@123456";
+            await users.AddAsync(new AddUserInput { Account = account, Password = password, Name = "门户用户", Enabled = true, RoleIds = [role.Id] });
+            return (account, password);
+        }
     }
 
     private static IEnumerable<long> ModuleIds(System.Text.Json.JsonElement modulesEnvelope) =>
@@ -95,6 +101,7 @@ public class ModulePortalTests
         var (account, password) = await SeedUser(f, menuId: 401);
 
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var uid = (await sp.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.Account == account))!.Id;
@@ -209,6 +216,7 @@ public class ModulePortalTests
         Assert.Empty(ModuleIds(await (await c.GetAsync("/api/v1/personal/modules")).ReadEnvelope()));   // 预热(空)
 
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var uid = (await sp.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.Account == account))!.Id;

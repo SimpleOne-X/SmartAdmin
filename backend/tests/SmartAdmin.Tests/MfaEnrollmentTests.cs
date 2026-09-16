@@ -38,8 +38,14 @@ public class MfaEnrollmentTests
             },
         };
 
+    /// <summary>
+    /// <paramref name="tenantId"/> 默认 null:后台 DI 作用域没有租户上下文,插入 AOP 填不了 TenantId,
+    /// 落成 null 与其余同样在后台作用域直调服务的自助绑定用例一致(ClearFilter&lt;ITenantScoped&gt;() 已让
+    /// StartBindAsync/CompleteBindAsync/UseRecoveryCodeAsync 不再关心这一列的值)。仅当用例要让这个用户
+    /// 被一个真实已认证 HTTP 调用方(如登录态 superAdmin,租户固定为 1)按租户过滤看到时,才显式传入。
+    /// </summary>
     private static async Task<(AdminAppFactory f, SysUser user, string password)> SeedUserAsync(
-        AdminAppFactory f, bool superAdmin = false, bool forceTotp = false)
+        AdminAppFactory f, bool superAdmin = false, bool forceTotp = false, long? tenantId = null)
     {
         using var scope = f.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
@@ -55,9 +61,41 @@ public class MfaEnrollmentTests
             ForceTotp = forceTotp,
             MustChangePassword = false,
             LastPasswordChangeTime = DateTime.Now,
+            TenantId = tenantId,
         };
         await users.InsertAsync(user);
         return (f, user, password);
+    }
+
+    /// <summary>
+    /// 经 HTTP 以 <paramref name="c"/>(须已带已认证 Bearer)清除目标用户 MFA;处理 [RequireReauth] 的一次重试。
+    /// </summary>
+    private static async Task ClearMfaViaHttpAsync(HttpClient c, long targetUserId)
+    {
+        async Task<bool> TryClearAsync()
+        {
+            var resp = await c.PostJson("/api/v1/sys/mfa/clear", new { userId = targetUserId });
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(raw))
+                return resp.IsSuccessStatusCode;
+            using var doc = System.Text.Json.JsonDocument.Parse(raw);
+            var code = doc.RootElement.GetProperty("code").GetInt32();
+            if (code == (int)ErrorCode.ReauthRequired)
+            {
+                var reauthEnv = await (await c.PostJson("/api/v1/auth/reauth", new
+                {
+                    method = "password",
+                    password = "Test@123456",
+                })).ReadEnvelope();
+                Assert.Equal(0, reauthEnv.GetProperty("code").GetInt32());
+                return false; // 调用方再试一次 clear
+            }
+            Assert.Equal(0, code);
+            return true;
+        }
+
+        if (!await TryClearAsync())
+            Assert.True(await TryClearAsync());
     }
 
     private static async Task BindSelfAsync(
@@ -101,7 +139,8 @@ public class MfaEnrollmentTests
         });
         Assert.Equal(10, complete.RecoveryCodes.Count);
 
-        var reloaded = await users.GetByIdAsync(user.Id);
+        // user 是后台作用域直建的夹具(TenantId 默认 null),这里同样是没有租户上下文的后台作用域读回,须跨租户查找。
+        var reloaded = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == user.Id).FirstAsync();
         Assert.NotNull(reloaded);
         Assert.True(reloaded!.TotpEnabled);
         Assert.False(string.IsNullOrEmpty(reloaded.TotpSeedProtected));
@@ -174,7 +213,7 @@ public class MfaEnrollmentTests
             RecoveryCode = complete.RecoveryCodes[0],
         });
 
-        var reloaded = await users.GetByIdAsync(user.Id);
+        var reloaded = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == user.Id).FirstAsync();
         Assert.False(reloaded!.TotpEnabled);
         Assert.True(string.IsNullOrEmpty(reloaded.TotpSeedProtected));
     }
@@ -183,25 +222,29 @@ public class MfaEnrollmentTests
     public async Task Admin_clear_mfa_allows_rebind()
     {
         await using var f = Factory();
-        var (_, target, password) = await SeedUserAsync(f);
+        // ClearUserMfaAsync 的 op/target 查找故意保持按租户过滤(越权守卫,见该方法上的注释)——
+        // target 须落在与下面发起 clear 的已登录 superAdmin 相同的租户(1),且必须真的经 HTTP 以
+        // 已认证身份调用,才是这条保护路径的真实调用场景(而不是绕开 [RolePermission]/令牌直调服务)。
+        var (_, target, password) = await SeedUserAsync(f, tenantId: DefaultTenantSeed.DEFAULT_TENANT_ID);
         using var scope = f.Services.CreateScope();
         var enroll = scope.ServiceProvider.GetRequiredService<IMfaEnrollmentService>();
         var totp = scope.ServiceProvider.GetRequiredService<ITotpService>();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
 
-        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
-        var super = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
-        Assert.NotNull(super);
-
         await BindSelfAsync(enroll, totp, target.Account, password);
-        await enroll.ClearUserMfaAsync(target.Id, super!.Id);
 
-        var reloaded = await users.GetByIdAsync(target.Id);
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", await c.LoginToken("superAdmin", "Test@123456"));
+        await ClearMfaViaHttpAsync(c, target.Id);
+
+        // target.TenantId 显式落到租户 1(见上),但这里是没有租户上下文的后台作用域,须跨租户查找。
+        var reloaded = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == target.Id).FirstAsync();
         Assert.False(reloaded!.TotpEnabled);
 
         // 可再次自助绑定
         await BindSelfAsync(enroll, totp, target.Account, password);
-        reloaded = await users.GetByIdAsync(target.Id);
+        reloaded = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == target.Id).FirstAsync();
         Assert.True(reloaded!.TotpEnabled);
     }
 
@@ -343,7 +386,9 @@ public class MfaEnrollmentTests
     public async Task Http_clear_mfa_as_super_admin()
     {
         await using var f = Factory();
-        var (_, target, password) = await SeedUserAsync(f);
+        // target 须与下面登录的 superAdmin 同租户(1)——ClearUserMfaAsync 的 target 查找故意保持
+        // 按租户过滤,见该方法上的注释。
+        var (_, target, password) = await SeedUserAsync(f, tenantId: DefaultTenantSeed.DEFAULT_TENANT_ID);
         using var scope = f.Services.CreateScope();
         var enroll = scope.ServiceProvider.GetRequiredService<IMfaEnrollmentService>();
         var totp = scope.ServiceProvider.GetRequiredService<ITotpService>();
@@ -351,43 +396,16 @@ public class MfaEnrollmentTests
 
         await BindSelfAsync(enroll, totp, target.Account, password);
 
-        // 超管默认无 TOTP:ClearUserMfa 允许未绑 TOTP 的超管清理他人
-        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
-        var super = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
-        Assert.NotNull(super);
-
         var c = f.CreateClient();
-        c.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", await c.LoginToken("superAdmin", "Test@123456"));
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", await c.LoginToken("superAdmin", "Test@123456"));
 
-        // Totp:Enabled → RequireReauth 生效;成功时 void action 可能空 body 200
-        async Task<bool> TryClearAsync()
-        {
-            var resp = await c.PostJson("/api/v1/sys/mfa/clear", new { userId = target.Id });
-            var raw = await resp.Content.ReadAsStringAsync();
-            if (string.IsNullOrWhiteSpace(raw))
-                return resp.IsSuccessStatusCode;
-            using var doc = System.Text.Json.JsonDocument.Parse(raw);
-            var code = doc.RootElement.GetProperty("code").GetInt32();
-            if (code == (int)ErrorCode.ReauthRequired)
-            {
-                var reauthEnv = await (await c.PostJson("/api/v1/auth/reauth", new
-                {
-                    method = "password",
-                    password = "Test@123456",
-                })).ReadEnvelope();
-                Assert.Equal(0, reauthEnv.GetProperty("code").GetInt32());
-                return false; // 调用方再试一次 clear
-            }
-            Assert.Equal(0, code);
-            return true;
-        }
+        // 超管默认无 TOTP:ClearUserMfa 允许未绑 TOTP 的超管清理他人(Totp:Enabled → RequireReauth 生效,
+        // ClearMfaViaHttpAsync 内处理一次 reauth 重试)。
+        await ClearMfaViaHttpAsync(c, target.Id);
 
-        if (!await TryClearAsync())
-            Assert.True(await TryClearAsync());
-
-        var reloaded = await users.GetByIdAsync(target.Id);
+        // target.TenantId 显式落到租户 1(见上),但这里是没有租户上下文的后台作用域,须跨租户查找。
+        var reloaded = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == target.Id).FirstAsync();
         Assert.False(reloaded!.TotpEnabled);
     }
 }

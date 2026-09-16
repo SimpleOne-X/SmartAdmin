@@ -24,15 +24,20 @@ public class CacheInvalidationTests
     {
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
-        var role = new SysRole { Name = "缓存失效测试角色", Code = "cache-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
-        await sp.GetRequiredService<IRepository<SysRole>>().InsertAsync(role);
-        await sp.GetRequiredService<IRbacService>().SetRoleMenusAsync(role.Id, [menuId]);
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUser 都是 ITenantScoped,借 TestTenantContext
+        // 让这段建库过程落到默认租户,与下面真实登录后的 tid=1 令牌一致。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
+        {
+            var role = new SysRole { Name = "缓存失效测试角色", Code = "cache-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
+            await sp.GetRequiredService<IRepository<SysRole>>().InsertAsync(role);
+            await sp.GetRequiredService<IRbacService>().SetRoleMenusAsync(role.Id, [menuId]);
 
-        var account = "cache-" + Guid.CreateVersion7().ToString("N")[..8];
-        const string password = "Cache@123456";
-        await sp.GetRequiredService<IUserService>().AddAsync(
-            new AddUserInput { Account = account, Password = password, Name = "缓存用户", Enabled = true, RoleIds = [role.Id] });
-        return (account, password);
+            var account = "cache-" + Guid.CreateVersion7().ToString("N")[..8];
+            const string password = "Cache@123456";
+            await sp.GetRequiredService<IUserService>().AddAsync(
+                new AddUserInput { Account = account, Password = password, Name = "缓存用户", Enabled = true, RoleIds = [role.Id] });
+            return (account, password);
+        }
     }
 
     [Fact]
@@ -48,6 +53,7 @@ public class CacheInvalidationTests
 
         // 管理员停用该用户
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var uid = (await sp.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.Account == account))!.Id;
@@ -71,8 +77,10 @@ public class CacheInvalidationTests
         WithToken(c, await c.LoginToken(account, password));
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/v1/ping")).StatusCode);   // 首次请求预热 perm 缓存
 
-        // 管理员经菜单服务停用菜单 401(经 MenuService.UpdateAsync → 扇出失效受影响用户 perm)
+        // 管理员经菜单服务停用菜单 401(经 MenuService.UpdateAsync → 扇出失效受影响用户 perm;
+        // 该扇出内部会查 ITenantScoped 的 SysUserRole/SysRoleMenu 找受影响用户,同样需要租户上下文)
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var menu = (await sp.GetRequiredService<IRepository<SysMenu>>().GetByIdAsync(401))!;
@@ -97,6 +105,9 @@ public class CacheInvalidationTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;SysUser/SysOrg 都是 ITenantScoped,借 TestTenantContext
+        // 让整段建库/查库过程落到默认租户。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
 
         // 造普通用户并预热其数据范围缓存 scope:{uid}
         var uid = (await sp.GetRequiredService<IUserService>().AddAsync(

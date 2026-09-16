@@ -130,7 +130,9 @@ public class ExternalAuthTests
         var binding = await sp.GetRequiredService<ISysUserExternalService>().FindByExternalAsync("prov", "sub-prov");
         Assert.NotNull(binding);
         Assert.Equal(output.UserId, binding!.UserId);
-        var user = await sp.GetRequiredService<IRepository<SysUser>>().GetByIdAsync(binding.UserId);
+        // 后台 DI 作用域没有租户上下文;自动开户的新用户同样是 ITenantScoped,读回须跨租户查找。
+        var user = await sp.GetRequiredService<IRepository<SysUser>>()
+            .AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == binding.UserId).FirstAsync();
         Assert.NotNull(user);
         Assert.False(user!.MustChangePassword);
         Assert.StartsWith("prov_", user.Account);
@@ -282,6 +284,9 @@ public class ExternalAuthTests
         using var f = Factory(identity);
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;IUserService.DeleteAsync 按 Id 查目标用户是按租户过滤的
+        // (真实调用永远是已认证管理员删自己租户内的用户),这里须借 TestTenantContext 补上。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var ext = sp.GetRequiredService<ISysUserExternalService>();
 
         var user = await InsertUserAsync(sp, "to-delete");

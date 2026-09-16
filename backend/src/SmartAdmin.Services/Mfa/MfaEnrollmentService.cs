@@ -53,7 +53,9 @@ public class MfaEnrollmentService(
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(input.Account), ErrorCode.PasswordWrong);
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(input.CurrentPassword), ErrorCode.MfaBindPasswordRequired);
 
-        var user = await users.GetFirstAsync(u => u.Account == input.Account.Trim());
+        // 自助绑定是 [AllowAnonymous] 端点(账密自证身份,尚无令牌),同 AuthService.ValidateUserAsync:
+        // currentUser.TenantId 为 null,按账号找人须跨租户查找,否则任何已归属租户的用户都绑不了 TOTP。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == input.Account.Trim()).FirstAsync();
         if (user is null)
         {
             hasher.Verify(input.CurrentPassword, _dummyHash ??= hasher.Hash("smart-admin.timing-dummy"));
@@ -119,7 +121,9 @@ public class MfaEnrollmentService(
         if (!totp.Verify(seed, input.TotpCode.Trim()))
             throw new AdminException(ErrorCode.TotpWrong);
 
-        var user = await users.GetByIdAsync(payload.UserId);
+        // 绑定挑战 Id 是 StartBindAsync 密码校验后建的短时关联票据,不是令牌;完成绑定前仍无租户上下文,
+        // 按挑战解出的 UserId 取人须跨租户查找(同 AuthService 的 TOTP/短信登录挑战)。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == payload.UserId).FirstAsync();
         AdminException.ThrowIf(user is null, ErrorCode.UserNotFound);
 
         var consumed = await cache.GetAndRemoveAsync<string>(challengeKey);
@@ -149,7 +153,8 @@ public class MfaEnrollmentService(
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(input.CurrentPassword), ErrorCode.PasswordWrong);
         AdminException.ThrowIf(string.IsNullOrWhiteSpace(input.RecoveryCode), ErrorCode.RecoveryCodeInvalid);
 
-        var user = await users.GetFirstAsync(u => u.Account == input.Account.Trim());
+        // 用恢复码同样是 [AllowAnonymous] 端点,同 StartBindAsync,须跨租户按账号查找。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == input.Account.Trim()).FirstAsync();
         if (user is null)
         {
             hasher.Verify(input.CurrentPassword, _dummyHash ??= hasher.Hash("smart-admin.timing-dummy"));
@@ -177,6 +182,16 @@ public class MfaEnrollmentService(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <b>租户隔离:这两处 <c>GetByIdAsync</c> 故意不 ClearFilter&lt;ITenantScoped&gt;()</b>——与
+    /// <see cref="AuthService"/>/本类自助绑定三个方法不同,本方法只在已认证管理员会话内被调用
+    /// (<c>MfaController.ClearMfa</c>,<c>[Authorize][RolePermission][RequireReauth]</c>),
+    /// <c>operatorUserId</c> 取自调用者自己的令牌,<c>currentUser.TenantId</c> 此刻必然有效。
+    /// <c>op</c> 是自查,天然同租户;<c>target</c> 则是越权守卫的关键一步——同 <see cref="SessionService.ForceLogoutAsync"/>
+    /// 的既有先例(那里操作者不得跨租户强退会话),清除 MFA 比强退更敏感(等于摘掉对方账号的二次验证),
+    /// 一个租户内被授予 <see cref="HighSensitivityPermissions.MfaClear"/> 的管理员必须只能对本租户内的用户生效,
+    /// 不能靠猜/连续试 Id 跨租户摘掉别人的 MFA。清过滤器会打开这个口子,故保持按租户过滤不变。
+    /// </remarks>
     public virtual async Task ClearUserMfaAsync(long targetUserId, long operatorUserId)
     {
         await EnsureTotpOnAsync();

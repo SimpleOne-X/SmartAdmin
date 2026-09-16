@@ -206,9 +206,15 @@ public class UserService(
         // 非超管不能把用户建到范围外的机构
         ValidateOrgInScope(input.OrgId);
 
-        // 查重把软删行也纳入:软删行仍占着唯一索引里的 Account,漏检会撞库唯一约束抛原生 500
+        // 查重把软删行也纳入:软删行仍占着唯一索引里的 Account,漏检会撞库唯一约束抛原生 500。
+        // 同时须 ClearFilter<ITenantScoped>:账号全平台唯一是 sys_user.Account 上的一条全局唯一索引
+        // (ADR-0010 决策 3,同 TenantService.AddAsync/AuthService.GenerateProvisionAccountAsync 的查重口径),
+        // Task 7 挂上租户过滤器前这条查重天然扫全表;不清则会静默收窄到"调用者自己租户内查重",
+        // 两个不同租户各自建同名账号都能各自通过检查,直到第二次 InsertAsync 才撞库唯一索引抛原生 500
+        // (而不是这里优雅地返回 AccountExists)——login/ValidateUserAsync 早已按账号跨租户查找,
+        // 两个租户各建一份同名账号会让登录结果不确定,是真实的正确性缺口,不是假设。
         AdminException.ThrowIf(
-            await users.AsQueryable().ClearFilter<ISoftDelete>().AnyAsync(u => u.Account == input.Account),
+            await users.AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>().AnyAsync(u => u.Account == input.Account),
             ErrorCode.AccountExists);
         AdminException.ThrowIf(
             avatarValidator is not null && !avatarValidator.IsValid(input.Avatar),

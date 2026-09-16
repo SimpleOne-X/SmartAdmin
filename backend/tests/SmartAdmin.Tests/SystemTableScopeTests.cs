@@ -35,19 +35,24 @@ public class SystemTableScopeTests
             menuIds.Add(menu.Id);
         }
 
-        var roles = sp.GetRequiredService<IRepository<SysRole>>();
-        var rbac = sp.GetRequiredService<IRbacService>();
-        var role = new SysRole { Name = "范围管理员", Code = "st-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
-        await roles.InsertAsync(role);
-        if (menuIds.Count > 0) await rbac.SetRoleMenusAsync(role.Id, menuIds);
-        await rbac.SetRoleDataScopeAsync(role.Id, DataScopeType.Org);
-
-        var account = "st-" + Guid.CreateVersion7().ToString("N")[..8];
-        await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUser(经 IUserService.AddAsync)都是 ITenantScoped,
+        // 借 TestTenantContext 让这段建库过程落到默认租户,与下面真实登录后的 tid=1 令牌一致。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
-            Account = account, Password = PASSWORD, Name = "范围管理员", Enabled = true, OrgId = orgId, RoleIds = [role.Id],
-        });
-        return account;
+            var roles = sp.GetRequiredService<IRepository<SysRole>>();
+            var rbac = sp.GetRequiredService<IRbacService>();
+            var role = new SysRole { Name = "范围管理员", Code = "st-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
+            await roles.InsertAsync(role);
+            if (menuIds.Count > 0) await rbac.SetRoleMenusAsync(role.Id, menuIds);
+            await rbac.SetRoleDataScopeAsync(role.Id, DataScopeType.Org);
+
+            var account = "st-" + Guid.CreateVersion7().ToString("N")[..8];
+            await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput
+            {
+                Account = account, Password = PASSWORD, Name = "范围管理员", Enabled = true, OrgId = orgId, RoleIds = [role.Id],
+            });
+            return account;
+        }
     }
 
     private static async Task<HttpClient> LoginAsync(AdminAppFactory f, string account, string password)

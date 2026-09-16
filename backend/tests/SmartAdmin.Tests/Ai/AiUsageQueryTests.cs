@@ -100,6 +100,9 @@ public class AiUsageQueryTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;SysUser 是 ITenantScoped,借 TestTenantContext 让这段建库/
+        // 查库过程落到默认租户——下面 SummaryAsync 按 userId 回填 Label 时同样要按租户过滤查得到。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
 
         var users = sp.GetRequiredService<IRepository<SysUser>>();
         var user = new SysUser { Account = $"u-{Guid.NewGuid():N}", Password = "x", Name = "张三" };

@@ -20,6 +20,9 @@ public class PasswordExpiryTests
     /// <summary>建一个普通用户并把过期锚点摆成用例需要的样子(AddAsync 默认置强制改密,这里复位)。</summary>
     private static async Task<long> CreateUserAsync(IServiceProvider sp, string account, DateTime? lastChange)
     {
+        // 后台 DI 作用域没有租户上下文;SysUser 是 ITenantScoped,借 TestTenantContext 让这段建库/
+        // 读回过程落到默认租户——下面真实 HTTP 登录后拿到的 tid=1 令牌才认得出这行。
+        using var _tenant = TestTenantContext.Use(sp, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var users = sp.GetRequiredService<IUserService>();
         var repo = sp.GetRequiredService<IRepository<SysUser>>();
         var id = (await users.AddAsync(new AddUserInput { Account = account, Name = account, Password = Password })).Id;
@@ -54,8 +57,9 @@ public class PasswordExpiryTests
         Assert.True(await LoginAsync(factory.CreateClient(), "exp-old"));
 
         // 标志已持久化——后续刷新令牌换发同样带出,不是登录出参上的一次性字段
+        // 后台 DI 作用域没有租户上下文,须跨租户查找。
         var repo = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
-        Assert.True((await repo.GetByIdAsync(id))!.MustChangePassword);
+        Assert.True((await repo.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == id).FirstAsync())!.MustChangePassword);
     }
 
     [Fact]
@@ -81,7 +85,7 @@ public class PasswordExpiryTests
 
         // 回填生效:过期窗口从这次登录起算
         var repo = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
-        Assert.NotNull((await repo.GetByIdAsync(id))!.LastPasswordChangeTime);
+        Assert.NotNull((await repo.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == id).FirstAsync())!.LastPasswordChangeTime);
     }
 
     [Fact]
@@ -106,8 +110,11 @@ public class PasswordExpiryTests
         var client = factory.CreateClient();
         Assert.True(await LoginAsync(client, "exp-cycle"));   // 过期 → 强制改密
 
+        // PersonalService.ChangePasswordAsync 按 userId 自查自己(真实调用永远是已登录用户改自己的密码,
+        // currentUser.TenantId 与目标行同租户);这里是没有租户上下文的后台作用域直调,须借 TestTenantContext 补上。
         var personal = scope.ServiceProvider.GetRequiredService<IPersonalService>();
-        await personal.ChangePasswordAsync(id, new ChangePasswordInput { OldPassword = Password, NewPassword = NewPassword });
+        using (TestTenantContext.Use(scope.ServiceProvider, DefaultTenantSeed.DEFAULT_TENANT_ID))
+            await personal.ChangePasswordAsync(id, new ChangePasswordInput { OldPassword = Password, NewPassword = NewPassword });
 
         Assert.False(await LoginAsync(client, "exp-cycle", NewPassword));   // 改密后窗口重新起算,标志已清
     }
@@ -129,7 +136,7 @@ public class PasswordExpiryTests
         Assert.True(await LoginAsync(factory.CreateClient(), "exp-clock"));   // 注入时钟看来已过期 → 置强制改密
 
         var repo = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
-        Assert.True((await repo.GetByIdAsync(id))!.MustChangePassword);
+        Assert.True((await repo.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == id).FirstAsync())!.MustChangePassword);
     }
 }
 

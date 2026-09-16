@@ -149,9 +149,17 @@ public static class SqlSugarSetup
                 {
                     // 租户隔离(硬边界):刻意不设 IsUnrestricted 式逃逸条件——机构数据范围回答
                     // "同租户内我能看多少",这里回答"我根本不该看见别的租户",两者不能共用同一个开关。
-                    // e.TenantId 与 currentUser.TenantId 都可能是 null(升级补列未回填 / 系统上下文无租户);
-                    // SQL 的 NULL = NULL 恒非真,天然拒绝而不是意外放行,不需要额外判空。
-                    client.QueryFilter.AddTableFilter<ITenantScoped>(e => e.TenantId == currentUser.TenantId);
+                    // e.TenantId 与 currentUser.TenantId 都可能是 null(升级补列未回填 / 系统上下文无租户)。
+                    // 本想让 SQL 的三值逻辑兜底("NULL = NULL"恒非真,天然拒绝而不是意外放行),但实测
+                    // SqlSugar 把 `e.TenantId == currentUser.TenantId`(currentUser.TenantId 为 C# null 时)
+                    // 翻译成 `TenantId IS NULL`,而不是参数化的 `TenantId = @p0`——即会命中 TenantId 恰好也是
+                    // NULL 的行(升级补列未回填的老行),与这条注释原先的假设相反。补列由 TenantBackfillHook
+                    // 在启动时同步回填,稳态下不该有活的 NULL 行,但"稳态下不该有"不是安全边界,是运气;
+                    // 这里显式加 `currentUser.TenantId != null` 前置条件,不管 ORM 具体怎么翻译第二个子句,
+                    // 无租户上下文的调用者(系统上下文/回填钩子出 bug/将来漏挂 TenantBackfillHook 的新表)
+                    // 恒看不见任何行——写成显式判空,不依赖"NULL = NULL"这种容易被 ORM 实现细节推翻的假设。
+                    client.QueryFilter.AddTableFilter<ITenantScoped>(e =>
+                        currentUser.TenantId != null && e.TenantId == currentUser.TenantId);
                 }
 
                 if (policy.ApplyAuditAop)

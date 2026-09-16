@@ -127,6 +127,9 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;SysUser 是 ITenantScoped,借 TestTenantContext 让整段
+        // 建库/查库/导出过程落到同一个(默认)租户。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
 
         var repo = sp.GetRequiredService<IRepository<SysUser>>();
         var hasher = sp.GetRequiredService<IPasswordHasher>();
@@ -202,6 +205,9 @@ public class ImportExportTests
 
         // 导入:label→value
         using var importScope = f.Services.CreateScope();
+        // 后台 DI 作用域没有租户上下文;CommitAsync 新插的行同样是 ITenantScoped,借 TestTenantContext
+        // 让整段导入 + 读回过程落到默认租户。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var isp = importScope.ServiceProvider;
         var runner = isp.GetRequiredService<IImportRunner>();
         var profile = isp.GetRequiredService<UserImportProfile>();
@@ -238,6 +244,9 @@ public class ImportExportTests
         using var f = new AdminAppFactory { Overrides = UseRealExcelCodecs };
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;导入新插的行是 ITenantScoped,借 TestTenantContext 让整段
+        // 导入 + 读回过程落到默认租户。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var users = sp.GetRequiredService<IRepository<SysUser>>();
@@ -377,6 +386,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var users = sp.GetRequiredService<IRepository<SysUser>>();
@@ -408,6 +418,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var users = sp.GetRequiredService<IRepository<SysUser>>();
@@ -436,6 +447,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var users = sp.GetRequiredService<IRepository<SysUser>>();
@@ -480,6 +492,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var users = sp.GetRequiredService<IRepository<SysUser>>();
@@ -594,6 +607,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
         var userSvc = sp.GetRequiredService<IUserService>();
@@ -636,6 +650,8 @@ public class ImportExportTests
         };
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;新插行要与种子超管(TenantId=1)同租户才能被同一句 Count 看到。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var repo = sp.GetRequiredService<IRepository<SysUser>>();
         var hasher = sp.GetRequiredService<IPasswordHasher>();
         var hash = hasher.Hash("Lim@Test1");
@@ -834,6 +850,7 @@ public class ImportExportTests
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
 
         var runner = sp.GetRequiredService<IImportRunner>();
         var profile = sp.GetRequiredService<UserImportProfile>();
@@ -900,6 +917,9 @@ public class ImportExportTests
         };
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
+        // 后台 DI 作用域没有租户上下文;下面导入按 Account 查"已有行"须先找得到它,否则会被当成
+        // 全新插入而不是"覆盖越权行",触发不到本条要测的 ImportOrgOutOfScope。
+        using var _tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var userSvc = sp.GetRequiredService<IUserService>();
 
         await userSvc.AddAsync(new AddUserInput

@@ -102,6 +102,7 @@ public class DeleteGuardTests
         string account = "self-del-" + Guid.CreateVersion7().ToString("N")[..8];
         string password = "Self@123456";
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var menus = sp.GetRequiredService<IRepository<SysMenu>>();
@@ -137,6 +138,7 @@ public class DeleteGuardTests
         string account = "self-dis-" + Guid.CreateVersion7().ToString("N")[..8];
         string password = "Self@123456";
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var roles = sp.GetRequiredService<IRepository<SysRole>>();

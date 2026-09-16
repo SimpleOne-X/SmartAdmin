@@ -40,7 +40,11 @@ public class MfaChallengeService(
         var userId = await cache.GetAsync<long>(CacheKeys.TotpMfaChallenge(challengeId));
         AdminException.ThrowIf(userId == 0, ErrorCode.TotpWrong);
 
-        var user = await users.GetByIdAsync(userId);
+        // 本方法是 TOTP 挑战完成的唯一入口,只在 AuthService.LoginByTotpChallengeAsync(密码路径与
+        // 外部登录路径共用同一个完成端点 /auth/login/totp,[AllowAnonymous])里被调用——挑战完成前
+        // 尚无令牌,currentUser.TenantId 恒为 null,须跨租户查找,否则任何已归属租户的用户都完成不了
+        // TOTP 二次验证登录(同 AuthService.cs 里其它挑战完成查询的道理)。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
         AdminException.ThrowIf(user is null || !user.TotpEnabled || string.IsNullOrEmpty(user.TotpSeedProtected),
             ErrorCode.TotpNotBound);
 

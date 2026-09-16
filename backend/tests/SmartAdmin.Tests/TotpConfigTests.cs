@@ -51,8 +51,9 @@ public class TotpConfigTests
         }
 
         using var scope2 = f.Services.CreateScope();
+        // 后台 DI 作用域没有租户上下文,须跨租户查找刚才在另一个后台作用域建的用户。
         var user = await scope2.ServiceProvider.GetRequiredService<IRepository<SysUser>>()
-            .GetFirstAsync(u => u.Account.StartsWith("force_off_"));
+            .AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account.StartsWith("force_off_")).FirstAsync();
         var policy = scope2.ServiceProvider.GetRequiredService<IMfaPolicyService>();
         Assert.False(await policy.IsTotpFeatureEnabledAsync());
         Assert.False(await policy.IsMfaRequiredAsync(user!));
@@ -101,8 +102,9 @@ public class TotpConfigTests
         {
             var policy = scope.ServiceProvider.GetRequiredService<IMfaPolicyService>();
             Assert.True(await policy.IsTotpFeatureEnabledAsync());
+            // 同上:后台 DI 作用域没有租户上下文,须跨租户查找。
             var user = await scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>()
-                .GetFirstAsync(u => u.Account == account);
+                .AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == account).FirstAsync();
             Assert.True(await policy.IsMfaRequiredAsync(user!));
         }
 

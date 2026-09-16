@@ -52,6 +52,9 @@ public class SampleDocScopeTests
         long docAId, docBId;
         string account, password = "Scope@123456";
         using (var scope = f.Services.CreateScope())
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUser(经 AddAsync)都是 ITenantScoped,借
+        // TestTenantContext 让这段建库过程落到默认租户,与下面真实登录后的 tid=1 令牌一致。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
 
@@ -116,6 +119,7 @@ public class SampleDocScopeTests
 
         string account, password = "Scope@123456";
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var roles = sp.GetRequiredService<IRepository<SysRole>>();

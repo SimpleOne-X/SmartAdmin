@@ -46,6 +46,9 @@ public class ImportExportScopeTests
 
         string account;
         using (var scope = f.Services.CreateScope())
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUser(经 AddAsync)都是 ITenantScoped,借
+        // TestTenantContext 让这段建库过程落到默认租户,与下面真实登录后的 tid=1 令牌一致。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
             var menus = sp.GetRequiredService<IRepository<SysMenu>>();
@@ -111,8 +114,11 @@ public class ImportExportScopeTests
                 .Any(e => e.GetProperty("code").GetInt32() == (int)ErrorCode.ImportOrgOutOfScope));
 
         using var check = f.Services.CreateScope();
+        // 断言的是"全库都没有这一行"(而不是"从这个没有租户上下文的作用域看不到它"——两者在
+        // currentUser.TenantId 为 null 时会被过滤器混为一谈),须同时清租户过滤器,否则这条断言
+        // 无论导入是否真的拒绝都会通过,测不出东西。
         var exists = await check.ServiceProvider.GetRequiredService<IRepository<SysUser>>()
-            .AsQueryable().ClearFilter<ISoftDelete>()
+            .AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>()
             .AnyAsync(u => u.Account == "out-of-scope-user");
         Assert.False(exists, "越权机构行不得落库");
     }
@@ -139,6 +145,9 @@ public class ImportExportScopeTests
 
         string accFe, accBe, accPm;
         using (var scope = f.Services.CreateScope())
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUser 都是 ITenantScoped,借 TestTenantContext
+        // 让这段建库过程落到默认租户,与下面真实登录后的 tid=1 令牌一致。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var sp = scope.ServiceProvider;
 
@@ -208,10 +217,11 @@ public class ImportExportScopeTests
         {
             var cache = scope.ServiceProvider.GetRequiredService<ICacheProvider>();
             // 清所有用户 scope 缓存:用 CacheAdmin 或按 key 模式——这里按三账号 id 查后清
+            // 后台 DI 作用域没有租户上下文,须跨租户查找刚才建的三个账号。
             var userRepo = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
             foreach (var acc in new[] { accFe, accBe, accPm })
             {
-                var uid = await userRepo.AsQueryable().Where(u => u.Account == acc).Select(u => u.Id).FirstAsync();
+                var uid = await userRepo.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == acc).Select(u => u.Id).FirstAsync();
                 await cache.RemoveAsync(CacheKeys.UserDataScope(uid));
             }
         }
