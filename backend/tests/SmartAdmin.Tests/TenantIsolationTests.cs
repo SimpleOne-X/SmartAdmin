@@ -106,4 +106,42 @@ public class TenantIsolationTests
         var byPlatform = await (await platform.GetAsync($"/api/v1/sys/tenant/{victimTenantId}")).ReadEnvelope();
         Assert.Equal(0, byPlatform.GetProperty("code").GetInt32());
     }
+
+    /// <summary>
+    /// 跨租户篡改 Id 的<b>写</b>路径:租户 B 拿着租户 A 的机构 Id 直接发 PUT / DELETE。
+    /// 这是本次改造最核心的攻击面——全局租户过滤器只作用于查询,按主键的 Update/Delete 靠
+    /// <c>SqlSugarRepository.InScopeAsync</c> 那道写前守卫兜底;这条把它锁进 CI。
+    /// <para>两个动词都必须报错而不是"成功但零行":DELETE 曾经因为服务层不看仓储返回值而回
+    /// <c>{"code":0,"data":true}</c>——数据没损坏(守卫挡住了),但调用方以为删掉了,审计日志还留下一条假的
+    /// "删除成功"。</para>
+    /// </summary>
+    [Fact]
+    public async Task Tenant_admin_cannot_update_or_delete_another_tenants_org_by_id()
+    {
+        using var f = new AdminAppFactory();
+        var platform = await SuperAdminClient(f);
+
+        var clientA = await NewTenantAdminClient(f, platform, "idorA");
+        var clientB = await NewTenantAdminClient(f, platform, "idorB");
+
+        const string orgName = "A的机构";
+        var addOrg = await (await clientA.PostJson("/api/v1/sys/org/add",
+            new { name = orgName, code = $"ORGIDOR_{Guid.NewGuid():N}"[..16], parentId = 0, sort = 1, enabled = true })).ReadEnvelope();
+        Assert.Equal(0, addOrg.GetProperty("code").GetInt32());
+        var orgAId = addOrg.GetProperty("data").GetInt64();
+
+        // 越权改:租户 B 拿着 A 的机构 Id 发 PUT(code 留空 = 不改编码)
+        var put = await (await clientB.PutJson($"/api/v1/sys/org/{orgAId}",
+            new { name = "被B改掉的名字", code = "", parentId = 0, sort = 99, enabled = false })).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.OrgNotFound, put.GetProperty("code").GetInt32());
+
+        // 越权删:同一个 Id 发 DELETE —— 必须同样报"查不到",不能是假成功
+        var del = await (await clientB.DeleteAsync($"/api/v1/sys/org/{orgAId}")).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.OrgNotFound, del.GetProperty("code").GetInt32());
+
+        // 租户 A 那一行原样健在:名字没被改、行也没被删
+        var still = await (await clientA.GetAsync($"/api/v1/sys/org/{orgAId}")).ReadEnvelope();
+        Assert.Equal(0, still.GetProperty("code").GetInt32());
+        Assert.Equal(orgName, still.GetProperty("data").GetProperty("name").GetString());
+    }
 }

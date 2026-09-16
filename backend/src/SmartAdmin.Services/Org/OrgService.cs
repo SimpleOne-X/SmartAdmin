@@ -127,6 +127,11 @@ public class OrgService(
     {
         // 非超管只能删自己范围内的机构
         ValidateOrgInScope(id);
+        // 先确认这一行在当前上下文里真的看得见(GetAsync 走租户/软删过滤器,看不见即抛 OrgNotFound),
+        // 同 UpdateAsync 与 RoleService.DeleteAsync 的成法。少了这一步,跨租户篡改来的 Id 会一路走到
+        // orgs.DeleteAsync(id) —— 仓储的 InScopeAsync 守卫让它静默返 0 行,而这里不看返回值,
+        // 于是控制器回 {"code":0,"data":true}:什么都没删,调用方以为删成功了,审计日志还留下一条假的"删除成功"。
+        await GetAsync(id);
 
         AdminException.ThrowIf(await orgs.AnyAsync(o => o.ParentId == id), ErrorCode.OrgHasChildren);
         // 还有未删除的用户挂在这个机构下就不许删
