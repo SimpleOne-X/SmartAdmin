@@ -15,13 +15,20 @@ public class TenantService(
     IPasswordHasher hasher,
     ICurrentUser currentUser) : ITenantService
 {
-    public virtual async Task<PagedList<SysTenant>> PageAsync(TenantPageInput input) =>
-        await tenants.AsQueryable()
+    public virtual async Task<PagedList<SysTenant>> PageAsync(TenantPageInput input)
+    {
+        // 读也要过这道门:租户注册表不受 ITenantScoped 过滤器约束(SysTenant 是注册表本身,没有 TenantId),
+        // 少了这一行,任何租户的初始管理员(租户内超管,天然绕过 [RolePermission])直接 GET 就能翻出
+        // 全平台每一个租户的完整档案——跨客户信息泄露。
+        RequirePlatformAdmin();
+        return await tenants.AsQueryable()
             .WhereIF(!string.IsNullOrEmpty(input.Name), t => t.Name.Contains(input.Name!))
             .ToPagedListAsync(input, q => q.OrderBy(t => t.CreateTime));
+    }
 
     public virtual async Task<SysTenant> GetAsync(long id)
     {
+        RequirePlatformAdmin();   // 同 PageAsync:按 Id 单读同样是读,门禁一视同仁
         var tenant = await tenants.GetByIdAsync(id);
         AdminException.ThrowIf(tenant is null, ErrorCode.TenantNotFound);
         return tenant!;

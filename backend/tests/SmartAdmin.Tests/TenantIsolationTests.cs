@@ -16,7 +16,11 @@ public class TenantIsolationTests
         return c;
     }
 
-    private static async Task<HttpClient> NewTenantAdminClient(AdminAppFactory f, HttpClient platform, string codePrefix)
+    private static async Task<HttpClient> NewTenantAdminClient(AdminAppFactory f, HttpClient platform, string codePrefix) =>
+        (await NewTenant(f, platform, codePrefix)).Client;
+
+    /// <summary>建一个新租户,返回它的 Id 与已登录的租户内超管 client(该租户的初始管理员 IsSuperAdmin=true)。</summary>
+    private static async Task<(long TenantId, HttpClient Client)> NewTenant(AdminAppFactory f, HttpClient platform, string codePrefix)
     {
         var code = $"{codePrefix}{Guid.NewGuid():N}"[..16];
         var account = $"{code}_admin";
@@ -27,11 +31,12 @@ public class TenantIsolationTests
             code, name = $"{code}-Inc", isolationMode = 1, enabled = true,
             adminAccount = account, adminPassword = password,
         });
-        Assert.Equal(0, (await add.ReadEnvelope()).GetProperty("code").GetInt32());
+        var addEnv = await add.ReadEnvelope();
+        Assert.Equal(0, addEnv.GetProperty("code").GetInt32());
 
         var client = f.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await client.LoginToken(account, password));
-        return client;
+        return (addEnv.GetProperty("data").GetInt64(), client);
     }
 
     [Fact]
@@ -75,5 +80,30 @@ public class TenantIsolationTests
         var pageB = (await (await clientB.GetAsync("/api/v1/sys/role/page?Current=1&Size=100")).ReadEnvelope()).GetProperty("data");
         var idsB = pageB.GetProperty("items").EnumerateArray().Select(r => r.GetProperty("id").GetInt64()).ToList();
         Assert.DoesNotContain(roleAId, idsB);
+    }
+
+    /// <summary>
+    /// 租户注册表的<b>读</b>接口同样只对平台管理员开放。每个新租户的初始管理员都是租户内超管
+    /// (IsSuperAdmin=true,天然绕过 [RolePermission]),门禁若只挂在写接口上,它直接 GET 就能读到
+    /// 全平台每一个租户的完整信息(名称、联系人、联系电话、到期时间)——跨客户信息泄露。
+    /// </summary>
+    [Fact]
+    public async Task Tenant_admin_cannot_read_the_tenant_registry()
+    {
+        using var f = new AdminAppFactory();
+        var platform = await SuperAdminClient(f);
+
+        var (victimTenantId, _) = await NewTenant(f, platform, "victim");   // 被窥探的那个租户
+        var (_, peeker) = await NewTenant(f, platform, "peeker");           // 发起窥探的租户内超管
+
+        var page = await (await peeker.GetAsync("/api/v1/sys/tenant/page?Current=1&Size=100")).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.PlatformAdminRequired, page.GetProperty("code").GetInt32());
+
+        var get = await (await peeker.GetAsync($"/api/v1/sys/tenant/{victimTenantId}")).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.PlatformAdminRequired, get.GetProperty("code").GetInt32());
+
+        // 正向对照:平台管理员照常读得到,证明上面的拒绝是门禁生效而不是接口本身坏了
+        var byPlatform = await (await platform.GetAsync($"/api/v1/sys/tenant/{victimTenantId}")).ReadEnvelope();
+        Assert.Equal(0, byPlatform.GetProperty("code").GetInt32());
     }
 }
