@@ -469,7 +469,11 @@ public class AuthService(
             // 同时须 ClearFilter<ITenantScoped>:账号全平台唯一(ADR-0010 决策 3,同 TenantService.AddAsync
             // 的查重口径),且此刻尚无租户上下文——不清则查重退化为只在 TenantId == null 内找,
             // 会漏检其他租户已占用的账号,重试耗尽后撞库唯一索引抛原生 500(而非这里优雅地换后缀重试)。
-            if (!await users.AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>().AnyAsync(u => u.Account == account))
+            // 必须用双类型参数的单次调用 ClearFilter<ISoftDelete, ITenantScoped>(),不能写成链式两次
+            // ClearFilter<A>().ClearFilter<B>()——SqlSugarCore 的 ClearFilter 对内部状态是赋值不是追加,
+            // 链式第二次调用会把第一次的清除覆盖掉,只有最后一层真的生效(实测:被吞掉的是 ISoftDelete,
+            // 后果是软删未改名的同名行会被误判为不重复,撞库唯一索引抛原生 500,而不是这里的优雅重试)。
+            if (!await users.AsQueryable().ClearFilter<ISoftDelete, ITenantScoped>().AnyAsync(u => u.Account == account))
                 return account;
             account = $"{baseAccount}_{RandomNumberGenerator.GetString(PROVISION_PWD_CHARS, 4)}";
         }

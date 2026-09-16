@@ -35,8 +35,11 @@ public class TenantService(
         AdminException.ThrowIf(
             await tenants.AsQueryable().ClearFilter<ISoftDelete>().AnyAsync(t => t.Code == input.Code),
             ErrorCode.TenantCodeExists);
+        // 双类型参数单次调用,不是链式两次 ClearFilter<A>().ClearFilter<B>()——后者只有最后一层真的生效
+        // (ClearFilter 对内部状态是赋值不是追加),同 AuthService.GenerateProvisionAccountAsync /
+        // UserService.AddAsync 处注释。
         AdminException.ThrowIf(
-            await users.AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>().AnyAsync(u => u.Account == input.AdminAccount),
+            await users.AsQueryable().ClearFilter<ISoftDelete, ITenantScoped>().AnyAsync(u => u.Account == input.AdminAccount),
             ErrorCode.AccountExists);
 
         var tenant = new SysTenant

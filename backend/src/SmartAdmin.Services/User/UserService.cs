@@ -213,8 +213,12 @@ public class UserService(
         // 两个不同租户各自建同名账号都能各自通过检查,直到第二次 InsertAsync 才撞库唯一索引抛原生 500
         // (而不是这里优雅地返回 AccountExists)——login/ValidateUserAsync 早已按账号跨租户查找,
         // 两个租户各建一份同名账号会让登录结果不确定,是真实的正确性缺口,不是假设。
+        // 必须用双类型参数的单次调用 ClearFilter<ISoftDelete, ITenantScoped>(),不能写成链式两次
+        // ClearFilter<A>().ClearFilter<B>()——ClearFilter 对内部状态是赋值不是追加,链式第二次调用会把
+        // 第一次的清除覆盖掉,只有最后一层真的生效(实测被吞掉的是 ISoftDelete:软删未改名的同名账号
+        // 会被误判为不重复,撞库唯一索引抛原生 500,而不是这里的 AccountExists)。
         AdminException.ThrowIf(
-            await users.AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>().AnyAsync(u => u.Account == input.Account),
+            await users.AsQueryable().ClearFilter<ISoftDelete, ITenantScoped>().AnyAsync(u => u.Account == input.Account),
             ErrorCode.AccountExists);
         AdminException.ThrowIf(
             avatarValidator is not null && !avatarValidator.IsValid(input.Avatar),

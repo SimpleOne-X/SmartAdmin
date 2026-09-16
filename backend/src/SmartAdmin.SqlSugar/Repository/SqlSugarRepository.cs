@@ -232,9 +232,24 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     }
 
     /// <summary>软删前释放唯一索引字符串列:读出当前值,追加 <c>_del_{id}</c>,按列更新回去。</summary>
+    /// <remarks>
+    /// 对 <c>ITenantScoped</c> 实体须显式 <c>ClearFilter&lt;ITenantScoped&gt;()</c>:本方法可能在没有
+    /// 租户上下文(后台任务/系统作用域)里软删一行时被调用,此时 <c>currentUser.TenantId</c> 为 null,
+    /// 全局租户过滤器会让这条查询恒查不到任何行——<c>if (entity is null) return;</c> 会悄悄跳过改名,
+    /// 但紧接着 <see cref="DeleteAsync"/> 里的 <see cref="SoftDeleteCoreAsync"/>(裸 <c>Updateable</c>,
+    /// 不受过滤器约束)照样把 <c>IsDelete</c> 置 1——净效果是这一行的唯一列永远不会被改名,永久占着
+    /// 唯一索引位,下次有人想用同一个值建新行就会撞库唯一索引抛原生异常(而不是这里本该给出的
+    /// <c>XxxExists</c> 业务错误码)。这里只是确认"要改名的这一行本身"、按主键精确匹配,跟调用者
+    /// 是谁、属于哪个租户无关——改的是这一行自己的唯一列后缀,不暴露、不影响其它行,清租户过滤器
+    /// 不构成越权(与 <see cref="InScopeAsync"/> 里对 ClearFilter&lt;ISoftDelete&gt; 的取舍同一道理)。
+    /// 只在 <see cref="IsTenantScoped"/> 为真时才清:消费者若给实体额外挂了自定义过滤器,无参
+    /// <c>ClearFilter()</c> 会把那些也一并跳过,这里改用双类型参数重载,只清本方法确实要越过的这一层。
+    /// </remarks>
     private async Task ReleaseUniqueColumnsAsync(long id, PropertyInfo[] uniqueCols)
     {
-        var entity = await db.Queryable<TEntity>().InSingleAsync(id);
+        var query = db.Queryable<TEntity>();
+        if (IsTenantScoped) query = query.ClearFilter<ITenantScoped>();
+        var entity = await query.InSingleAsync(id);
         if (entity is null) return;
 
         foreach (var prop in uniqueCols)
