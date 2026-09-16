@@ -170,7 +170,7 @@ jobs:
           # 方言敏感子集：nvarchar 中文、布尔谓词全局过滤器、T-SQL DDL / 首启建表、Storageable 种子 SQL、领取 CAS、多 ConfigId。
           # 与库无关的逻辑其余三条腿已经全量覆盖。
           if [ "${{ matrix.db }}" = "sqlserver" ] && [ "${{ github.event_name }}" != "schedule" ] && [ "${{ inputs.full-sqlserver }}" != "true" ]; then
-            echo 'filter=--filter-class "*CodeFirstNullableUpgradeTests*" --filter-class "*ProductionBootstrapTests*" --filter-class "*SeedUpgradeTests*" --filter-class "*SeedIdRangeTests*" --filter-class "*DataScopeTests*" --filter-class "*SoftDeleteAuditTests*" --filter-class "*DictCrudTests*" --filter-class "*UserCrudTests*" --filter-class "*JobClaimTests*" --filter-class "*MultiConfigIdTests*"' >> "$GITHUB_OUTPUT"
+            echo 'filter=--filter-class "*CodeFirstNullableUpgradeTests*" --filter-class "*ProductionBootstrapTests*" --filter-class "*SeedUpgradeTests*" --filter-class "*SeedIdRangeTests*" --filter-class "*DataScopeTests*" --filter-class "*SoftDeleteAuditTests*" --filter-class "*DictCrudTests*" --filter-class "*UserCrudTests*" --filter-class "*JobClaimTests*" --filter-class "*MultiConfigIdTests*" --filter-class "*TenantScopeFilterTests*"' >> "$GITHUB_OUTPUT"
           else
             echo 'filter=' >> "$GITHUB_OUTPUT"
           fi
