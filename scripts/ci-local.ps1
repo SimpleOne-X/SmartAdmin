@@ -103,7 +103,7 @@ $sqlServerSubset = @(
     '--filter-class', '*DataScopeTests*', '--filter-class', '*SoftDeleteAuditTests*',
     '--filter-class', '*DictCrudTests*', '--filter-class', '*UserCrudTests*',
     '--filter-class', '*JobClaimTests*', '--filter-class', '*MultiConfigIdTests*',
-    '--filter-class', '*TenantScopeFilterTests*')
+    '--filter-class', '*TenantScopeFilterTests*', '--filter-class', '*TenantScopedCodeUniquenessTests*')
 
 $results = New-Object System.Collections.ArrayList
 $startedContainers = New-Object System.Collections.ArrayList
