@@ -67,7 +67,10 @@ public class FileGcTests : IAsyncLifetime
         await files.InsertAsync(row);
         // 取该 StoragePath 下最新一行(= 刚插入的这条);雪花 Id 时间有序,故按 Id 降序取首行,
         // 在共享 StoragePath(秒传去重)下也能无歧义拿到本次插入的记录。
-        return (await files.AsQueryable().Where(f => f.StoragePath == storagePath)
+        // 本类整体跑在没有 HttpContext 的裸 ServiceProvider 上(见类构造函数),currentUser 恒是
+        // SystemCurrentUser(TenantId=null);ITenantScoped 过滤器要求 currentUser.TenantId != null 才放行
+        // 任何行,不清掉这层,连刚插入的这一行自己都读不回——清过滤器直读,与 GC 服务本身的读法一致。
+        return (await files.AsQueryable().ClearFilter<ITenantScoped>().Where(f => f.StoragePath == storagePath)
             .OrderBy(f => f.Id, OrderByType.Desc).FirstAsync()).Id;
     }
 
@@ -81,8 +84,13 @@ public class FileGcTests : IAsyncLifetime
     private async Task<SysFile?> FindRowAsync(long id)
     {
         using var scope = _sp.CreateScope();
+        // 无参 ClearFilter() = 清掉这条查询上挂的全部全局过滤器(等价 DatabaseInitializer 那句 DisableFilters()
+        // 的说法)。SysFile 只挂了 ISoftDelete/ITenantScoped 两层,这里两层都要越过,本该等价于分别
+        // ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>() ——但实测同一 ISugarQueryable 链上连续
+        // ClearFilter<T>() 两次、且第二层过滤条件此刻确实生效(行已软删,IsDelete=1 命中 ISoftDelete 谓词)时,
+        // 只有最后一次调用的清除生效,前一次被覆盖回去,行会被误判"不存在"。无参版本没有这个坑,直接用它。
         return await scope.ServiceProvider.GetRequiredService<IRepository<SysFile>>()
-            .AsQueryable().ClearFilter<ISoftDelete>().Where(f => f.Id == id).FirstAsync();
+            .AsQueryable().ClearFilter().Where(f => f.Id == id).FirstAsync();
     }
 
     private bool OnDisk(string storagePath) => File.Exists(Path.Combine(_root, storagePath.Replace('/', Path.DirectorySeparatorChar)));

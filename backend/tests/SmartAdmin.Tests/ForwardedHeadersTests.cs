@@ -33,7 +33,11 @@ public class ForwardedHeadersTests
     {
         using var scope = f.Services.CreateScope();
         var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysLoginLog>>();
-        var list = await logs.AsQueryable().Where(l => l.Account == account).OrderByDescending(l => l.Id).ToListAsync();
+        // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此恒零行
+        // (见 TestTenantContext.cs)。登录成功的这条日志已由 AuthService 显式带上正确 TenantId,这里只是
+        // 验证态验证读。
+        var list = await logs.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(l => l.Account == account).OrderByDescending(l => l.Id).ToListAsync();
         return list.FirstOrDefault()?.Ip;
     }
 

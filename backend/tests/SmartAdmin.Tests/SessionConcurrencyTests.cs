@@ -40,7 +40,9 @@ public class SessionConcurrencyTests
         using var scope = f.Services.CreateScope();
         var sessions = scope.ServiceProvider.GetRequiredService<IRepository<SysSession>>();
         var now = DateTime.UtcNow;
-        return await sessions.AsQueryable()
+        // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此恒零行
+        // (见 TestTenantContext.cs)。这些会话都是真实登录写入、已经带着正确 TenantId,这里只是验证态验证读。
+        return await sessions.AsQueryable().ClearFilter<ITenantScoped>()
             .Where(s => s.Account == ACCOUNT && s.RevokedAt == null && s.ExpiresAt > now)
             .ToListAsync();
     }

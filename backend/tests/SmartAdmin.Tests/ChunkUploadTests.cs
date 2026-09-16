@@ -104,9 +104,11 @@ public class ChunkUploadTests
             await c.PostJson("/api/v1/sys/file/chunk/init", initBody);
 
         // sys_file 中该 hash 仍只有 1 行——幂等,无孤儿泄漏(否则孤儿行会让 GC 的共享判定恒真、物理文件永不删盘)
+        // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此恒零行
+        // (见 TestTenantContext.cs)。文件行是真实上传写入、已经带着正确 TenantId,这里只是验证态验证读。
         using var scope = f.Services.CreateScope();
         var count = await scope.ServiceProvider.GetRequiredService<IRepository<SysFile>>()
-            .AsQueryable().Where(x => x.Hash == hash).CountAsync();
+            .AsQueryable().ClearFilter<ITenantScoped>().Where(x => x.Hash == hash).CountAsync();
         Assert.Equal(1, count);
     }
 

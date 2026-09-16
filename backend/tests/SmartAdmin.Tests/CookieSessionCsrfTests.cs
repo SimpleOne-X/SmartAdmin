@@ -260,7 +260,9 @@ public class CookieSessionCsrfTests
             TimeSpan.FromHours(8));
         await sessions.OpenAsync(user, sid, pair);
 
-        var row = await sessionRepo.GetFirstAsync(s => s.SessionId == sid);
+        // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此恒零行
+        // (见 TestTenantContext.cs)。OpenAsync 已经显式把 TenantId 写成 user.TenantId,这里只是验证态验证读。
+        var row = await sessionRepo.AsQueryable().ClearFilter<ITenantScoped>().Where(s => s.SessionId == sid).FirstAsync();
         Assert.NotNull(row);
         // 绝对窗 ≤ now+8h
         Assert.True(row!.AbsoluteExpiresAt <= clock.GetUtcNow().UtcDateTime.AddHours(8).AddSeconds(2));

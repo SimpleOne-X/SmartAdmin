@@ -35,7 +35,9 @@ public class OperationLogAsyncTests
     {
         for (var i = 0; i < 50; i++)
         {
-            var row = await repo.AsQueryable()
+            // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此
+            // 恒零行(见 TestTenantContext.cs)。这里验证的是异步落库是否真的写进去了,清过滤器直读。
+            var row = await repo.AsQueryable().ClearFilter<ITenantScoped>()
                 .Where(l => l.Path.Contains(pathFragment))
                 .OrderByDescending(l => l.Id)
                 .FirstAsync();

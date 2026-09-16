@@ -78,7 +78,10 @@ public class CodeFirstNullableUpgradeTests
             Assert.False(admin!.ForceTotp);
             Assert.False(admin.TotpEnabled);
 
-            var legacySession = await sessions2.GetFirstAsync(s => s.SessionId == LegacySessionId);
+            // 同上:后台 DI 作用域没有租户上下文,须跨租户查找(该行的 TenantId 在 v2 启动时已由
+            // TenantBackfillHook 回填成默认租户,但这里是没有 HttpContext 的验证读,不能依赖 currentUser.TenantId)。
+            var legacySession = await sessions2.AsQueryable().ClearFilter<ITenantScoped>()
+                .Where(s => s.SessionId == LegacySessionId).FirstAsync();
             Assert.NotNull(legacySession);
             Assert.Equal(default, legacySession!.AbsoluteExpiresAt);
             Assert.True(await sessionService.IsActiveAsync(LegacySessionId));
