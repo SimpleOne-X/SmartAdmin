@@ -274,13 +274,14 @@ public class ApiKeyAuthTests
         using var scope = f.Services.CreateScope();
         var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysOpLog>>();
         // 没有 HttpContext 的后台 DI 作用域里读,currentUser.TenantId 恒 null;ITenantScoped 过滤器据此恒零行
-        // (见 TestTenantContext.cs)。这条日志本身是未绑定用户的 API Key 写的,TenantId 也确实是 null
-        // (与登录失败日志同一类已知缺口,不在本测试断言范围),清过滤器才能读到这一行本身。
+        // (见 TestTenantContext.cs),所以这里清过滤器只是为了让这次"验证读"本身能落地,不是因为行的归属有问题:
+        // 这条日志是未绑定用户的 API Key 写的(写入时同样没有租户上下文),LogService 会把它兜底到默认租户。
         var row = await logs.AsQueryable().ClearFilter<ITenantScoped>()
             .Where(x => x.Path == "/api/v1/diag/machine-write").FirstAsync();
         Assert.NotNull(row);
         Assert.Equal("POST", row.HttpMethod);
         Assert.Null(row.OperatorId);
+        Assert.Equal(DefaultTenantSeed.DEFAULT_TENANT_ID, row.TenantId);   // 无登录态 → 兜底默认租户,不留 null
     }
 
     /// <summary>OpenAPI 契约把 [ApiKey] 端点标成 x-auth=apikey,[SkipEnvelope] 的 200 schema 不加信封外壳。</summary>

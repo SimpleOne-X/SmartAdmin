@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
+using SmartAdmin.SqlSugar;
 
 namespace SmartAdmin.Tests;
 
@@ -141,7 +142,10 @@ public class JobExecutorTests : IAsyncLifetime
         Assert.Equal(JobStatus.Panic, afterSecond.Status);
         Assert.Null(afterSecond.NextRunTime);
         Assert.Equal(["ops@test.local"], _email.Sent);
-        var notices = await _host.Db.Queryable<SysNotice>().ToListAsync();
+        // 必须清租户过滤器:本宿主只有 Services 层、没有 HttpContext,ICurrentUser 是系统上下文(TenantId 恒 null),
+        // 而 ITenantScoped 过滤器对这种调用者恒零行——告警通知确实落库了也一样读不出来。
+        // 清的是"读"这一侧的可见性语义,断言本身不放宽(同 ApiKeyAuthTests / CookieSessionCsrfTests 的既有写法)。
+        var notices = await _host.Db.Queryable<SysNotice>().ClearFilter<ITenantScoped>().ToListAsync();
         var notice = Assert.Single(notices);
         Assert.Contains(job.Name, notice.Title);
         // 定向超管,不广播
@@ -150,7 +154,7 @@ public class JobExecutorTests : IAsyncLifetime
         // 第三次失败:已是 Panic,Ready→Panic 的 CAS 不再成功 → 不重复告警
         await _host.Executor.FireAndTrack(job, _host.Now, JobFireMode.Schedule);
         Assert.Single(_email.Sent);
-        Assert.Single(await _host.Db.Queryable<SysNotice>().ToListAsync());
+        Assert.Single(await _host.Db.Queryable<SysNotice>().ClearFilter<ITenantScoped>().ToListAsync());
     }
 
     [Fact]
