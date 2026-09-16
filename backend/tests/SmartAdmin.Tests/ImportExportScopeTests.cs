@@ -115,10 +115,13 @@ public class ImportExportScopeTests
 
         using var check = f.Services.CreateScope();
         // 断言的是"全库都没有这一行"(而不是"从这个没有租户上下文的作用域看不到它"——两者在
-        // currentUser.TenantId 为 null 时会被过滤器混为一谈),须同时清租户过滤器,否则这条断言
-        // 无论导入是否真的拒绝都会通过,测不出东西。
+        // currentUser.TenantId 为 null 时会被过滤器混为一谈),须同时清软删+租户两层过滤器,否则这条
+        // 断言无论导入是否真的拒绝都会通过,测不出东西。必须用双类型参数的单次调用
+        // ClearFilter<ISoftDelete, ITenantScoped>(),不能写成链式两次 ClearFilter<A>().ClearFilter<B>()——
+        // 后者只有最后一层真的生效(ClearFilter 对内部状态是赋值不是追加),链式写法下这条断言会因为
+        // ISoftDelete 过滤器没被真的清掉而弱一档:只要没有软删行占着这个账号,不管导入拒没拒绝都会通过。
         var exists = await check.ServiceProvider.GetRequiredService<IRepository<SysUser>>()
-            .AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>()
+            .AsQueryable().ClearFilter<ISoftDelete, ITenantScoped>()
             .AnyAsync(u => u.Account == "out-of-scope-user");
         Assert.False(exists, "越权机构行不得落库");
     }
