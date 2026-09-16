@@ -22,7 +22,8 @@ public class LoginWritePathTests
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
         var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
 
-        var before = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        // 后台 DI 作用域没有租户上下文(currentUser.TenantId 为 null),须跨租户查找 superAdmin。
+        var before = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(before);
 
         // 模拟"另一个人在登录处理期间改了这一行":登录读到的是旧值,写回时不该把这次改动盖掉
@@ -33,7 +34,7 @@ public class LoginWritePathTests
 
         await auth.LoginAsync(new LoginInput { Account = "superAdmin", Password = "Test@123456" });
 
-        var after = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var after = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.Equal("并发改的昵称", after!.Nickname);      // 没被登录写回抹掉
         Assert.NotNull(after.LastSuccessfulLoginAt);        // 该更新的那一列确实更新了
     }
@@ -57,7 +58,7 @@ public class LoginWritePathTests
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
         // 先塞一份按旧参数(60 万)算出来的哈希
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         var legacy = new Pbkdf2PasswordHasher(new AdminSecurityOptions { Password = new AdminPasswordOptions { Pbkdf2Iterations = 600_000 } }).Hash("Test@123456");
         await users.Db.Updateable<SysUser>()
             .SetColumns(u => u.Password == legacy)
@@ -67,7 +68,7 @@ public class LoginWritePathTests
 
         await auth.LoginAsync(new LoginInput { Account = "superAdmin", Password = "Test@123456" });
 
-        var after = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var after = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotEqual(legacy, after!.Password);           // 换了新串
         Assert.False(hasher.NeedsRehash(after.Password));   // 已经是当前参数
         Assert.True(hasher.Verify("Test@123456", after.Password));   // 而且照样能登

@@ -103,7 +103,11 @@ public class SessionService(
         if (session is null || session.RevokedAt != null || session.ExpiresAt <= Now) return false;
 
         var absolute = session.AbsoluteExpiresAt == default ? session.ExpiresAt : session.AbsoluteExpiresAt;
-        var user = await users.GetByIdAsync(session.UserId);
+        // 本方法既在已认证请求([RolePermission]/[ActiveSession],currentUser.TenantId 有效)内被调用,
+        // 也在 RefreshAsync 的刷新流程(尚无租户上下文)内被调用;session.UserId 已经过上面的会话行校验,
+        // 不是开放式跨租户查找,只用来读这一个用户的 MFA 策略位,须跨租户查找以覆盖后一种场景
+        // (否则缓存未命中时会把 MFA 用户误判成非 MFA,套错闲置超时策略)。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == session.UserId).FirstAsync();
         var isMfa = user is not null && IsMfaUser(user);
         var idleMinutes = ResolveIdleMinutes(isMfa);
 
@@ -138,7 +142,10 @@ public class SessionService(
         // 会话须仍活跃(未强退/未过期/未绝对窗/未闲置)
         if (!await IsActiveAsync(rt.SessionId)) throw new AdminException(ErrorCode.RefreshTokenInvalid);
 
-        var user = await users.GetByIdAsync(rt.UserId);
+        // 刷新发生在访问令牌已过期之后,请求通常不带(有效)Bearer,currentUser.TenantId 为 null:
+        // 按刷新令牌关联的 UserId 取人须跨租户查找,否则过滤器退化为 TenantId == null,任何已归属租户的
+        // 用户(含种子超管)都刷不出新令牌对。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == rt.UserId).FirstAsync();
         if (user is null) throw new AdminException(ErrorCode.RefreshTokenInvalid);
         AdminException.ThrowIf(!user.Enabled, ErrorCode.AccountDisabled);
 

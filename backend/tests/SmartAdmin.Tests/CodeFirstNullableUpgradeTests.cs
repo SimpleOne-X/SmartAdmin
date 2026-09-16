@@ -32,7 +32,9 @@ public class CodeFirstNullableUpgradeTests
                 var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
                 var sessions = scope.ServiceProvider.GetRequiredService<IRepository<SysSession>>();
 
-                var seedAdmin = await users.GetFirstAsync(u => u.IsSuperAdmin);
+                // 这里是脱离 HTTP 请求的后台 DI 作用域,没有租户上下文(currentUser.TenantId 为 null):
+                // 直接查种子超管须跨租户查找,否则租户过滤器退化为找不到任何已归属租户的行。
+                var seedAdmin = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.IsSuperAdmin).FirstAsync();
                 Assert.NotNull(seedAdmin);
                 await sessions.InsertAsync(new SysSession
                 {
@@ -70,7 +72,8 @@ public class CodeFirstNullableUpgradeTests
             Assert.Contains("AbsoluteExpiresAt", sessionCols);
 
             // 4) 存量行:补列后应为 null(可空语义),读侧按 false
-            var admin = await users2.GetFirstAsync(u => u.IsSuperAdmin);
+            // 同上:后台 DI 作用域没有租户上下文,须跨租户查找。
+            var admin = await users2.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.IsSuperAdmin).FirstAsync();
             Assert.NotNull(admin);
             Assert.False(admin!.ForceTotp);
             Assert.False(admin.TotpEnabled);

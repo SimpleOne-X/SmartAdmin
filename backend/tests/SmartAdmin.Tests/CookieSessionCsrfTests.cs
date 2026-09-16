@@ -250,7 +250,8 @@ public class CookieSessionCsrfTests
         var tokens = scope.ServiceProvider.GetRequiredService<ITokenProvider>();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IRepository<SysSession>>();
 
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin(同 LoginWritePathTests)。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(user);
         var sid = Guid.CreateVersion7().ToString("N");
         var pair = tokens.Create(
@@ -287,7 +288,7 @@ public class CookieSessionCsrfTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IRepository<SysSession>>();
         var cache = scope.ServiceProvider.GetRequiredService<ICacheProvider>();
 
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         user!.TotpEnabled = true;
         await users.UpdateAsync(user);
 
@@ -320,7 +321,7 @@ public class CookieSessionCsrfTests
 
         using var scope = f.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(user!.LastSuccessfulLoginAt);
     }
 }

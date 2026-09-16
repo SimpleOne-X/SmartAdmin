@@ -47,20 +47,31 @@ public class BatchDeleteTests
     public async Task Batch_delete_rejects_whole_set_when_super_admin_included()
     {
         using var f = new AdminAppFactory();
-        using var scope = f.Services.CreateScope();
-        var sp = scope.ServiceProvider;
-        var users = sp.GetRequiredService<IUserService>();
-        var repo = sp.GetRequiredService<IRepository<SysUser>>();
 
-        var normalId = await AddUser(sp, "c");
-        var superId = (await repo.GetFirstAsync(u => u.IsSuperAdmin))!.Id;
+        // 经 HTTP 以已登录 superAdmin 身份操作(而非后台 DI 作用域直调服务):DeleteBatchAsync 内部按
+        // currentUser.TenantId 查这批 Id 判断"是否含超管",后台作用域没有租户上下文会让 superId 在那次
+        // 查询里"隐形"(过滤器退化成只找得到租户为空的行),超管保护形同虚设——只有走真实已认证请求
+        // 才是这条保护路径的真实调用场景。
+        var c = f.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", await c.LoginToken("superAdmin", "Test@123456"));
+
+        var superId = (await (await c.GetAsync("/api/v1/personal/profile")).ReadEnvelope())
+            .GetProperty("data").GetProperty("id").GetInt64();
+        var normalId = (await (await c.PostJson("/api/v1/sys/user", new
+        {
+            account = "batch-c", password = "Batch@123456", name = "批量用户c", enabled = true, roleIds = Array.Empty<long>(),
+        })).ReadEnvelope()).GetProperty("data").GetProperty("id").GetInt64();
 
         // 集合含超管 → 抛 SuperAdminProtected
-        var ex = await Assert.ThrowsAsync<AdminException>(() => users.DeleteBatchAsync([normalId, superId]));
-        Assert.Equal(ErrorCode.SuperAdminProtected, ex.Code);
+        var del = await (await c.PostJson("/api/v1/sys/user/batch-delete",
+            new { ids = new[] { normalId, superId } })).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.SuperAdminProtected, del.GetProperty("code").GetInt32());
 
         // 原子性:整批回滚,普通用户也没被删
-        Assert.True(await repo.AnyAsync(u => u.Id == normalId));
-        Assert.True(await repo.AnyAsync(u => u.Id == superId));
+        using var scope = f.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+        Assert.True(await repo.AsQueryable().ClearFilter<ITenantScoped>().AnyAsync(u => u.Id == normalId));
+        Assert.True(await repo.AsQueryable().ClearFilter<ITenantScoped>().AnyAsync(u => u.Id == superId));
     }
 }

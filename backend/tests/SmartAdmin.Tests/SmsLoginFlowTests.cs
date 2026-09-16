@@ -37,7 +37,8 @@ public class SmsLoginFlowTests
     {
         using var scope = f.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
-        var u = await users.GetFirstAsync(x => x.Account == account);
+        // 后台 DI 作用域没有租户上下文(currentUser.TenantId 为 null),须跨租户查找目标账号。
+        var u = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(x => x.Account == account).FirstAsync();
         u!.Phone = phone;
         await users.UpdateAsync(u);
     }

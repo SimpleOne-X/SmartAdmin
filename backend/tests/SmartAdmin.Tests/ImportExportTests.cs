@@ -175,6 +175,9 @@ public class ImportExportTests
                 Gender = "1",
                 Enabled = true,
                 IsSuperAdmin = false,
+                // 后台 DI 作用域没有租户上下文,插入 AOP 填不了 TenantId(见 SqlSugarSetup);
+                // 这里显式落到默认租户,才能被下面以 superAdmin(TenantId=1)身份发起的导出接口看到。
+                TenantId = DefaultTenantSeed.DEFAULT_TENANT_ID,
             });
         }
 

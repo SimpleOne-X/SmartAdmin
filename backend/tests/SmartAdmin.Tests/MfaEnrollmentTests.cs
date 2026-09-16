@@ -189,7 +189,8 @@ public class MfaEnrollmentTests
         var totp = scope.ServiceProvider.GetRequiredService<ITotpService>();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
 
-        var super = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
+        var super = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(super);
 
         await BindSelfAsync(enroll, totp, target.Account, password);
@@ -351,7 +352,8 @@ public class MfaEnrollmentTests
         await BindSelfAsync(enroll, totp, target.Account, password);
 
         // 超管默认无 TOTP:ClearUserMfa 允许未绑 TOTP 的超管清理他人
-        var super = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
+        var super = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(super);
 
         var c = f.CreateClient();

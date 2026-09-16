@@ -247,6 +247,9 @@ public class RecycleBinTests
             {
                 Account = "rb-" + Guid.CreateVersion7().ToString("N")[..8], Name = "别机构的人",
                 Password = "x", OrgId = 940002, Enabled = true,
+                // 后台 DI 作用域没有租户上下文,插入 AOP 填不了 TenantId(见 SqlSugarSetup);
+                // 这里显式落到默认租户,才能被下面以 superAdmin(TenantId=1)身份发起的 HTTP 查询看到。
+                TenantId = DefaultTenantSeed.DEFAULT_TENANT_ID,
             };
             await users.InsertAsync(victim);
             deletedId = victim.Id;

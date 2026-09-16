@@ -32,7 +32,8 @@ public class BatchOperationTests
         var users = sp.GetRequiredService<IRepository<SysUser>>();
         var tokens = sp.GetRequiredService<ITokenProvider>();
 
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         Assert.NotNull(user);
         for (var i = 0; i < 4; i++)
         {
@@ -61,7 +62,7 @@ public class BatchOperationTests
         var users = sp.GetRequiredService<IRepository<SysUser>>();
         var tokens = sp.GetRequiredService<ITokenProvider>();
 
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         var sids = new List<string>();
         for (var i = 0; i < 3; i++)
         {
@@ -90,7 +91,7 @@ public class BatchOperationTests
         var users = sp.GetRequiredService<IRepository<SysUser>>();
         var tokens = sp.GetRequiredService<ITokenProvider>();
 
-        var user = await users.GetFirstAsync(u => u.Account == "superAdmin");
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == "superAdmin").FirstAsync();
         var sids = new List<string>();
         for (var i = 0; i < 3; i++)
         {

@@ -80,7 +80,10 @@ public class AuthService(
     /// </summary>
     protected virtual async Task<SysUser> ValidateUserAsync(LoginInput input)
     {
-        var user = await users.GetFirstAsync(u => u.Account == input.Account);
+        // 登录尚无租户上下文(JWT 未验证,currentUser.TenantId 为 null):按账号反查所属租户是登录本身的
+        // 定义(账号全平台唯一,见 ADR-0010 决策 3),必须跨租户查找,否则过滤器退化为 TenantId == null,
+        // 查不到任何已归属租户的用户(含种子超管)。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == input.Account).FirstAsync();
         if (user is null)
         {
             hasher.Verify(input.Password, _dummyHash ??= hasher.Hash("smart-admin.timing-dummy"));
@@ -182,7 +185,9 @@ public class AuthService(
         try
         {
             var userId = await mfaChallenge!.VerifyAndConsumeAsync(input.ChallengeId, input.Code);
-            user = await users.GetByIdAsync(userId);
+            // TOTP 挑战完成前令牌尚未签发,currentUser.TenantId 仍为 null:挑战 Id 是登录第一步(密码校验后)
+            // 建的短时关联票据,不是租户上下文的替代品,按其解出的 userId 取人必须跨租户查找。
+            user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
             AdminException.ThrowIf(user is null, ErrorCode.TotpWrong);
             await CheckLoginPolicyAsync(user!);
             var pair = await CreateTokenAsync(user!);
@@ -210,7 +215,8 @@ public class AuthService(
             // 码对才消费挑战(原子取删防并发重放);用户在挑战期间被删/停用则拒
             userId = await smsOtp.ConsumeMfaChallengeAsync(input.ChallengeId);
             AdminException.ThrowIf(userId == 0, ErrorCode.SmsCodeExpired);
-            user = await users.GetByIdAsync(userId);
+            // 短信二次验证同 TOTP:挑战完成前尚无令牌/租户上下文,按挑战解出的 userId 取人须跨租户查找。
+            user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
             AdminException.ThrowIf(user is null, ErrorCode.SmsCodeExpired);
 
             await CheckLoginPolicyAsync(user!);
@@ -233,7 +239,8 @@ public class AuthService(
         // 持有活挑战即已过密码校验,无需图形验证码;冷却/日上限在 IssueAsync 内强制
         var userId = await smsOtp.GetMfaChallengeAsync(input.ChallengeId);
         AdminException.ThrowIf(userId == 0, ErrorCode.SmsCodeExpired);
-        var user = await users.GetByIdAsync(userId);
+        // 重发仍在登录挑战期内,同样没有租户上下文,须跨租户查找。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
         AdminException.ThrowIf(user is null || string.IsNullOrWhiteSpace(user!.Phone), ErrorCode.SmsCodeExpired);
         return await smsOtp.IssueAsync(ISmsOtpService.PURPOSE_MFA, input.ChallengeId, user!.Phone!);
     }
@@ -246,8 +253,10 @@ public class AuthService(
 
         // 防枚举:未命中"恰一个启用用户"(不存在/重复/停用)也走同闸门、同冷却、同出参,只是不发码。
         // 重复手机号因此静默不可用免密登录——防枚举优先,消费方需在录入侧保证手机号唯一。
+        // 免密登录发码同样发生在租户上下文确立之前,按手机号找人须跨租户查找(同账密登录)。
         var phone = input.Phone.Trim();
-        var matches = await users.AsQueryable().Where(u => u.Phone == phone && u.Enabled).Take(2).ToListAsync();
+        var matches = await users.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(u => u.Phone == phone && u.Enabled).Take(2).ToListAsync();
         return matches.Count == 1
             ? await smsOtp.IssueAsync(ISmsOtpService.PURPOSE_LOGIN, phone, phone)
             : await smsOtp.PretendIssueAsync(phone);
@@ -275,7 +284,9 @@ public class AuthService(
                 throw new AdminException(ErrorCode.SmsCodeExpired);
             }
 
-            var matches = await users.AsQueryable().Where(u => u.Phone == phone && u.Enabled).Take(2).ToListAsync();
+            // 免密登录本身即按手机号反查所属租户,发生在租户上下文确立之前,须跨租户查找(同 SendSmsLoginCodeAsync)。
+            var matches = await users.AsQueryable().ClearFilter<ITenantScoped>()
+                .Where(u => u.Phone == phone && u.Enabled).Take(2).ToListAsync();
             AdminException.ThrowIf(matches.Count != 1, ErrorCode.SmsCodeExpired);   // 发码后用户被停用/删除的窗口期防御
             var user = matches[0];
 
@@ -366,7 +377,9 @@ public class AuthService(
         var binding = await externalBindings!.FindByExternalAsync(identity.Provider, identity.Subject);
         if (binding is not null)
         {
-            var bound = await users.GetByIdAsync(binding.UserId);
+            // 外部登录回调 / 换票据都发生在签发本地令牌之前,currentUser.TenantId 为 null:绑定表按外部身份
+            // 找到的 UserId 须跨租户取人,否则过滤器退化为 TenantId == null,查不到任何已归属租户的用户。
+            var bound = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == binding.UserId).FirstAsync();
             AdminException.ThrowIf(bound is null, ErrorCode.OAuthAccountNotBound);   // 悬挂绑定(用户已删)→ 当未绑定拒绝
             return bound!;
         }
@@ -390,7 +403,8 @@ public class AuthService(
     {
         if (!await externalBindings!.IsLinkByAccountAsync(identity.Provider)) return null;
 
-        var user = await users.GetFirstAsync(u => u.Account == identity.Subject);
+        // 同 ValidateUserAsync:按账号自动关联发生在租户上下文确立之前,账号全平台唯一,须跨租户查找。
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == identity.Subject).FirstAsync();
         if (user is null || user.IsSuperAdmin || !user.Enabled) return null;
         if ((await externalBindings.ListByUserAsync(user.Id)).Any(b => b.Provider == identity.Provider)) return null;
 
@@ -428,7 +442,9 @@ public class AuthService(
             // 并发首登竞态:另一路已抢先给同一外部身份开好户并绑定,本路事务撞唯一约束整体回滚(无孤儿用户)。
             // 改用对方已建的账号 → 让并发首登幂等,而非把裸库唯一约束异常甩成 500。
             var raced = await externalBindings!.FindByExternalAsync(identity.Provider, identity.Subject);
-            if (raced is not null && await users.GetByIdAsync(raced.UserId) is { } winner)
+            // 竞态恢复同样在令牌签发之前,须跨租户查找(同上面绑定命中分支)。
+            if (raced is not null &&
+                await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == raced.UserId).FirstAsync() is { } winner)
                 return winner;
             throw tran.ErrorException;   // 非竞态的真失败(rbac/DB 等):原样抛,交由外层记日志 + 500
         }
@@ -450,7 +466,10 @@ public class AuthService(
             // 查重把软删行也纳入(ClearFilter<ISoftDelete>)——防御性:软删走 repo.DeleteAsync 时 Account 已被
             // 追加 _del_{id} 后缀释放唯一位(见 SqlSugarRepository.DeleteAsync),精确等值本不会命中软删行;
             // 保留此过滤只为兜住"绕过回收直接置 IsDelete"的边角软删,避免撞库唯一约束抛原生 500。
-            if (!await users.AsQueryable().ClearFilter<ISoftDelete>().AnyAsync(u => u.Account == account))
+            // 同时须 ClearFilter<ITenantScoped>:账号全平台唯一(ADR-0010 决策 3,同 TenantService.AddAsync
+            // 的查重口径),且此刻尚无租户上下文——不清则查重退化为只在 TenantId == null 内找,
+            // 会漏检其他租户已占用的账号,重试耗尽后撞库唯一索引抛原生 500(而非这里优雅地换后缀重试)。
+            if (!await users.AsQueryable().ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>().AnyAsync(u => u.Account == account))
                 return account;
             account = $"{baseAccount}_{RandomNumberGenerator.GetString(PROVISION_PWD_CHARS, 4)}";
         }

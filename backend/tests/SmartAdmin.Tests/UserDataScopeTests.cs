@@ -96,17 +96,17 @@ public class UserDataScopeTests
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken("superAdmin", "Test@123456"));
 
-        using (var scope = f.Services.CreateScope())
+        // 经 HTTP 以已登录 superAdmin 身份建号(而非后台 DI 作用域直调 IUserService):插入 AOP 才能从
+        // currentUser.TenantId 正确回填新用户的租户,否则它会落成 TenantId=null,下面按 superAdmin 的租户分页永远看不到它。
+        await (await c.PostJson("/api/v1/sys/user", new
         {
-            await scope.ServiceProvider.GetRequiredService<IUserService>().AddAsync(new AddUserInput
-            {
-                Account = "all-vis-" + Guid.CreateVersion7().ToString("N")[..8],
-                Password = "Test@123456",
-                Name = "全可见用户",
-                Enabled = true,
-                OrgId = 7,   // HR
-            });
-        }
+            account = "all-vis-" + Guid.CreateVersion7().ToString("N")[..8],
+            password = "Test@123456",
+            name = "全可见用户",
+            enabled = true,
+            orgId = 7,   // HR
+            roleIds = Array.Empty<long>(),
+        })).ReadEnvelope();
 
         var page = await (await c.GetAsync("/api/v1/sys/user/page?Current=1&Size=200")).ReadEnvelope();
         Assert.Equal(0, page.GetProperty("code").GetInt32());

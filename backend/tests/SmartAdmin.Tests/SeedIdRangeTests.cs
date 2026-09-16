@@ -64,7 +64,8 @@ public class SeedIdRangeTests
         using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
 
-        var admin = await users.AsQueryable().Where(u => u.IsSuperAdmin).FirstAsync();
+        // 后台 DI 作用域没有租户上下文,须跨租户查找 superAdmin。
+        var admin = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.IsSuperAdmin).FirstAsync();
 
         Assert.NotNull(admin);
         Assert.InRange(admin.Id, 1, SmartSeedIds.KernelMax);

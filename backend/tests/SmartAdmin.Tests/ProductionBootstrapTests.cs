@@ -49,7 +49,8 @@ public class ProductionBootstrapTests
         using var scope = f.Services.CreateScope();   // 触发宿主启动 → 探表通过 → 种子执行
         var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
 
-        Assert.True(await users.AnyAsync(u => u.IsSuperAdmin));   // 超管种子确实写进了 DBA 建好的表
+        // 后台 DI 作用域没有租户上下文,须跨租户查找(同 LoginWritePathTests)。
+        Assert.True(await users.AsQueryable().ClearFilter<ITenantScoped>().AnyAsync(u => u.IsSuperAdmin));   // 超管种子确实写进了 DBA 建好的表
     }
 
     /// <summary>
