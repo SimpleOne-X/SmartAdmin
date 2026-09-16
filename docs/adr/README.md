@@ -15,7 +15,6 @@
 | [0007](0007-external-login-brand-ui-and-providers.md) | 外部登录品牌化 UI + GitHub / 个人微信可选包 | 已采纳(2026-07-31) |
 | [0008](0008-web-kernel-as-npm-package.md) | 前端内核以 npm 包分发:单包、预编译、插件式扩展 | 已采纳(2026-09-12) |
 | [0009](0009-ai-gateway-in-kernel.md) | AI 网关进内核:统一入口、按协议适配、直连不引 SDK | 已采纳(2026-09-13) |
-| [0010](0010-multi-tenancy-shared-database.md) | 多租户(共享库模式):反转「不做多租户」非目标,新增独立 `TenantId` 维度硬隔离 | 已采纳(2026-09-15) |
 
 ## 什么时候写一份新的
 
