@@ -31,24 +31,24 @@ namespace SmartAdmin.SqlSugar;
 /// 机构数据范围回答"同租户内我能看多少",租户隔离回答"我根本不该看见别的租户",两者语义不同,不可共用同一个开关。</summary>
 public interface ITenantScoped
 {
-    long TenantId { get; }
+    long? TenantId { get; }
 }
 
 /// <summary>审计 + 软删 + 租户隔离,不含机构数据范围。多数内置 Sys* 表(用户/角色/菜单授权等)用这个。</summary>
 public abstract class TenantEntity : BaseEntity, ITenantScoped
 {
-    public long TenantId { get; set; }
+    public long? TenantId { get; set; }
 }
 
 /// <summary>审计 + 软删 + 机构数据范围 + 租户隔离。需要同时具备"同租户内还要分机构可见范围"能力的实体用这个
 /// (如未来把 IOrgScoped 范式真正接到某张表上时)。</summary>
 public abstract class TenantDataEntity : DataEntity, ITenantScoped
 {
-    public long TenantId { get; set; }
+    public long? TenantId { get; set; }
 }
 ```
 
-`TenantId` 是 `long`(非空)而非 `long?`——不像 `CreateOrgId` 允许为空,租户归属是硬性的,由 AOP 在插入前自动填充(与 `CreateOrgId` 同一套审计 AOP 机制扩展,写入位置在 `SqlSugarSetup.cs` 现有 AOP 段旁边)。
+`TenantId` 是 `long?`(可空)——**不是**最初设想的非空 `long`。原因:`SysOrg`/`SysUser`/`SysRole` 等是内核已经发版的表,仓库的既有纪律"已有表加列,数据库列必须可空"(`CodeFirstNullableUpgradeTests` 锁着,MSSQL 对有数据的表 `ADD` 非空无默认列直接失败)对这次改造同样适用——不因为"当前无外部部署"就能跳过,因为这条规矩保护的是**未来**任何一个装了旧版、要升级到这个版本的消费方,不是当下。可空字段由 AOP 在插入前自动填充(仿 `CreateOrgId` 回填),升级场景下老数据补列后 `TenantId` 会是 `null`,由 §8 的回填钩子统一处理,不能假设它总有值。
 
 ### 2.2 `SysTenant`(新内置实体)
 
@@ -144,11 +144,11 @@ if (policy.ApplyTenantFilter)
 
 ## 5. 平台管理员 vs 租户内超管
 
-现有 `sadm`(超管)语义收窄为"**租户内超管**"——绕过 RBAC,但仍然属于某个具体租户(`TenantId` 非空)。
+现有 `sadm`(超管)语义收窄为"**租户内超管**"——绕过 `[RolePermission]`,但仍然属于某个具体租户,查询仍然受 `ITenantScoped` 过滤器约束(过滤器不认 `sadm`,见 §3)。
 
-新增"**平台管理员**"概念:`TenantId` 为 `null`,不属于任何租户,是唯一能对 `SysTenant` 做增删改的角色。大概率就是种子里的初始超管账号(`SuperAdminSeed`,`Id=1`)天然充当——不新增一套独立的账号体系。
+**平台管理员不是靠 `TenantId=null` 识别**(那样会和"升级补列后的存量行暂时没有租户"这个合法中间状态混在一起,无法区分)。改用显式标志,仿 `SysUser.IsSuperAdmin` 的写法:`SysUser` 新增 `IsPlatformAdmin`(可空 bool,同样只能种子/数据库手工置,接口不暴露修改入口),写入 `tid` 之外新增的 `padm` claim,`ICurrentUser` 加 `IsPlatformAdmin` 只读属性。种子里的初始超管账号(`SuperAdminSeed`,`Id=1`)天然是唯一的初始平台管理员,`TenantId` 指向 §7 提到的保留"默认租户"行,不是 `null`。
 
-`ITenantScoped` 过滤器对平台管理员的行为:`currentTenant.Current` 为 `null` 时,过滤谓词恒不成立(查不到任何行),即平台管理员**默认查不到任何租户域数据**,不是"看到所有租户"——这是刻意的最小权限默认值,不是遗漏。"平台管理员代入某租户排障"这类跨租户视角**明确不在本次范围**,留作未来 P1/P2 评估(不新增字段,不占位)。
+**为什么不能让 `IsSuperAdmin` 兼任平台管理员**:`sadm` 绕过的是 `[RolePermission]`(路由权限检查),不绕过 `ITenantScoped` 过滤器——这是刻意的(§3)。但 `SysTenant` 表本身不带 `TenantId`(它是隔离边界的根,见 §2.2),如果直接用 `IsSuperAdmin` 兼任"能管理 SysTenant"的判据,任何一个租户内部的超管账号(客户自己的 IT 管理员,合理会有这个标志)都能连带管到**其它客户**的租户注册表——这是真实的越权面,不是理论风险。`TenantService` 的每个写操作必须显式校验 `currentUser.IsPlatformAdmin`,与 `[RolePermission]`/`IsSuperAdmin` 完全独立,是叠加的第二道门。
 
 ## 6. 菜单与前端
 
@@ -176,9 +176,15 @@ if (policy.ApplyTenantFilter)
 
 `stores/auth.ts` 或 `stores/user.ts` 加 `tenantId`/`tenantName` 只读字段,登录响应带出,不新增"当前租户"可写状态。
 
-## 7. CodeFirst / 种子
+## 7. CodeFirst / 种子 / 升级回填
 
-内核 `SysTenant` 加入 `SmartAdmin.Services` 程序集,随现有 `ApplicationAssemblies` 路径自动进入 CodeFirst 建表,不需要新的扫描逻辑。是否需要 `DefaultTenantSeed`(默认给存量演示数据建一个租户)留到实施计划阶段按需评估——生产环境不应该有预置租户数据,大概率不需要种子,只需要保证表结构存在。
+内核 `SysTenant` 加入 `SmartAdmin.Services` 程序集,随现有 `ApplicationAssemblies` 路径自动进入 CodeFirst 建表,不需要新的扫描逻辑。
+
+**需要一个 `DefaultTenantSeed`**,种一条固定 Id、受保护(不可删除/禁用)的"默认租户"。它身兼两职,不是演示数据:
+1. **全新安装**:零配置启动的初始超管(`SuperAdminSeed`)必须挂在某个真实存在的租户下才能满足 `TenantId` 的业务约束,不能要求运维在能登录前先手工建一个租户——违反"三行 `Program.cs` 可跑"的零配置承诺。
+2. **老库升级**:见下面的回填钩子,升级前的存量数据统一落进这一个租户,老部署的行为不因升级而改变。
+
+**升级回填**:`TenantEntity`/`TenantDataEntity` 的 `TenantId` 是可空列(§2.1)。已发版表(`SysOrg`/`SysUser`/`SysRole` 等)补列后,存量行 `TenantId` 是 `null`——套上 §3 的过滤器,这些行会对所有人不可见,等同于升级后现有客户看不到自己的机构/用户/角色。必须有一个升级期回填步骤:实现 `IDatabaseReadyHook`(`SmartAdmin.SqlSugar/Seed/IDatabaseReadyHook.cs`,`TryAddEnumerable` 多实现扩展点,CodeFirst+种子跑完后触发),把所有 `TenantId IS NULL` 的存量行批量置为默认租户 Id。新行此后一律由插入 AOP 自动填充,不会再产生 null。
 
 ## 8. 二期(混合模式)预留说明
 
@@ -201,6 +207,4 @@ if (policy.ApplyTenantFilter)
 ## 10. 不在本次设计范围
 
 - 二期独立库的具体动态路由实现、跨租户排障视角、租户级字典/配置定制——均明确不做(§1 决策 3、§5、§8)。
-- 具体迁移到 `TenantEntity` 的通知/文件/日志/会话实体的确切类名与字段——留给实施计划阶段核对源码后逐个列出。
-- `ICurrentUser`/`SystemCurrentUser`/`HttpContextCurrentUser` 的精确改动点——留给实施计划阶段核对现有实现。
-- `DefaultTenantSeed` 是否需要、种子内容——留给实施计划阶段按需评估。
+- "平台管理员代入某租户排障"这类跨租户视角——明确排除,不是遗漏(见 §5)。
