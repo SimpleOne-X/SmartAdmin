@@ -241,6 +241,9 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultJobSeed>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultTenantSeed>());
 
+        // 升级回填钩子:补列后 TenantId 为 null 的存量行自动置为默认租户(IDatabaseReadyHook 多实现,每次启动幂等)
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IDatabaseReadyHook, TenantBackfillHook>());
+
         return services;
     }
 }
