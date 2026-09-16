@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using SmartAdmin.Core;
+using SmartAdmin.Services;
+using SmartAdmin.SqlSugar;
 
 namespace SmartAdmin.AspNetCore;
 
@@ -29,7 +31,8 @@ public class ApiKeyAuthenticationHandler(
     ILoggerFactory logger,
     UrlEncoder encoder,
     AdminSecurityOptions security,
-    IApiKeyValidator validator) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    IApiKeyValidator validator,
+    IRepository<SysUser> users) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     /// <inheritdoc />
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -42,7 +45,11 @@ public class ApiKeyAuthenticationHandler(
         var principal = await validator.ValidateAsync(presented, Context.RequestAborted);
         if (principal is null) return AuthenticateResult.Fail("API key 无效");
 
-        return AuthenticateResult.Success(new AuthenticationTicket(BuildPrincipal(principal), Scheme.Name));
+        var claimsPrincipal = BuildPrincipal(principal);
+        if (principal.UserId is long userId)
+            await AttachBoundUserClaimsAsync(claimsPrincipal, userId);
+
+        return AuthenticateResult.Success(new AuthenticationTicket(claimsPrincipal, Scheme.Name));
     }
 
     /// <summary>key → ClaimsPrincipal。覆写可追加自己的 claim(如租户)。</summary>
@@ -57,6 +64,31 @@ public class ApiKeyAuthenticationHandler(
             claims.Add(new Claim(JwtRegisteredClaimNames.Sub, userId.ToString(CultureInfo.InvariantCulture)));
         var identity = new ClaimsIdentity(claims, Scheme.Name, JwtRegisteredClaimNames.UniqueName, roleType: null);
         return new ClaimsPrincipal(identity);
+    }
+
+    /// <summary>
+    /// 给绑定了用户的 key 补上 sadm/tid/orgId/platformAdmin 这组 claim——<see cref="BuildPrincipal"/> 只认得
+    /// key 本身,不查库。这组 claim 决定了 <c>[RolePermission]</c>、数据范围、<c>ITenantScoped</c> 过滤器
+    /// 怎么看待这次调用,必须与该用户真实登录时签发的令牌一致(同 <c>AuthService.CreateTokenAsync</c> 的
+    /// <c>TokenSubject</c> 映射)。不补 tid 的话,SysRole/SysUserRole/SysRoleMenu 等表挂了租户过滤器后,
+    /// 绑定用户的 key 会被过滤器恒判"看不到自己的角色/菜单授权"——不是退化成无权限,是这把 key 彻底不能用了。
+    /// <para>按用户 Id 查询前必须 <c>ClearFilter&lt;ITenantScoped&gt;()</c>:这一步本身就是在确定"这个用户
+    /// 属于哪个租户",此刻当前调用者还没有租户上下文,同 <c>AuthService</c> 登录路径按账号查用户那一步。</para>
+    /// </summary>
+    protected virtual async Task AttachBoundUserClaimsAsync(ClaimsPrincipal claimsPrincipal, long userId)
+    {
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
+        if (user is null) return;
+
+        var identity = (ClaimsIdentity)claimsPrincipal.Identity!;
+        if (user.IsSuperAdmin)
+            identity.AddClaim(new Claim(TokenClaimNames.SUPER_ADMIN, "true"));
+        if (user.OrgId is { } orgId)
+            identity.AddClaim(new Claim(TokenClaimNames.ORG_ID, orgId.ToString(CultureInfo.InvariantCulture)));
+        if (user.TenantId is { } tenantId)
+            identity.AddClaim(new Claim(TokenClaimNames.TENANT_ID, tenantId.ToString(CultureInfo.InvariantCulture)));
+        if (user.IsPlatformAdmin == true)
+            identity.AddClaim(new Claim(TokenClaimNames.PLATFORM_ADMIN, "true"));
     }
 
     /// <summary>401:key 缺失或无效(<see cref="ErrorCode.ApiKeyInvalid"/>),与 JWT 的 40006 分开,机器调用方一眼能分。</summary>
