@@ -43,8 +43,16 @@ export function useModule() {
         .catch(() => ({ ok: false, codes: [] as string[] })),
       personalApi
         .profile()
-        .then(p => ({ sadm: p.isSuperAdmin, avatar: p.avatar ?? null, tenantName: p.tenantName ?? null }))
-        .catch(() => ({ sadm: useUserStore().userInfo?.isSuperAdmin ?? false, avatar: null, tenantName: null })),
+        .then(p => ({
+          sadm: p.isSuperAdmin,
+          avatar: p.avatar ?? null,
+          tenantName: p.tenantName ?? null,
+        }))
+        .catch(() => ({
+          sadm: useUserStore().userInfo?.isSuperAdmin ?? false,
+          avatar: null,
+          tenantName: null,
+        })),
     ])
     auth.modules = modules
     auth.defaultModuleId = defaultModuleId ?? null
