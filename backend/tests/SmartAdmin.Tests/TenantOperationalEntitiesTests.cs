@@ -199,4 +199,163 @@ public class TenantOperationalEntitiesTests
             .Select(x => x.GetProperty("account").GetString()).ToList();
         Assert.Contains(account, accounts);
     }
+
+    // ── 系统/未认证上下文下的 TenantId 归属(C3 修复轮) ────────────────────────────────
+    // 共同背景:ITenantScoped 全局过滤器对 currentUser.TenantId 为 null 的调用者恒零行(见 SqlSugarSetup),
+    // 插入 AOP 同理只在有租户上下文时才回填。于是"没有登录态的写入点"如果不显式定租户,写出来的行
+    // 在过滤器眼里谁都看不见——要么白写,要么(存在性校验那种)在插入之前就把整条路径判死。
+
+    /// <summary>
+    /// 账号<b>根本不存在</b>的登录失败:无人可归属,兜底到默认租户而不是留 null。
+    /// <para>留 null 的行被租户过滤器挡在所有人视线之外,等于写了没写;代价(探测流量混进默认租户日志)
+    /// 是已裁定接受的已知局限,与 <c>TenantBackfillHook</c> 把无主存量行回填到默认租户同一类取舍。</para>
+    /// </summary>
+    [Fact]
+    public async Task Failed_login_of_an_unknown_account_falls_back_to_the_default_tenant()
+    {
+        using var f = new AdminAppFactory();
+        var anonymous = f.CreateClient();
+        var account = $"ghost{Guid.NewGuid():N}"[..20];
+
+        var env = await (await anonymous.PostJson("/api/v1/auth/login",
+            new { account, password = "Wrong@000000" })).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.PasswordWrong, env.GetProperty("code").GetInt32());
+
+        using var scope = f.Services.CreateScope();
+        var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysLoginLog>>();
+        // 后台 DI 作用域没有租户上下文 → 清过滤器直读存量值(同本类其它几条验证读)
+        var row = Assert.Single(await logs.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(l => l.Account == account).ToListAsync());
+        Assert.False(row.Success);
+        Assert.Null(row.UserId);                                                   // 确实是"账号不存在"那一支
+        Assert.Equal(DefaultTenantSeed.DEFAULT_TENANT_ID, row.TenantId);
+    }
+
+    /// <summary>无登录态的操作日志(未绑定用户的 API Key / 后台任务 / 无 HttpContext 的系统调用)兜底默认租户。</summary>
+    [Fact]
+    public async Task System_context_operation_log_falls_back_to_the_default_tenant()
+    {
+        using var f = new AdminAppFactory();
+        _ = f.CreateClient();   // 触发建库 + 种子
+
+        var path = $"/diag/system-context-oplog/{Guid.NewGuid():N}";
+        using var scope = f.Services.CreateScope();   // 无 HttpContext ⇒ currentUser.TenantId 为 null
+        await scope.ServiceProvider.GetRequiredService<ILogService>().RecordOperationAsync(new OperationLogEntry
+        {
+            Title = "后台写入", HttpMethod = "POST", Path = path, ResultCode = 0,
+        });
+
+        var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysOpLog>>();
+        var row = Assert.Single(await logs.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(x => x.Path == path).ToListAsync());
+        Assert.Null(row.OperatorId);                                               // 确实没有登录态
+        Assert.Equal(DefaultTenantSeed.DEFAULT_TENANT_ID, row.TenantId);
+    }
+
+    /// <summary>
+    /// 无登录态的异常日志同样兜底默认租户——匿名端点/后台任务崩掉恰恰是最需要看见的那批,
+    /// 留 null 会让它们整批消失在过滤器后面。
+    /// </summary>
+    [Fact]
+    public async Task System_context_exception_log_falls_back_to_the_default_tenant()
+    {
+        using var f = new AdminAppFactory();
+        _ = f.CreateClient();
+
+        var path = $"/diag/system-context-exlog/{Guid.NewGuid():N}";
+        using var scope = f.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ILogService>().RecordExceptionAsync(new ExceptionLogEntry
+        {
+            HttpMethod = "GET", Path = path,
+            ExceptionType = "System.InvalidOperationException", Message = "boom-system-context",
+        });
+
+        var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysExceptionLog>>();
+        var row = Assert.Single(await logs.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(x => x.Path == path).ToListAsync());
+        Assert.Null(row.OperatorId);
+        Assert.Equal(DefaultTenantSeed.DEFAULT_TENANT_ID, row.TenantId);
+    }
+
+    /// <summary>
+    /// 系统上下文定向发通知(JobExecutor 的 Panic 告警就是这条路径):接收目标存在性校验必须看得见真实用户,
+    /// 通知本体必须真的落库并归属默认租户。
+    /// <para>修复前这里是真丢数据:校验在插入<b>之前</b>,过滤器让它查到零行 → 抛 45003 →
+    /// 被 <c>SendPanicAlertAsync</c> 的 try/catch 吞成一条警告,那条 INSERT 根本没执行到。</para>
+    /// </summary>
+    [Fact]
+    public async Task System_context_targeted_publish_sees_the_real_user_and_lands_in_the_default_tenant()
+    {
+        using var f = new AdminAppFactory();
+        _ = f.CreateClient();
+
+        using var scope = f.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+        var superAdmin = await users.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(u => u.Account == "superAdmin").FirstAsync();
+        Assert.NotNull(superAdmin);
+
+        var title = $"系统上下文定向通知-{Guid.NewGuid():N}";
+        var id = await scope.ServiceProvider.GetRequiredService<INoticeService>().PublishAsync(new NoticePublishInput
+        {
+            Title = title,
+            Content = "x",
+            ReceiverType = ReceiverType.User,
+            ReceiverIds = [superAdmin!.Id],
+        });
+        Assert.True(id > 0);
+
+        var notices = scope.ServiceProvider.GetRequiredService<IRepository<SysNotice>>();
+        var row = await notices.AsQueryable().ClearFilter<ITenantScoped>().Where(n => n.Id == id).FirstAsync();
+        Assert.NotNull(row);
+        Assert.Equal(title, row!.Title);
+        Assert.Equal(DefaultTenantSeed.DEFAULT_TENANT_ID, row.TenantId);
+    }
+
+    /// <summary>
+    /// 上一条的反面守卫:存在性校验清租户过滤器<b>只许</b>发生在没有租户上下文时。
+    /// <para>已认证的租户 A 管理员拿租户 B 的真实用户 Id 当定向目标,必须仍然被判成"目标不存在"——
+    /// 这层校验是唯一的把关处(插入接收目标行时不再查库),无条件清过滤器就等于开一个跨租户 IDOR:
+    /// 既能给别的租户的人发通知,又能拿错误码当探针问出"B 租户有没有这个 Id"。</para>
+    /// </summary>
+    [Fact]
+    public async Task Tenant_admin_cannot_target_another_tenants_user_in_a_targeted_notice()
+    {
+        using var f = new AdminAppFactory();
+        var platform = await SuperAdminClient(f);
+
+        var (clientA, accountA) = await NewTenantAdminClient(f, platform, "noticA");
+        var (_, accountB) = await NewTenantAdminClient(f, platform, "noticB");
+
+        long userIdA, userIdB;
+        using (var scope = f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+            var rowA = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == accountA).FirstAsync();
+            var rowB = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == accountB).FirstAsync();
+            Assert.NotNull(rowA);
+            Assert.NotNull(rowB);
+            Assert.NotEqual(rowA!.TenantId, rowB!.TenantId);   // 确实是两个不同租户的真实用户
+            (userIdA, userIdB) = (rowA.Id, rowB.Id);
+        }
+
+        // 正向对照:发给自己租户的人是通的(证明下面那条不是"发通知这条路整体坏了")
+        var ok = await (await clientA.PostJson("/api/v1/sys/notice",
+            new { title = "自家人", type = 1, receiverType = 2, receiverIds = new[] { userIdA } })).ReadEnvelope();
+        Assert.Equal(0, ok.GetProperty("code").GetInt32());
+
+        // 越权:目标是租户 B 的真实用户 → 仍按"看不见就是不存在"拒绝
+        const string crossTitle = "越租户";
+        var denied = await (await clientA.PostJson("/api/v1/sys/notice",
+            new { title = crossTitle, type = 1, receiverType = 2, receiverIds = new[] { userIdB } })).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.NoticeReceiverNotFound, denied.GetProperty("code").GetInt32());
+
+        // 且整体拒绝发生在插入之前:这条通知一行都没落库(跨租户也查不到)
+        using (var scope = f.Services.CreateScope())
+        {
+            var notices = scope.ServiceProvider.GetRequiredService<IRepository<SysNotice>>();
+            Assert.Empty(await notices.AsQueryable().ClearFilter<ITenantScoped>()
+                .Where(n => n.Title == crossTitle).ToListAsync());
+        }
+    }
 }

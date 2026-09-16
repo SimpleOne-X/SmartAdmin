@@ -583,8 +583,12 @@ public class AuthService(
     /// <para>仅"密码错误"计入失败锁定——验证码错/已锁定/停用/TOTP 信令等不累加,避免把锁定窗口无限延长或误伤。</para>
     /// <para>账号确实存在(密码错、停用、TOTP/短信失败……)时带上该账号所属的 TenantId:用户行早在
     /// <see cref="ValidateUserAsync"/> 里就按账号跨租户解出来了,不带上等于把全平台租户的爆破痕迹堆进同一个
-    /// 无主分区,租户管理员在自己的登录日志里一条都看不到。真正无从归属的只有"账号根本不存在"那一支,
-    /// 它留 null。</para>
+    /// 无主分区,租户管理员在自己的登录日志里一条都看不到。</para>
+    /// <para>"账号根本不存在"那一支无人可归属,<b>兜底到默认租户</b>而不是留 null:留 null 的行被
+    /// <c>ITenantScoped</c> 全局过滤器挡在所有人视线之外(过滤器对无租户上下文的调用者恒零行),
+    /// 写进去了却谁也查不到,等于没写。代价是已接受的已知局限——探测不存在账号的爆破流量会混进默认租户的
+    /// 登录日志里;这与 <see cref="TenantBackfillHook"/> 把无主存量行统一回填到默认租户是同一类取舍,
+    /// 不是新概念,也不需要"系统租户"这种额外身份。</para>
     /// </summary>
     protected virtual async Task OnLoginFailedAsync(LoginInput input, ErrorCode code)
     {
@@ -597,7 +601,7 @@ public class AuthService(
         await logService.RecordLoginAsync(new LoginLogEntry
         {
             Account = input.Account, Success = false, ResultCode = (int)code,
-            TenantId = _lastResolvedTenantIdForFailedLoginAudit,
+            TenantId = _lastResolvedTenantIdForFailedLoginAudit ?? DefaultTenantSeed.DEFAULT_TENANT_ID,
         });
         _lastResolvedTenantIdForFailedLoginAudit = null;   // 取一次就丢,见字段注释
     }

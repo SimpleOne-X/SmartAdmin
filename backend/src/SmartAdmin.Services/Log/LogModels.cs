@@ -36,7 +36,11 @@ public record LoginLogEntry
     /// (与 <see cref="SessionService.OpenAsync"/> 对 <c>SysSession.TenantId</c> 同一原因,同一修法)。
     /// <para>登录成功固然带;<b>账号确实存在的失败</b>(密码错、停用、TOTP/短信校验失败……)同样带——
     /// 用户行早在 <c>AuthService.ValidateUserAsync</c> 里就按账号跨租户解出来了。
-    /// 只有"账号根本不存在"这一支留 null(无人可归属),那部分是尚待产品裁定的已知缺口。</para>
+    /// "账号根本不存在"这一支无人可归属,由 <c>AuthService.OnLoginFailedAsync</c> 兜底到
+    /// <c>DefaultTenantSeed.DEFAULT_TENANT_ID</c>——留 null 会被租户过滤器挡在所有人视线之外,
+    /// 写了等于没写;代价是探测不存在账号的爆破流量混进默认租户的登录日志,属已接受的已知局限。</para>
+    /// <para>类型仍是可空:这条记录是"给日志服务的入参",空值语义留给未显式带上的消费者子类与旧调用方,
+    /// 而不是内核自己的正常分支。</para>
     /// </summary>
     public long? TenantId { get; init; }
 }

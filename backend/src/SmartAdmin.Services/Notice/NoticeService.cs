@@ -73,6 +73,11 @@ public class NoticeService(
             Type = input.Type,
             ReceiverType = input.ReceiverType,
             ActionsJson = SerializeActions(input.Actions),
+            // 显式定死租户归属,不指望插入 AOP:AOP 只在 currentUser.TenantId 有值时才回填,
+            // 而这里的调用方也可能是系统上下文(JobExecutor 的 Panic 告警、无 HttpContext 的后台任务),
+            // 那时会留下一行 TenantId=null 的通知——在租户过滤器眼里谁都看不见,要等下次启动
+            // TenantBackfillHook 回填才冒出来。兜底目标与该钩子的回填目标取同一个值,不是另立一套策略。
+            TenantId = currentUser.TenantId ?? DefaultTenantSeed.DEFAULT_TENANT_ID,
         };
         await notices.InsertAsync(entity);
         // 定向发送:每个目标(角色 Id 或用户 Id)写一行接收目标;全体广播不写行。
@@ -99,7 +104,7 @@ public class NoticeService(
         if (type == ReceiverType.Role)
         {
             if (roles is null) return;
-            var existing = await roles.AsQueryable()
+            var existing = await ReceiverExistenceQuery(roles.AsQueryable())
                 .Where(r => targetIds.Contains(r.Id) && r.Enabled)
                 .Select(r => r.Id).ToListAsync();
             AdminException.ThrowIf(targetIds.Except(existing).Any(), ErrorCode.NoticeReceiverNotFound);
@@ -107,12 +112,30 @@ public class NoticeService(
         else if (type == ReceiverType.User)
         {
             if (users is null) return;
-            var existing = await users.AsQueryable()
+            var existing = await ReceiverExistenceQuery(users.AsQueryable())
                 .Where(u => targetIds.Contains(u.Id) && u.Enabled)
                 .Select(u => u.Id).ToListAsync();
             AdminException.ThrowIf(targetIds.Except(existing).Any(), ErrorCode.NoticeReceiverNotFound);
         }
     }
+
+    /// <summary>
+    /// 接收目标存在性校验专用的查询:<b>仅</b>在没有租户上下文时清租户过滤器,有上下文时原样返回。
+    /// <para>不清的后果不是"查得少"而是丢数据:<c>ITenantScoped</c> 全局过滤器对
+    /// <c>currentUser.TenantId</c> 为 null 的调用者<b>恒零行</b>(见 <c>SqlSugarSetup.AttachHooks</c>),
+    /// 于是 <c>JobExecutor</c> 的 Panic 告警在系统上下文里把"超管确实存在"也判成"目标不存在"、
+    /// 抛 <see cref="ErrorCode.NoticeReceiverNotFound"/>,被上游 try/catch 吞成一条警告——
+    /// 而这一步在插入通知<b>之前</b>,那条 INSERT 根本没跑到。同款写法见
+    /// <c>SqlSugarRepository.ReleaseUniqueColumnsAsync</c>:识别身份发生在租户上下文确立之前。</para>
+    /// <para>为什么不无条件清:那会开一个跨租户 IDOR。已认证的租户 A 管理员拿租户 B 的用户 Id 当定向目标时,
+    /// 这层校验是唯一的把关处(后续插入不再按目标查库),放行就等于既能给别的租户的人发通知,
+    /// 又能拿错误码当探针问出"B 租户有没有这个 Id"。有租户上下文时,"看不见"就得继续判成"不存在"。</para>
+    /// <para>用带类型参数的 <c>ClearFilter&lt;ITenantScoped&gt;()</c> 而非无参 <c>ClearFilter()</c>:
+    /// 后者会把消费者自挂的其它过滤器一并跳过,这里只想越过租户这一层(同 <c>SqlSugarRepository</c> 的取舍)。</para>
+    /// </summary>
+    protected virtual ISugarQueryable<T> ReceiverExistenceQuery<T>(ISugarQueryable<T> query)
+        where T : ITenantScoped =>
+        currentUser.TenantId is null ? query.ClearFilter<ITenantScoped>() : query;
 
     /// <inheritdoc />
     public virtual async Task<PagedList<SysNotice>> PageAsync(NoticePageInput input)

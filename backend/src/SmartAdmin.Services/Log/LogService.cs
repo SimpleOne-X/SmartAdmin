@@ -69,6 +69,10 @@ public class LogService(
     /// "当前登录者"回填 TenantId 时,那个"当前"已经是没有 HttpContext 的后台上下文,回填不到。
     /// 与 <see cref="SessionService.OpenAsync"/> 显式赋值 TenantId 同一原因:AOP 依赖的登录态必须在
     /// 请求线程上就绪时取好,不能指望它在真正落库的那一刻还在。</para>
+    /// <para>发起方本身就没有租户上下文时(未绑定用户的 API Key、后台任务、无 HttpContext 的系统调用)
+    /// 兜底到默认租户,而不是留 null:留 null 的行在租户过滤器眼里谁都查不到,要等下次启动
+    /// <see cref="TenantBackfillHook"/> 回填才冒出来——审计日志"写进去了却谁也看不见"比归错租户更糟。
+    /// 兜底目标与该钩子的回填目标取同一个值,不是另立一套策略。</para>
     /// </summary>
     protected virtual SysOpLog BuildOperationRow(OperationLogEntry entry) => new()
     {
@@ -85,7 +89,7 @@ public class LogService(
         UserAgent = currentUser.UserAgent,
         CreateUserId = currentUser.UserId,
         CreateTime = (time ?? TimeProvider.System).GetLocalNow().DateTime,
-        TenantId = currentUser.TenantId,
+        TenantId = currentUser.TenantId ?? DefaultTenantSeed.DEFAULT_TENANT_ID,
     };
 
     /// <inheritdoc />
@@ -102,8 +106,8 @@ public class LogService(
                 Ip = currentUser.IpAddress,
                 UserAgent = currentUser.UserAgent,
                 // 由 AuthService 显式带上(此刻请求尚无认证头,插入 AOP 回填不了,见 LoginLogEntry.TenantId 注释):
-                // 登录成功带,账号确实存在的失败(密码错、停用、TOTP/短信失败)也带;只有"账号根本不存在"
-                // 那一支为 null——无人可归属,是尚待产品裁定的已知缺口。
+                // 登录成功带,账号确实存在的失败(密码错、停用、TOTP/短信失败)也带;"账号根本不存在"那一支
+                // 无人可归属,由 AuthService 兜底到默认租户(已裁定,见 OnLoginFailedAsync 注释),故此处恒非 null。
                 TenantId = entry.TenantId,
             });
         }
@@ -130,6 +134,10 @@ public class LogService(
                 OperatorId = currentUser.UserId,
                 Ip = currentUser.IpAddress,
                 UserAgent = currentUser.UserAgent,
+                // 同 BuildOperationRow:显式定死租户归属,无租户上下文(匿名端点崩了、后台任务崩了)兜底默认租户。
+                // 插入 AOP 只在 currentUser.TenantId 有值时回填,留 null 的异常行谁都查不到——
+                // 恰恰是最需要看见的那批(没有登录态的路径上出的事)会整批消失在过滤器后面。
+                TenantId = currentUser.TenantId ?? DefaultTenantSeed.DEFAULT_TENANT_ID,
             });
         }
         catch (Exception ex)
