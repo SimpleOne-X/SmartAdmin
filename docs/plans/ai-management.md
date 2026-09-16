@@ -291,21 +291,21 @@ public sealed record AiEndpoint(string ProviderCode, string BaseUrl, string? Api
 
 两个控制器都挂 `[Module("Ai")]`,返回 `Result<T>`,分页入参继承 `PageInputBase`。
 
-菜单种子(`DefaultMenuSeed.cs`,新开 `// ═══ 7xx AI 管理 ═══` 段):
+菜单种子(`DefaultMenuSeed.cs`,新开 `// ═══ 8xx AI 管理 ═══` 段;实施时为 `7xx`,后因多租户改造插入 `2xx 租户管理` 段整体后移一位,现为 `8xx`,详见 `DefaultMenuSeed` 头部分区表):
 
 ```csharp
-new SysMenu { Id = 700, ParentId = 0,   Type = MenuType.Catalog, Title = "AI 管理",  Permission = "", Icon = "ph:robot-duotone", Sort = 6, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
-new SysMenu { Id = 710, ParentId = 700, Type = MenuType.Menu,    Title = "AI 模型",  Permission = "", Path = "/system/ai-model", Component = "system/ai-model/index", Icon = "ph:brain-duotone", Sort = 1, Enabled = true, Visible = true },
-new SysMenu { Id = 711, ParentId = 710, Type = MenuType.Button,  Title = "AI 厂商-查询",     Permission = Codes("GET:/api/v1/sys/ai/provider/page", "GET:/api/v1/sys/ai/provider/{id}", "GET:/api/v1/sys/ai/provider/presets"), Sort = 1, Enabled = true },
-new SysMenu { Id = 712, ParentId = 710, Type = MenuType.Button,  Title = "AI 厂商-新增",     Permission = "POST:/api/v1/sys/ai/provider/add", Sort = 2, Enabled = true },
-new SysMenu { Id = 713, ParentId = 710, Type = MenuType.Button,  Title = "AI 厂商-更新",     Permission = Codes("PUT:/api/v1/sys/ai/provider/{id}", "PUT:/api/v1/sys/ai/provider/{id}/enabled"), Sort = 3, Enabled = true },
-new SysMenu { Id = 714, ParentId = 710, Type = MenuType.Button,  Title = "AI 厂商-删除",     Permission = "DELETE:/api/v1/sys/ai/provider/{id}", Sort = 4, Enabled = true },
-new SysMenu { Id = 715, ParentId = 710, Type = MenuType.Button,  Title = "AI 厂商-测试连接", Permission = "POST:/api/v1/sys/ai/provider/{id}/test", Sort = 5, Enabled = true },
-new SysMenu { Id = 720, ParentId = 700, Type = MenuType.Menu,    Title = "用量统计", Permission = "", Path = "/system/ai-usage", Component = "system/ai-usage/index", Icon = "ph:chart-line-up-duotone", Sort = 2, Enabled = true, Visible = true },
-new SysMenu { Id = 721, ParentId = 720, Type = MenuType.Button,  Title = "AI 用量-查询",     Permission = Codes("GET:/api/v1/sys/ai/usage/summary", "GET:/api/v1/sys/ai/usage/trend", "GET:/api/v1/sys/ai/usage/page"), Sort = 1, Enabled = true },
+new SysMenu { Id = 800, ParentId = 0,   Type = MenuType.Catalog, Title = "AI 管理",  Permission = "", Icon = "ph:robot-duotone", Sort = 7, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
+new SysMenu { Id = 810, ParentId = 800, Type = MenuType.Menu,    Title = "AI 模型",  Permission = "", Path = "/system/ai-model", Component = "system/ai-model/index", Icon = "ph:brain-duotone", Sort = 1, Enabled = true, Visible = true },
+new SysMenu { Id = 811, ParentId = 810, Type = MenuType.Button,  Title = "AI 厂商-查询",     Permission = Codes("GET:/api/v1/sys/ai/provider/page", "GET:/api/v1/sys/ai/provider/{id}", "GET:/api/v1/sys/ai/provider/presets"), Sort = 1, Enabled = true },
+new SysMenu { Id = 812, ParentId = 810, Type = MenuType.Button,  Title = "AI 厂商-新增",     Permission = "POST:/api/v1/sys/ai/provider/add", Sort = 2, Enabled = true },
+new SysMenu { Id = 813, ParentId = 810, Type = MenuType.Button,  Title = "AI 厂商-更新",     Permission = Codes("PUT:/api/v1/sys/ai/provider/{id}", "PUT:/api/v1/sys/ai/provider/{id}/enabled"), Sort = 3, Enabled = true },
+new SysMenu { Id = 814, ParentId = 810, Type = MenuType.Button,  Title = "AI 厂商-删除",     Permission = "DELETE:/api/v1/sys/ai/provider/{id}", Sort = 4, Enabled = true },
+new SysMenu { Id = 815, ParentId = 810, Type = MenuType.Button,  Title = "AI 厂商-测试连接", Permission = "POST:/api/v1/sys/ai/provider/{id}/test", Sort = 5, Enabled = true },
+new SysMenu { Id = 820, ParentId = 800, Type = MenuType.Menu,    Title = "用量统计", Permission = "", Path = "/system/ai-usage", Component = "system/ai-usage/index", Icon = "ph:chart-line-up-duotone", Sort = 2, Enabled = true, Visible = true },
+new SysMenu { Id = 821, ParentId = 820, Type = MenuType.Button,  Title = "AI 用量-查询",     Permission = Codes("GET:/api/v1/sys/ai/usage/summary", "GET:/api/v1/sys/ai/usage/trend", "GET:/api/v1/sys/ai/usage/page"), Sort = 1, Enabled = true },
 ```
 
-`Sort = 6` 以现有目录的实际排序为准,实施时核对。`DefaultMenuSeed` 头部注释的分区表加 `7xx AI 管理`;`MenuSeedIdLayoutTests` 会核对 1–4 号位的 HTTP 方法,715 是本页特有操作,落 5 号位。
+`Sort` 以现有目录的实际排序为准,实施时核对。`DefaultMenuSeed` 头部注释的分区表加 `8xx AI 管理`;`MenuSeedIdLayoutTests` 会核对 1–4 号位的 HTTP 方法,815 是本页特有操作,落 5 号位。
 
 ## 9. 前端
 
@@ -385,7 +385,7 @@ e2e(可选):在 `web/e2e` 现有页面级冒烟模板上加「AI 模型页可渲
 - [x] `Services/Ai/AiModels.cs`(DTO)、`IAiProviderService.cs`、`AiProviderService.cs`(第 7.1 节)、`AiProviderChangedEvent`
 - [x] `AiUsageService` 补 `SummaryAsync / TrendAsync / PageAsync`
 - [x] `AiProviderController.cs`、`AiUsageController.cs`
-- [x] `DefaultMenuSeed` 7xx 段 + 头部分区表
+- [x] `DefaultMenuSeed` 8xx 段(实施时为 7xx,后因多租户改造整体后移一位) + 头部分区表
 - [x] `ReplaceabilityContract` 登记 `IAiProviderService`
 - [x] 测试:`AiProviderCrudTests`、`AiUsageQueryTests`、`AiModuleDisableTests`
 - [x] **验收**:`dotnet test` 全绿(含 `PermissionCodeConsistencyTests`、`MenuSeedIdLayoutTests`);`/openapi/v1.json` 里 11 个端点齐全
