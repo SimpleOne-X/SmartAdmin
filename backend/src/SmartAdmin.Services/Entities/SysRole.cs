@@ -9,7 +9,9 @@ namespace SmartAdmin.Services;
 /// <para>数据范围(五种机构范围)由独立表 <c>sys_role_data_scope</c> 承载,不揉进本表。</para>
 /// </summary>
 [SugarTable("sys_role", TableDescription = "角色")]
-[SugarIndex("idx_sys_role_code", nameof(Code), OrderByType.Asc, IsUnique = true)]
+// 编码唯一性是**租户内**唯一,不是全局唯一:两个客户各建一个 Code="manager" 的角色是常态,
+// 不是边界情况。索引名保持不变,旧形状(单列 Code 全局唯一)的库由 DatabaseInitializer 按名先删再重建。
+[SugarIndex("idx_sys_role_code", nameof(TenantId), OrderByType.Asc, nameof(Code), OrderByType.Asc, IsUnique = true)]
 public class SysRole : TenantEntity
 {
     [SugarColumn(Length = 64, ColumnDescription = "角色名称")]

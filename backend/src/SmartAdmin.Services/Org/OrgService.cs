@@ -69,7 +69,8 @@ public class OrgService(
         }
         else
         {
-            // 编码唯一(库有 idx_sys_org_code 唯一索引):无前置查重会撞约束抛原生 500;查重纳入软删行
+            // 编码在**租户内**唯一(库有 idx_sys_org_code 复合唯一索引 (TenantId, Code)):无前置查重会撞约束抛原生 500;
+            // 查重只清软删过滤器、租户过滤器保持生效,查重范围与索引范围因此一致
             AdminException.ThrowIf(
                 await orgs.AsQueryable().ClearFilter<ISoftDelete>().AnyAsync(o => o.Code == code),
                 ErrorCode.OrgCodeExists);

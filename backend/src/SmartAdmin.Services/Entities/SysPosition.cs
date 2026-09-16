@@ -9,7 +9,9 @@ namespace SmartAdmin.Services;
 /// 二者不互相派生,一名用户可挂一个职位、多个角色。</para>
 /// </summary>
 [SugarTable("sys_position", TableDescription = "职位")]
-[SugarIndex("idx_sys_position_code", nameof(Code), OrderByType.Asc, IsUnique = true)]
+// 编码唯一性是**租户内**唯一,不是全局唯一:两个客户各建一个 Code="gm" 的职位是常态,
+// 不是边界情况。索引名保持不变,旧形状(单列 Code 全局唯一)的库由 DatabaseInitializer 按名先删再重建。
+[SugarIndex("idx_sys_position_code", nameof(TenantId), OrderByType.Asc, nameof(Code), OrderByType.Asc, IsUnique = true)]
 public class SysPosition : TenantEntity
 {
     [SugarColumn(Length = 64, ColumnDescription = "职位名称")]

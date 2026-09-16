@@ -149,6 +149,7 @@ internal sealed class DatabaseInitializer(
         {
             await db.RunInTransactionAsync(() =>
             {
+                DropReshapedIndexes();
                 db.CodeFirst.InitTables(entityTypes);
                 return Task.CompletedTask;
             });
@@ -158,6 +159,42 @@ internal sealed class DatabaseInitializer(
             db.Aop.OnLogExecuting = previous!;
         }
         return (sqlCount, sw.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// 改过键列的具名索引清单:(索引名, 表名)。<see cref="DropReshapedIndexes"/> 的输入。
+    /// <para>往后再有哪个 <c>[SugarIndex]</c> 改了键列集合(而不是改名),就往这里加一行——
+    /// 否则那次改动对所有已建过表的库都是静默空操作,原因见 <see cref="DropReshapedIndexes"/>。</para>
+    /// </summary>
+    private static readonly (string IndexName, string TableName)[] ReshapedIndexes =
+    [
+        ("idx_sys_org_code", "sys_org"),
+        ("idx_sys_role_code", "sys_role"),
+        ("idx_sys_position_code", "sys_position"),
+    ];
+
+    /// <summary>
+    /// 索引形状变更的补偿:<b>SqlSugar 的 <c>CodeFirst.InitTables</c> 只按索引<b>名</b>判存在,不比对键列</b>——
+    /// 同名索引已经在库里,它就整个跳过,库里那个索引原样保留。于是把实体上的 <c>[SugarIndex]</c>
+    /// 从单列改成复合(或反过来)、而索引名不变时,对任何已经跑过一次 <c>InitTables</c> 的库都是<b>静默空操作</b>,
+    /// 只有全新空库才会拿到新形状。这是 <c>InitTables</c> 的通用限制,不止本次这三个索引:
+    /// 以后谁再改某个索引的键列,都得像这样先按名把旧索引删掉,<c>InitTables</c> 才会按新形状重建。
+    /// <para>本次要迁的是 sys_org / sys_role / sys_position 的 Code 唯一索引:从全局唯一改成
+    /// 租户内唯一 <c>(TenantId, Code)</c>。共享库多租户下两个客户各有一个 Code="HQ" 的机构是<b>常态</b>,
+    /// 不迁的话第二个租户建同码机构会撞库级唯一约束,前端拿到的是一个裸 500 而不是业务错误。</para>
+    /// <para>无条件执行,不另设开关:外层 <see cref="CodeFirstUpToDateAsync"/> 的版本门控已经决定了
+    /// 整个 <see cref="RunCodeFirstAsync"/> 跑不跑,这里再加一道自己的闸门只会和它意见不一致。
+    /// <see cref="IDbMaintenance.IsAnyIndex"/> 在"表还不存在"(全新库)与"表在但索引不在"两种情况下
+    /// 都只返回 false、不抛,所以新装上这一步是真空操作,只有从旧形状升级的库才真的执行 DROP。</para>
+    /// <para><see cref="IDbMaintenance.DropIndex(string, string)"/> 必须用<b>带表名的两参重载</b>:
+    /// 单参重载在 SqlServer 上无条件抛 "Must specify the table name and index name for the DROP INDEX statement",
+    /// 索引存不存在都一样,在这儿没法用。</para>
+    /// </summary>
+    private void DropReshapedIndexes()
+    {
+        foreach (var (indexName, tableName) in ReshapedIndexes)
+            if (db.DbMaintenance.IsAnyIndex(indexName))
+                db.DbMaintenance.DropIndex(indexName, tableName);
     }
 
     /// <summary>

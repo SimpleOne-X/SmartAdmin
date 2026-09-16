@@ -8,7 +8,9 @@ namespace SmartAdmin.Services;
 /// 后端不维护物化树结构,避免"树 + 平铺"两份数据打架。
 /// </summary>
 [SugarTable("sys_org", TableDescription = "机构")]
-[SugarIndex("idx_sys_org_code", nameof(Code), OrderByType.Asc, IsUnique = true)]
+// 编码唯一性是**租户内**唯一,不是全局唯一:共享库里两个客户各有一个 Code="HQ" 的总部是常态,
+// 不是边界情况。索引名保持不变,旧形状(单列 Code 全局唯一)的库由 DatabaseInitializer 按名先删再重建。
+[SugarIndex("idx_sys_org_code", nameof(TenantId), OrderByType.Asc, nameof(Code), OrderByType.Asc, IsUnique = true)]
 public class SysOrg : TenantEntity
 {
     /// <summary>父机构 Id(0=根,即顶级机构无父)</summary>
