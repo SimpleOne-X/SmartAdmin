@@ -2228,7 +2228,7 @@ git commit -m "feat: 个人资料带出租户名,前端只读展示
 
 ## 收尾
 
-全部 13 个任务完成后:
+全部 14 个任务完成后:
 
 ```bash
 dotnet build backend/SmartAdmin.slnx -c Release
