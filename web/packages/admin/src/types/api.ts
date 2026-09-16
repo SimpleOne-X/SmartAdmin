@@ -960,3 +960,36 @@ export interface SysAiUsageLog {
   requestId?: string | null
   createTime: string
 }
+
+/** 租户行(后端 SysTenant) */
+export interface SysTenant {
+  id: number
+  code: string
+  name: string
+  contactName?: string | null
+  contactPhone?: string | null
+  expireTime?: string | null
+  isolationMode: number // 1=共享库(一期唯一可选) 2=独立库(二期,前端锁定不可选)
+  connectionConfigId?: string | null
+  enabled: boolean
+  remark?: string | null
+  createTime?: string
+}
+
+/** 租户编辑入参(后端 TenantInput) */
+export interface TenantInput {
+  code: string
+  name: string
+  contactName?: string | null
+  contactPhone?: string | null
+  expireTime?: string | null
+  isolationMode: number
+  enabled: boolean
+  remark?: string | null
+}
+
+/** 租户创建入参(后端 TenantCreateInput:比 TenantInput 多两个初始管理员字段) */
+export interface TenantCreateInput extends TenantInput {
+  adminAccount: string
+  adminPassword: string
+}

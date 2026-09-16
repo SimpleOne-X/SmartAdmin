@@ -60,6 +60,9 @@ import type {
   SysPosition,
   SysRole,
   SysRoleDataScope,
+  SysTenant,
+  TenantCreateInput,
+  TenantInput,
   UpdateUserInput,
   UserDetail,
   UserItem,
@@ -1402,4 +1405,37 @@ export const aiUsageApi = {
         },
       })
       .then(r => toPage<SysAiUsageLog>(r)),
+}
+
+// 租户注册表:CRUD(仅平台管理员可见入口,业务门禁在后端 TenantService)。
+export const tenantApi = {
+  page: (params: {
+    page: number
+    pageSize: number
+    name?: string
+    sortField?: string
+    sortOrder?: string
+  }) =>
+    client
+      .GET('/api/v1/sys/tenant/page', {
+        params: {
+          query: {
+            ...pageParams(params),
+            Name: params.name,
+            SortField: params.sortField,
+            SortOrder: params.sortOrder,
+          },
+        },
+      })
+      .then(r => toPage<SysTenant>(r)),
+  add: (body: TenantCreateInput) =>
+    client.POST('/api/v1/sys/tenant/add', { body }).then(r => unwrap<number>(r)),
+  update: (id: number, body: TenantInput) =>
+    client
+      .PUT('/api/v1/sys/tenant/{id}', { params: { path: { id } }, body })
+      .then(r => unwrap<boolean>(r)),
+  remove: (id: number) =>
+    client
+      .DELETE('/api/v1/sys/tenant/{id}', { params: { path: { id } } })
+      .then(r => unwrap<boolean>(r)),
 }

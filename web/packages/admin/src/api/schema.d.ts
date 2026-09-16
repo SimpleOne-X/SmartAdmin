@@ -2278,6 +2278,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/tenant/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["Tenant_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/tenant/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["Tenant_Get"];
+        put: operations["Tenant_Update"];
+        post?: never;
+        delete: operations["Tenant_Delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/tenant/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["Tenant_Add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/user/page": {
         parameters: {
             query?: never;
@@ -2591,7 +2639,12 @@ export interface components {
             remark: null | string;
             models: components["schemas"]["AiModelInput"][];
         };
-        /** @description AI 厂商预置项:协议 / Base URL / 鉴权方式由预设带出,运维只填 Key(见 docs/plans/ai-management.md §6)。 */
+        /**
+         * @description AI 厂商预置项:协议 / Base URL / 鉴权方式由预设带出,运维只填 Key(见 docs/plans/ai-management.md §6)。
+         *     bool AiProviderPreset.SupportsJsonSchema 是否支持 OpenAI 的 json_schema 严格结构化输出(`response_format.type == "json_schema"`);
+         *     只对 Protocol == "openai" 的厂商有意义,默认 true。标记为 false 的厂商收到该字段时不会报错,只会静默忽略约束按自由文本
+         *     作答——AiChatClient 据此在请求携带 ResponseSchema 时提前拒绝,不把一个对方读不懂的字段透传过去。
+         */
         AiProviderPreset: {
             code: string;
             name: string;
@@ -2599,6 +2652,8 @@ export interface components {
             baseUrl: string;
             authScheme: string;
             models: components["schemas"]["AiModelPreset"][];
+            /** @default true */
+            supportsJsonSchema: boolean;
         };
         /**
          * @description AI 厂商编辑入参。<b>没有</b>`Preset`/`Protocol` 字段——这两项创建后不可改,入参类型层面就不给改的机会。
@@ -4043,6 +4098,34 @@ export interface components {
          * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
          *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
          */
+        PagedListOfSysTenant: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["SysTenant"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
         PagedListOfUserItem: {
             /**
              * Format: int32
@@ -5281,6 +5364,27 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfPagedListOfSysTenant: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfSysTenant"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfPagedListOfUserItem: {
             /**
              * Format: int32
@@ -5547,6 +5651,27 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["SysRoleDataScope"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfSysTenant: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["SysTenant"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5971,6 +6096,14 @@ export interface components {
             operatorName?: null | string;
             ip?: null | string;
             userAgent?: null | string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6021,6 +6154,14 @@ export interface components {
             sizeBytes?: number | string;
             /** @description 内容 SHA-256(hex,小写);分片上传落库,供「秒传」按内容去重。单文件上传暂不计算(留 null)。 */
             hash?: null | string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6208,9 +6349,12 @@ export interface components {
             nodeInstanceId?: string;
             /** @description 跨节点终止旗标:kill 端点置 true,执行侧每 KillPollSeconds 轮询自己这行 */
             killRequested?: boolean;
-            /** @description 处理器输出(截 8KB;HTTP 响应体截 Http.MaxResponseLogBytes) */
+            /**
+             * @description 处理器输出;超过 int AdminJobsOptions.MaxMessageChars(字符数,≤0 不限)按「保留开头 + 结尾,截中间」
+             *     截断,断点处留标记(HTTP 响应体截断走独立的 int AdminJobsHttpOptions.MaxResponseLogBytes)。
+             */
             messageText?: null | string;
-            /** @description 失败异常信息(截 8KB) */
+            /** @description 失败异常信息;截断规则同 string? SysJobLog.MessageText(共用 int AdminJobsOptions.MaxMessageChars)。 */
             errorText?: null | string;
             /**
              * Format: date-time
@@ -6261,6 +6405,14 @@ export interface components {
             userAgent?: null | string;
             /** @description 用户姓名——非持久化,分页时按 long? SysLoginLog.UserId 批量回填(失败/账号不存在的行为 null,前端回落账号)。 */
             name?: null | string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6356,6 +6508,14 @@ export interface components {
              *     可空:旧行 NULL,即"没有动作",不需要迁移。
              */
             actionsJson?: null | string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6423,6 +6583,14 @@ export interface components {
             operatorName?: null | string;
             ip?: null | string;
             userAgent?: null | string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6469,6 +6637,14 @@ export interface components {
             /** Format: int32 */
             sort?: number | string;
             enabled?: boolean;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6509,6 +6685,14 @@ export interface components {
             /** Format: int32 */
             sort?: number | string;
             enabled?: boolean;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6557,6 +6741,14 @@ export interface components {
              *     ADD 无 DEFAULT 的 NOT NULL 列(同 bool SysUser.ForceTotp 的成法)。
              */
             isDelegatable?: null | boolean;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6595,6 +6787,14 @@ export interface components {
             scopeType?: components["schemas"]["DataScopeType"];
             /** @description 自定义机构 Id 列表(逗号分隔),仅 DataScopeType.Custom 时使用。 */
             customOrgIds?: string;
+            /**
+             * Format: int64
+             * @description 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+             *     硬化后的过滤器谓词显式要求 `currentUser.TenantId != null`,null 行对任何调用者(含无租户上下文的
+             *     系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、`TenantBackfillHook` 尚未处理过的
+             *     存量行,稳态下不该有活的这类行。
+             */
+            tenantId?: null | number | string;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6623,6 +6823,87 @@ export interface components {
              */
             id?: number | string;
         };
+        /**
+         * @description 租户表——隔离边界的根,自己不实现 ITenantScoped(不自我引用)。新表,首次建表可直接 NOT NULL,
+         *     不受"已有表加列必须可空"约束。
+         */
+        SysTenant: {
+            code?: string;
+            name?: string;
+            contactName?: null | string;
+            contactPhone?: null | string;
+            /** Format: date-time */
+            expireTime?: null | string;
+            /** @description 二期预留,一期恒为 Shared;TenantService 对 Standalone 写入一律拒绝。 */
+            isolationMode?: components["schemas"]["TenantIsolationMode"];
+            /** @description 二期预留:对应 SqlSugar ConfigId,只路由消费方业务库连接,不影响内核自身数据。一期恒为空。 */
+            connectionConfigId?: null | string;
+            enabled?: boolean;
+            remark?: null | string;
+            /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
+            isDelete?: boolean;
+            /**
+             * Format: date-time
+             * @description 创建时间;插入时由审计 AOP 自动填充。
+             */
+            createTime?: string;
+            /**
+             * Format: int64
+             * @description 创建人用户 Id;插入时由审计 AOP 从当前登录用户填充,系统写入为 null。
+             */
+            createUserId?: null | number | string;
+            /**
+             * Format: date-time
+             * @description 最后更新时间;每次更新由审计 AOP 自动刷新。
+             */
+            updateTime?: null | string;
+            /**
+             * Format: int64
+             * @description 最后更新人用户 Id;每次更新由审计 AOP 从当前登录用户填充。
+             */
+            updateUserId?: null | number | string;
+            /**
+             * Format: int64
+             * @description 主键(雪花 ID;种子数据可用固定小整数)。插入时为 0 则由审计 AOP 自动生成。
+             */
+            id?: number | string;
+        };
+        /**
+         * @description 租户创建入参:在编辑字段基础上,额外携带该租户第一个管理员账号的凭据——
+         *                 新租户必须带着能登录的管理员一起出生,否则平台管理员建完之后没人能进去继续配置。
+         */
+        TenantCreateInput: {
+            adminAccount?: string;
+            adminPassword?: string;
+            code?: string;
+            name?: string;
+            contactName?: null | string;
+            contactPhone?: null | string;
+            /** Format: date-time */
+            expireTime?: null | string;
+            isolationMode?: components["schemas"]["TenantIsolationMode"];
+            enabled?: boolean;
+            remark?: null | string;
+        };
+        /** @description 租户编辑入参(更新用;不含初始管理员字段——那是创建独有的一次性动作)。 */
+        TenantInput: {
+            code?: string;
+            name?: string;
+            contactName?: null | string;
+            contactPhone?: null | string;
+            /** Format: date-time */
+            expireTime?: null | string;
+            isolationMode?: components["schemas"]["TenantIsolationMode"];
+            enabled?: boolean;
+            remark?: null | string;
+        };
+        /**
+         * @description 租户的数据隔离模式。一期只支持 TenantIsolationMode.Shared;TenantIsolationMode.Standalone 是二期"混合模式"的预留值,
+         *     一期 `TenantService` 会拒绝写入(见 `ErrorCode.TenantIsolationModeNotSupported`)。
+         *     二期即便某租户选了 Standalone,内核自身的机构/用户/角色/菜单授权数据仍然留在共享主库,只有消费方
+         *     自己的业务表会路由到独立连接串——对应 SqlSugar 官方"基础信息库 + 业务库"的划分,见设计文档 §8。
+         */
+        TenantIsolationMode: number;
         /** @description 绑定完成入参:挑战 + 当前 Authenticator 动态口令。 */
         TotpBindCompleteInput: {
             /** @description string TotpBindStartOutput.BindChallengeId */
@@ -10751,6 +11032,140 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfboolean"];
                     "application/json": components["schemas"]["ResultOfboolean"];
                     "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Tenant_Page: {
+        parameters: {
+            query?: {
+                Name?: string;
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfSysTenant"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfSysTenant"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfSysTenant"];
+                };
+            };
+        };
+    };
+    Tenant_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfSysTenant"];
+                    "application/json": components["schemas"]["ResultOfSysTenant"];
+                    "text/json": components["schemas"]["ResultOfSysTenant"];
+                };
+            };
+        };
+    };
+    Tenant_Update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantInput"];
+                "text/json": components["schemas"]["TenantInput"];
+                "application/*+json": components["schemas"]["TenantInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Tenant_Delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Tenant_Add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantCreateInput"];
+                "text/json": components["schemas"]["TenantCreateInput"];
+                "application/*+json": components["schemas"]["TenantCreateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOflong"];
+                    "application/json": components["schemas"]["ResultOflong"];
+                    "text/json": components["schemas"]["ResultOflong"];
                 };
             };
         };
