@@ -313,6 +313,52 @@ public class TenantOperationalEntitiesTests
     }
 
     /// <summary>
+    /// 上一条的业务效果闭环:系统上下文发出的定向通知,收件人以<b>真实认证身份</b>登录后
+    /// 在"我的通知"里必须真的看得到。
+    /// <para>光让通知本体落库还不够——<c>VisibleToMeAsync</c> 是先查 <c>SysNoticeReceiver</c> 拿到定向命中的
+    /// NoticeId、再据此筛通知。接收目标行若留 <c>TenantId = null</c>,收件人以默认租户身份登录后这一步
+    /// 恒查不到行,定向通知在"我的通知"里根本不出现:通知在库里、收件人看不见,等于白发。
+    /// 所以这条用例刻意走真实读路径(HTTP 的 /notice/mine + /notice/unread-count),
+    /// 而不是去读 <c>SysNoticeReceiver.TenantId</c> 这个字段本身。</para>
+    /// </summary>
+    [Fact]
+    public async Task System_context_targeted_notice_is_visible_to_its_recipient_in_my_notices()
+    {
+        using var f = new AdminAppFactory();
+        _ = f.CreateClient();
+
+        // ① 系统上下文(无 HttpContext)定向发给超管——与 JobExecutor 的 Panic 告警同一条路径
+        var title = $"系统上下文告警-{Guid.NewGuid():N}";
+        using (var scope = f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+            var superAdmin = await users.AsQueryable().ClearFilter<ITenantScoped>()
+                .Where(u => u.Account == "superAdmin").FirstAsync();
+            Assert.NotNull(superAdmin);
+
+            await scope.ServiceProvider.GetRequiredService<INoticeService>().PublishAsync(new NoticePublishInput
+            {
+                Title = title,
+                Content = "任务连续失败,已转入 Panic 停摆",
+                ReceiverType = ReceiverType.User,
+                ReceiverIds = [superAdmin!.Id],
+            });
+        }
+
+        // ② 收件人以真实认证身份(默认租户下的超管)登录,走真实的"我的通知"读路径
+        var admin = await SuperAdminClient(f);
+        var mine = await (await admin.GetAsync("/api/v1/sys/notice/mine?Current=1&Size=50")).ReadEnvelope();
+        Assert.Equal(0, mine.GetProperty("code").GetInt32());
+        var titles = mine.GetProperty("data").GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("title").GetString()).ToList();
+        Assert.Contains(title, titles);
+
+        // 未读角标同样要亮:库里只有这一条通知,未读数应当恰好是 1
+        var unread = await (await admin.GetAsync("/api/v1/sys/notice/unread-count")).ReadEnvelope();
+        Assert.Equal(1, unread.GetProperty("data").GetInt32());
+    }
+
+    /// <summary>
     /// 上一条的反面守卫:存在性校验清租户过滤器<b>只许</b>发生在没有租户上下文时。
     /// <para>已认证的租户 A 管理员拿租户 B 的真实用户 Id 当定向目标,必须仍然被判成"目标不存在"——
     /// 这层校验是唯一的把关处(插入接收目标行时不再查库),无条件清过滤器就等于开一个跨租户 IDOR:

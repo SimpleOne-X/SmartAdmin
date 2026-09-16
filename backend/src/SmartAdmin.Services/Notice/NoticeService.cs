@@ -83,8 +83,13 @@ public class NoticeService(
         // 定向发送:每个目标(角色 Id 或用户 Id)写一行接收目标;全体广播不写行。
         if (targetIds.Count > 0)
         {
+            // 每一行都要带上与通知本体<b>同一个</b>租户号,理由比通知本体那处更硬:
+            // VisibleToMeAsync 是先查 SysNoticeReceiver 拿到 targetedIds、再据此筛通知。接收目标行留 null 时,
+            // 收件人以自己的租户身份登录后这一步就查不到行 → targetedIds 为空 → 定向通知在"我的通知"里根本不出现。
+            // 净效果是"通知在库里、收件人看不到",等于白发——这正是系统上下文发 Panic 告警的那条路径。
+            var tenantId = currentUser.TenantId ?? DefaultTenantSeed.DEFAULT_TENANT_ID;
             var rows = targetIds
-                .Select(rid => new SysNoticeReceiver { NoticeId = entity.Id, ReceiverId = rid })
+                .Select(rid => new SysNoticeReceiver { NoticeId = entity.Id, ReceiverId = rid, TenantId = tenantId })
                 .ToList();
             await receivers.InsertRangeAsync(rows);
         }
