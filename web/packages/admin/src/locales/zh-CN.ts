@@ -1382,6 +1382,13 @@ export default {
       invalidParent: '上级菜单无效(不能指向自身或其子节点)',
     },
     session: { notFound: '会话不存在或已下线' },
+    tenant: {
+      notFound: '租户不存在',
+      codeExists: '租户编码已存在',
+      isolationModeNotSupported: '暂不支持该隔离模式',
+      protected: '默认租户受保护,禁止此操作',
+      platformAdminRequired: '该操作仅平台管理员可执行',
+    },
     dict: {
       typeNotFound: '字典类型不存在',
       typeCodeExists: '字典类型编码已存在',

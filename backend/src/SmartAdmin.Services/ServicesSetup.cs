@@ -139,6 +139,9 @@ public static class ServicesSetup
         services.TryAddScoped<IOrgService, OrgService>();
         services.TryAddScoped<IPositionService, PositionService>();
 
+        // 租户注册表:平台管理员专属;AddAsync 连带建初始管理员账号(见 TenantService 注释)
+        services.TryAddScoped<ITenantService, TenantService>();
+
         // 多应用门户:模块 CRUD + 按模块的"我的模块/菜单树"派生(访问权反推自菜单授权)
         services.TryAddScoped<IModuleService, ModuleService>();
         services.TryAddScoped<IMenuService, MenuService>();

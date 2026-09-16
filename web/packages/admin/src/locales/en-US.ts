@@ -1409,6 +1409,13 @@ export default {
       invalidParent: 'Invalid parent menu (cannot be itself or its descendant)',
     },
     session: { notFound: 'Session not found or already signed out' },
+    tenant: {
+      notFound: 'Tenant not found',
+      codeExists: 'Tenant code already exists',
+      isolationModeNotSupported: 'This isolation mode is not supported yet',
+      protected: 'Default tenant is protected from this operation',
+      platformAdminRequired: 'This operation requires platform administrator privileges',
+    },
     dict: {
       typeNotFound: 'Dict type not found',
       typeCodeExists: 'Dict type code exists',

@@ -88,6 +88,7 @@ public static class ReplaceabilityContract
         (typeof(IUserService), ServiceLifetime.Scoped),
         (typeof(IOrgService), ServiceLifetime.Scoped),
         (typeof(IPositionService), ServiceLifetime.Scoped),
+        (typeof(ITenantService), ServiceLifetime.Scoped),
         (typeof(IModuleService), ServiceLifetime.Scoped),
         (typeof(IMenuService), ServiceLifetime.Scoped),
         (typeof(IDictService), ServiceLifetime.Scoped),

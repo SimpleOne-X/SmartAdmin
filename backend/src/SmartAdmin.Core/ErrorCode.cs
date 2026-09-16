@@ -293,6 +293,26 @@ public enum ErrorCode
     [MsgKey("error.org.outOfScope")]
     OrgOutOfScope = 42030,
 
+    /// <summary>目标租户不存在</summary>
+    [MsgKey("error.tenant.notFound")]
+    TenantNotFound = 42031,
+
+    /// <summary>租户编码已存在(编码唯一)</summary>
+    [MsgKey("error.tenant.codeExists")]
+    TenantCodeExists = 42032,
+
+    /// <summary>一期只支持共享库隔离模式,独立库二期开放</summary>
+    [MsgKey("error.tenant.isolationModeNotSupported")]
+    TenantIsolationModeNotSupported = 42033,
+
+    /// <summary>默认租户受保护:不可删除/禁用</summary>
+    [MsgKey("error.tenant.protected")]
+    TenantProtected = 42034,
+
+    /// <summary>该操作仅平台管理员可执行</summary>
+    [MsgKey("error.tenant.platformAdminRequired")]
+    PlatformAdminRequired = 42035,
+
     // ── 43xxx 字典 / 配置 ────────────────────────────────────────────
 
     /// <summary>字典类型不存在</summary>
