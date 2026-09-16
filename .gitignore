@@ -63,3 +63,9 @@ backend/scratchpad/
 
 ## /loop 任务账本（跨轮记忆，操作态，不提交）
 .loop/
+
+## git worktree 隔离工作区（agent 实施计划时用，不提交）
+.worktrees/
+
+## subagent-driven-development 任务账本/评审素材（操作态，不提交）
+.superpowers/
