@@ -38,7 +38,7 @@ public enum ReceiverType
 /// 发布时间即审计字段 <c>CreateTime</c>,无需另存。</para>
 /// </summary>
 [SugarTable("sys_notice", TableDescription = "系统通知")]
-public class SysNotice : BaseEntity
+public class SysNotice : TenantEntity
 {
     [SugarColumn(Length = 128, ColumnDescription = "标题")]
     public string Title { get; set; } = "";

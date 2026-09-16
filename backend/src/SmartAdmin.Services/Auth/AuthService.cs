@@ -530,7 +530,10 @@ public class AuthService(
             .Where(u => u.Id == user.Id)
             .ExecuteCommandAsync();
 
-        await logService.RecordLoginAsync(new LoginLogEntry { Account = user.Account, Success = true, ResultCode = 0, UserId = user.Id });
+        await logService.RecordLoginAsync(new LoginLogEntry
+        {
+            Account = user.Account, Success = true, ResultCode = 0, UserId = user.Id, TenantId = user.TenantId,
+        });
     }
 
     /// <summary>

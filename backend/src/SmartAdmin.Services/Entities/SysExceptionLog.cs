@@ -13,7 +13,7 @@ namespace SmartAdmin.Services;
 [SugarTable("sys_exception_log", TableDescription = "异常日志")]
 // 同 SysOpLog:时间倒序是日志唯一天然查询轴(默认排序 + 时间范围筛 + 按天清理),DDL 只有一次机会。
 [SugarIndex("idx_sys_exception_log_create", nameof(BaseEntity.CreateTime), OrderByType.Desc)]
-public class SysExceptionLog : BaseEntity
+public class SysExceptionLog : TenantEntity
 {
     [SugarColumn(Length = 16, ColumnDescription = "HTTP 方法")]
     public string HttpMethod { get; set; } = "";

@@ -13,7 +13,7 @@ namespace SmartAdmin.Services;
 // 同 SysLoginLog:时间倒序是日志的唯一天然查询轴(默认排序 + 时间范围筛 + 按天清理),且 DDL 只有一次机会。
 // 刻意不给 Title/Path 建索引——它们走 Contains(前导通配 LIKE '%x%'),索引用不上;Success 基数为 2,优化器会忽略。
 [SugarIndex("idx_sys_op_log_create", nameof(BaseEntity.CreateTime), OrderByType.Desc)]
-public class SysOpLog : BaseEntity
+public class SysOpLog : TenantEntity
 {
     /// <summary>操作名(来自 <c>[OperationLog("新增用户")]</c> 的标题)</summary>
     [SugarColumn(Length = 128, ColumnDescription = "操作名")]

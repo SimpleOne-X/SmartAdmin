@@ -197,7 +197,15 @@ public class FileService(
     /// <inheritdoc />
     public virtual async Task<FileDownload> DownloadAsync(long id)
     {
-        var file = await files.GetByIdAsync(id);
+        // 未认证调用者(签名直链 /view,见 ValidateFileOwner 同一处豁免)查库须显式跨租户:SysFile 是
+        // ITenantScoped,过滤器要求 currentUser.TenantId != null 才放行任何行——但签名直链的鉴权模型从来
+        // 不是"登录到某个租户",是持有对这个 Id 的合法 HMAC 签名(与 SessionService.RefreshAsync 靠刷新令牌
+        // 哈希而非租户上下文鉴权同一道理)。已认证调用者(含租户内超管)维持过滤:不能因为清了这层,
+        // 就让超管经 /download 拿到别的租户的文件——那正是 Task 10 要收紧的边界,不能在这里开回逃生舱。
+        var unauthenticated = currentUser is null || !currentUser.IsAuthenticated;
+        var file = unauthenticated
+            ? await files.AsQueryable().ClearFilter<ITenantScoped>().Where(f => f.Id == id).FirstAsync()
+            : await files.GetByIdAsync(id);
         AdminException.ThrowIf(file is null, ErrorCode.FileNotFound);
         // 非超管只能下载自己的文件
         ValidateFileOwner(file!);

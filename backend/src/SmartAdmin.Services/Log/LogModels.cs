@@ -29,6 +29,14 @@ public record LoginLogEntry
     public int ResultCode { get; init; }
     /// <summary>登录成功时的用户 Id</summary>
     public long? UserId { get; init; }
+
+    /// <summary>
+    /// 登录成功时所属的租户 Id;<c>AuthService</c> 必须显式带上——这条日志写在登录成功、令牌尚未签发的
+    /// 同一请求内,此刻请求还没有认证头,插入 AOP 按当前登录者回填 TenantId 的路径不会命中
+    /// (与 <see cref="SessionService.OpenAsync"/> 对 <c>SysSession.TenantId</c> 同一原因,同一修法)。
+    /// 登录失败时没有已知用户,留空——这是尚待产品裁定的已知缺口(登录失败审计的租户归属),不在此处强填。
+    /// </summary>
+    public long? TenantId { get; init; }
 }
 
 /// <summary>

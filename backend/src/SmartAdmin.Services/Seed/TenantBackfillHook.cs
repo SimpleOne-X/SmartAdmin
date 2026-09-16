@@ -18,7 +18,15 @@ public class TenantBackfillHook(
     IRepository<SysUserRole> userRoles,
     IRepository<SysRoleMenu> roleMenus,
     IRepository<SysRoleDataScope> roleDataScopes,
-    IRepository<SysPosition> positions) : IDatabaseReadyHook
+    IRepository<SysPosition> positions,
+    IRepository<SysNotice> notices,
+    IRepository<SysNoticeReceiver> noticeReceivers,
+    IRepository<SysNoticeRead> noticeReads,
+    IRepository<SysFile> files,
+    IRepository<SysLoginLog> loginLogs,
+    IRepository<SysOpLog> opLogs,
+    IRepository<SysExceptionLog> exceptionLogs,
+    IRepository<SysSession> sessions) : IDatabaseReadyHook
 {
     public virtual async Task OnDatabaseReadyAsync(DatabaseReadyContext context, CancellationToken cancellationToken)
     {
@@ -49,6 +57,38 @@ public class TenantBackfillHook(
         await positions.Db.Updateable<SysPosition>()
             .SetColumns(p => p.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
             .Where(p => p.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await notices.Db.Updateable<SysNotice>()
+            .SetColumns(n => n.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(n => n.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await noticeReceivers.Db.Updateable<SysNoticeReceiver>()
+            .SetColumns(nr => nr.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(nr => nr.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await noticeReads.Db.Updateable<SysNoticeRead>()
+            .SetColumns(nr => nr.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(nr => nr.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await files.Db.Updateable<SysFile>()
+            .SetColumns(f => f.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(f => f.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await loginLogs.Db.Updateable<SysLoginLog>()
+            .SetColumns(l => l.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(l => l.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await opLogs.Db.Updateable<SysOpLog>()
+            .SetColumns(l => l.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(l => l.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await exceptionLogs.Db.Updateable<SysExceptionLog>()
+            .SetColumns(l => l.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(l => l.TenantId == null)
+            .ExecuteCommandAsync(cancellationToken);
+        await sessions.Db.Updateable<SysSession>()
+            .SetColumns(s => s.TenantId == DefaultTenantSeed.DEFAULT_TENANT_ID)
+            .Where(s => s.TenantId == null)
             .ExecuteCommandAsync(cancellationToken);
     }
 }

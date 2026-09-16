@@ -10,7 +10,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_notice_receiver", TableDescription = "通知接收目标")]
 [SugarIndex("idx_sys_notice_receiver", nameof(NoticeId), OrderByType.Asc, nameof(ReceiverId), OrderByType.Asc, IsUnique = true)]
-public class SysNoticeReceiver : BaseEntity
+public class SysNoticeReceiver : TenantEntity
 {
     [SugarColumn(ColumnDescription = "通知 Id")]
     public long NoticeId { get; set; }

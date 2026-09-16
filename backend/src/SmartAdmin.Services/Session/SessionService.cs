@@ -58,6 +58,10 @@ public class SessionService(
             // IP/UA 取自当前登录请求(与 LogService 同款,登录前即可读到);会话行是登录时快照,刷新不重写
             await sessions.InsertAsync(new SysSession
             {
+                // TenantId 必须显式指定:OpenAsync 在登录成功、令牌尚未签发的同一请求内执行,此刻请求
+                // 还没有认证头,currentUser.TenantId 为 null,插入 AOP 不会回填——与 TenantService.AddAsync
+                // 给新租户初始管理员显式赋值同一原因,都是"AOP 按当前登录者回填,但当前登录者判断不出该归属谁"。
+                TenantId = user.TenantId,
                 SessionId = sessionId,
                 UserId = user.Id,
                 Account = user.Account,
@@ -99,14 +103,20 @@ public class SessionService(
         }
 
         // 未命中:查库判定(可能是被驱逐、或本进程没缓存过),活跃则回填
-        var session = await sessions.GetFirstAsync(s => s.SessionId == sessionId);
+        // 本方法既在已认证请求([RolePermission]/[ActiveSession],currentUser.TenantId 有效)内被调用,
+        // 也在 RefreshAsync 的刷新流程(尚无租户上下文)内被调用——后一种场景下不清租户过滤器,
+        // 这条查询在 SysSession 迁入 TenantEntity 后会恒查到 0 行,把每一次「缓存未命中」的刷新都
+        // 误判成会话不活跃。sessionId 是 JWT sid claim,高熵且由令牌签发方生成,调用方能拿到它本身
+        // 就是持有合法令牌的证明(与下面 users 查询、及 RefreshAsync 里刷新令牌哈希命中同一容量令牌模型),
+        // 不是开放式跨租户查找,故可安全跨租户按 SessionId 精确匹配。
+        var session = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(s => s.SessionId == sessionId).FirstAsync();
         if (session is null || session.RevokedAt != null || session.ExpiresAt <= Now) return false;
 
         var absolute = session.AbsoluteExpiresAt == default ? session.ExpiresAt : session.AbsoluteExpiresAt;
-        // 本方法既在已认证请求([RolePermission]/[ActiveSession],currentUser.TenantId 有效)内被调用,
-        // 也在 RefreshAsync 的刷新流程(尚无租户上下文)内被调用;session.UserId 已经过上面的会话行校验,
-        // 不是开放式跨租户查找,只用来读这一个用户的 MFA 策略位,须跨租户查找以覆盖后一种场景
-        // (否则缓存未命中时会把 MFA 用户误判成非 MFA,套错闲置超时策略)。
+        // session.UserId 已经过上面的会话行校验,不是开放式跨租户查找,只用来读这一个用户的 MFA 策略位,
+        // 须跨租户查找以覆盖"尚无租户上下文"的刷新流程场景(否则缓存未命中时会把 MFA 用户误判成非 MFA,
+        // 套错闲置超时策略)。
         var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == session.UserId).FirstAsync();
         var isMfa = user is not null && IsMfaUser(user);
         var idleMinutes = ResolveIdleMinutes(isMfa);
@@ -149,7 +159,10 @@ public class SessionService(
         if (user is null) throw new AdminException(ErrorCode.RefreshTokenInvalid);
         AdminException.ThrowIf(!user.Enabled, ErrorCode.AccountDisabled);
 
-        var session = await sessions.GetFirstAsync(s => s.SessionId == rt.SessionId);
+        // 同上一条查询:同一原因须跨租户查找,否则 SysSession 迁入 TenantEntity 后,没有 Bearer 的
+        // 刷新请求会把 currentUser.TenantId 恒判 null,过滤器恒零行,刷新流程整体失效。
+        var session = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(s => s.SessionId == rt.SessionId).FirstAsync();
         if (session is null) throw new AdminException(ErrorCode.RefreshTokenInvalid);
         var absolute = session.AbsoluteExpiresAt == default ? session.ExpiresAt : session.AbsoluteExpiresAt;
         if (absolute <= Now) throw new AdminException(ErrorCode.RefreshTokenInvalid);
@@ -211,10 +224,13 @@ public class SessionService(
     {
         await MarkRevokedAsync([sessionId]);
         await cache.RemoveAsync(CacheKeys.Session(sessionId));   // 缓存移除 → 下次校验查库得吊销 → 401
-        // 吊销该会话上的 reauth 窗口(避免跨会话复用后 sid 已死仍残留——按 sid 清)
+        // 吊销该会话上的 reauth 窗口(避免跨会话复用后 sid 已死仍残留——按 sid 清)。
+        // RevokeAsync 也从 RefreshAsync 的刷新令牌复用检测路径调用(无 Bearer,currentUser.TenantId 为
+        // null),须跨租户查找,理由同上面几处 sessions 查询——sessionId 本身即持有凭证。
         long? userId = null;
         if (reauth is not null)
-            userId = (await sessions.GetFirstAsync(s => s.SessionId == sessionId))?.UserId;
+            userId = (await sessions.AsQueryable().ClearFilter<ITenantScoped>()
+                .Where(s => s.SessionId == sessionId).FirstAsync())?.UserId;
         await AfterRevokedAsync(sessionId, userId);
     }
 
@@ -274,7 +290,11 @@ public class SessionService(
     {
         // 与 EnforceConcurrencyAsync 同款"按 userId 取活跃会话再逐个吊销",少了单端/限并发的名额判断——
         // 停用/删除用户要下线其全部会话。逐个 RevokeAsync 复用其"标记两表 + 清会话缓存"逻辑。
-        var active = await sessions.AsQueryable()
+        // 须 ClearFilter<ITenantScoped>:目标集合已经被 userId 精确钉死(不是开放式跨租户查找),调用方
+        // (UserService 停用/删除用户、PersonalService 改密等)都已经在各自的租户上下文里解析出这个 userId,
+        // 但该方法本身也可能从没有租户上下文的系统调用者跑(例如后台任务代运维停用某用户)——不清则在
+        // 那类调用者手上会恒读到 0 行,"下线其全部会话"悄悄变成不生效。
+        var active = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
             .Where(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > Now)
             .Select(s => s.SessionId)
             .ToListAsync();
@@ -287,7 +307,8 @@ public class SessionService(
     /// <inheritdoc />
     public virtual async Task RevokeAllForUserExceptAsync(long userId, string? exceptSessionId)
     {
-        var active = await sessions.AsQueryable()
+        // 同上一条:目标集合已被 userId 精确钉死,清租户过滤器不构成越权,只是让系统上下文调用者也能正确生效。
+        var active = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
             .Where(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > Now)
             .Select(s => s.SessionId)
             .ToListAsync();
@@ -329,13 +350,27 @@ public class SessionService(
     /// 越界时若默默返回成功,管理员会误以为已经踢掉,对方其实还在线。两种拒绝原因共用一个码、
     /// 响应不暴露具体是哪一种:会话 id 是高熵随机串,"不存在则成功 / 存在但越界则报错"这点差异
     /// 不构成可枚举的探测面。
+    /// <para><b>租户越界与机构越界走同一分支,但判定必须先于"不存在则成功"</b>:<c>sessions.GetFirstAsync</c>
+    /// 经过 <c>ITenantScoped</c> 过滤器,别的租户的会话在当前调用者眼里天然是"查不到"——如果直接落进
+    /// 下面 <c>target is null</c> 的"幂等成功"分支,会调用 <see cref="RevokeAsync(string)"/> 进而
+    /// <see cref="MarkRevokedAsync"/> 的裸 <c>Updateable</c>(那里刻意不筛租户,因为刷新令牌复用检测
+    /// 也走同一条路径、发生在没有租户上下文的请求里,不能收窄),对 SessionId 精确匹配、不看 TenantId,
+    /// 会把别的租户那一行真的强退掉——比"越权者查不到"更严重,是"越权者能真下线目标"。因此先用
+    /// <c>ClearFilter&lt;ITenantScoped&gt;()</c> 的无租户存在性探测把这种情况从"真不存在"里挑出来,
+    /// 按越界处理(抛 <see cref="ErrorCode.SessionNotFound"/>),不落到幂等分支。</para>
     /// </remarks>
     public virtual async Task ForceLogoutAsync(string sessionId)
     {
         var target = await sessions.GetFirstAsync(x => x.SessionId == sessionId);
         if (target is null)
         {
-            await RevokeAsync(sessionId);   // 会话已不存在:吊销 0 行受影响,按幂等处理返回成功
+            // 当前租户下查不到:可能真不存在(已过期被清 / 纯拼错的 Id),也可能是存在但属于别的租户
+            // (被 ITenantScoped 过滤器挡住)。后一种必须按越界报错,不能走下面的幂等成功——见上方 remarks。
+            var existsInAnotherTenant = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
+                .AnyAsync(x => x.SessionId == sessionId);
+            AdminException.ThrowIf(existsInAnotherTenant, ErrorCode.SessionNotFound);
+
+            await RevokeAsync(sessionId);   // 真的不存在:吊销 0 行受影响,按幂等处理返回成功
             return;
         }
 
@@ -363,7 +398,11 @@ public class SessionService(
         var keep = ResolveKeepCount(userHint is not null ? IsMfaUser(userHint) : await IsMfaUserIdAsync(userId));
         if (keep <= 0) return;   // 多端不限
 
-        var active = await sessions.AsQueryable()
+        // 本方法从 OpenAsync 尾部调用,而 OpenAsync 发生在登录成功、令牌尚未签发的同一请求内——此刻还没有
+        // 认证头,currentUser.TenantId 为 null。不清租户过滤器的话,这里永远查到 0 行(连刚插入的那一行
+        // 自己都看不见),单端/限并发策略会静默失效:新会话虽然按 userId 正确开出,却没有任何一次收敛会
+        // 触发。userId 来自 OpenAsync 已校验过的登录用户,不是开放式跨租户查找。
+        var active = await sessions.AsQueryable().ClearFilter<ITenantScoped>()
             .Where(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > Now)
             .OrderByDescending(s => s.CreateTime)             // 最新在前
             .OrderByDescending(s => s.Id)                     // 同毫秒:雪花 Id 决胜(各副本口径一致)

@@ -64,6 +64,11 @@ public class LogService(
     /// 组装待落库的行。<b>上下文字段必须在这里定下来</b>——异步落库时后台线程上没有 HttpContext,
     /// 操作人、IP、UA、发生时刻都得在请求线程上快照。
     /// <para>审计 AOP 只在这些字段为空时才填,所以显式赋值不会被它覆盖掉。</para>
+    /// <para><b>TenantId 同理必须显式在这里快照</b>:异步路径(<see cref="OperationLogWriter"/>)真正执行插入
+    /// 是在后台 <c>Channel</c> 消费者的独立异步流上,不继承发起请求那条 <c>AsyncLocal</c>——插入 AOP 按
+    /// "当前登录者"回填 TenantId 时,那个"当前"已经是没有 HttpContext 的后台上下文,回填不到。
+    /// 与 <see cref="SessionService.OpenAsync"/> 显式赋值 TenantId 同一原因:AOP 依赖的登录态必须在
+    /// 请求线程上就绪时取好,不能指望它在真正落库的那一刻还在。</para>
     /// </summary>
     protected virtual SysOpLog BuildOperationRow(OperationLogEntry entry) => new()
     {
@@ -80,6 +85,7 @@ public class LogService(
         UserAgent = currentUser.UserAgent,
         CreateUserId = currentUser.UserId,
         CreateTime = (time ?? TimeProvider.System).GetLocalNow().DateTime,
+        TenantId = currentUser.TenantId,
     };
 
     /// <inheritdoc />
@@ -95,6 +101,9 @@ public class LogService(
                 UserId = entry.UserId,
                 Ip = currentUser.IpAddress,
                 UserAgent = currentUser.UserAgent,
+                // 登录成功时 AuthService 显式带上(此刻请求尚无认证头,插入 AOP 回填不了,见 LoginLogEntry.TenantId
+                // 注释);登录失败时 entry.TenantId 为 null——没有已知用户可归属,是尚待产品裁定的已知缺口。
+                TenantId = entry.TenantId,
             });
         }
         catch (Exception ex)

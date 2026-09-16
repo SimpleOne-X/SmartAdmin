@@ -12,7 +12,7 @@ namespace SmartAdmin.Services;
 // 时间倒序是日志的唯一天然查询轴:列表默认按时间倒排、按时间范围筛、"清理 N 天前"也打在这一列上。
 // 这是内核默认建的表,消费者不会来手工补索引;而 DDL 是一次性的——现在加是一行,等表里攒了千万行再加就是停机窗口。
 [SugarIndex("idx_sys_login_log_create", nameof(BaseEntity.CreateTime), OrderByType.Desc)]
-public class SysLoginLog : BaseEntity
+public class SysLoginLog : TenantEntity
 {
     /// <summary>登录账号(即使账号不存在也记原始输入,便于排查探测)</summary>
     [SugarColumn(Length = 64, ColumnDescription = "登录账号")]

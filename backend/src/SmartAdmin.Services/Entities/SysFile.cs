@@ -11,7 +11,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_file", TableDescription = "文件记录")]
 [SugarIndex("idx_sys_file_hash", nameof(SysFile.Hash), OrderByType.Asc)]
-public class SysFile : BaseEntity
+public class SysFile : TenantEntity
 {
     /// <summary>原始文件名(含后缀,仅展示与下载命名用)</summary>
     [SugarColumn(Length = 256, ColumnDescription = "原始文件名")]
