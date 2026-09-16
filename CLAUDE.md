@@ -12,6 +12,8 @@ The repo holds the kernel's two halves, released together under one version numb
 
 Codebase comments and docs are in Chinese. The design rationale lives in `docs/rebuild-design.md`; code comments don't cite its section numbers, they state the reasoning directly. **Git commit messages are written in Chinese** in conventional-commit format (`type(scope): 主题`) — see `skills/write-commit.md` (`/write-commit`); `type` and `scope` stay lowercase English.
 
+**`main` only advances via a reviewed PR from `dev`** — branch protection on `main` (required PR, required `backend (sqlite)`/`web` checks, `enforce_admins` on, no force-push/deletion) makes `git push origin main` fail for everyone, agents included. Day-to-day work happens on `dev` (or a feature branch merged into `dev`); `main` only moves when `skills/smart-release.md` (`/smart-release`) opens and merges that PR as part of cutting a release. If an agent session finds itself about to push directly to `main`, that is a sign the task drifted outside the intended flow — stop and route the change through `dev` instead of trying to work around the protection.
+
 ## Commands
 
 Backend (run from repo root; solution is `.slnx`, not `.sln`):
