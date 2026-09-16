@@ -26,6 +26,11 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     // 用于写路径越权兜底:全局范围过滤器只作用于查询(SELECT),不作用于按主键的 Update/Delete。
     private static readonly bool IsOrgScoped = typeof(IOrgScoped).IsAssignableFrom(typeof(TEntity));
 
+    // 编译期判定实体是否受租户隔离约束(实现 ITenantScoped,即 TenantEntity / TenantDataEntity 子类)。
+    // 与 IsOrgScoped 同一类缺口:全局租户过滤器同样只作用于查询,按主键的 Update/Delete 得靠这里补上。
+    // 是否真的启用检查还要看调用者有没有真实租户上下文——见 InScopeAsync。
+    private static readonly bool IsTenantScoped = typeof(ITenantScoped).IsAssignableFrom(typeof(TEntity));
+
     // 编译期判定实体是否软删除(实现 ISoftDelete,即 BaseEntity 子类)。DeleteAsync 据此分流软删/物理删,
     // RestoreAsync 据此拒绝非软删实体。用反射而非 `default(TEntity) is ISoftDelete`——引用类型 default 为 null,恒 false。
     private static readonly bool IsSoftDelete = typeof(ISoftDelete).IsAssignableFrom(typeof(TEntity));
@@ -37,13 +42,29 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     public virtual ISugarQueryable<TEntity> AsQueryable() => db.Queryable<TEntity>();
 
     /// <summary>
-    /// IOrgScoped 实体的写前范围守卫:经带全局范围过滤器的查询确认目标行在当前数据范围内。
-    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c>),
-    /// 不在范围内(或不存在)即返回 false,调用方据此拒写——堵住按主键改删他机构行的 IDOR。
-    /// 普通 BaseEntity(<c>IsOrgScoped==false</c>)恒真短路,无额外查询、行为不变。
+    /// IOrgScoped / ITenantScoped 实体的写前范围守卫:经带全局范围/租户过滤器的查询确认目标行在当前范围内。
+    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c> /
+    /// <c>AddTableFilter&lt;ITenantScoped&gt;</c>),不在范围内(或不存在)即返回 false,调用方据此拒写——
+    /// 堵住按主键改删他机构行 / 他租户行的 IDOR。两者都不实现的普通 BaseEntity 恒真短路,无额外查询、行为不变。
+    /// <para>ITenantScoped 的检查只在调用者已解出真实租户(<c>currentUser.TenantId != null</c>)时才启用:
+    /// 全局租户过滤器对无租户上下文的调用者是"谁都看不见"的硬拒绝、没有逃逸开关(见 <c>SqlSugarSetup</c> 里
+    /// 该过滤器的注释),原样套用到写路径会把登录 / MFA / 短信登录等预登录自助流程也一并挡住——那些流程本就
+    /// 依赖显式 <c>ClearFilter&lt;ITenantScoped&gt;()</c> 读出目标行、再按主键写回同一行(<c>AuthService</c>
+    /// / <c>MfaEnrollmentService</c> 里那些读取点),此时 <c>currentUser.TenantId</c> 必然是 null。
+    /// 这类调用者跳过本检查不等于失去保护——目标行本就是各自审计过的显式查询解出来的,仓储层这道门从来
+    /// 不是唯一防线。调用者持有真实租户时检查照常生效:目标行不属于该租户就查不到,正确拒绝跨租户 IDOR。
+    /// </para>
+    /// <para>查询显式 <c>ClearFilter&lt;ISoftDelete&gt;()</c>:范围/租户守卫要回答的是"这行是否属于调用者",
+    /// 与"这行当前是否软删"是两件事——不清掉软删过滤器,已软删行会被判"不存在",回收站彻底删除
+    /// (<c>RecycleBinType&lt;TEntity&gt;.PurgeAsync</c> → <c>HardDeleteAsync</c>,目标行此刻必然是软删态)
+    /// 会被这道门误挡,0 行受影响。普通 BaseEntity 不受影响(未实现 ISoftDelete 时该调用即空操作)。
+    /// </para>
     /// </summary>
-    protected virtual async Task<bool> InScopeAsync(long id) =>
-        !IsOrgScoped || await db.Queryable<TEntity>().Where(e => e.Id == id).AnyAsync();
+    protected virtual async Task<bool> InScopeAsync(long id)
+    {
+        var needsCheck = IsOrgScoped || (IsTenantScoped && currentUser?.TenantId != null);
+        return !needsCheck || await db.Queryable<TEntity>().ClearFilter<ISoftDelete>().Where(e => e.Id == id).AnyAsync();
+    }
 
     /// <inheritdoc />
     public virtual Task<TEntity?> GetByIdAsync(long id) =>
@@ -68,14 +89,14 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     /// <inheritdoc />
     public virtual async Task<int> UpdateAsync(TEntity entity)
     {
-        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅 IOrgScoped 实体触发实际检查)
+        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(IOrgScoped 恒触发;ITenantScoped 仅调用者有真实租户时触发)
         return await db.Updateable(entity).ExecuteCommandAsync();
     }
 
     /// <inheritdoc />
     public virtual async Task<int> DeleteAsync(long id)
     {
-        if (!await InScopeAsync(id)) return 0;   // 越权删防护(仅 IOrgScoped 实体触发实际检查)
+        if (!await InScopeAsync(id)) return 0;   // 越权删防护(IOrgScoped 恒触发;ITenantScoped 仅调用者有真实租户时触发)
 
         // 非软删实体(AuditEntity 系,如 OrgAuditEntity)→ 物理删除。已过 InScope 守卫,不再走 HardDeleteAsync 二次查询。
         // 物理删后行消失,唯一约束自然释放,无需软删那套 _del_{id} 占位释放。

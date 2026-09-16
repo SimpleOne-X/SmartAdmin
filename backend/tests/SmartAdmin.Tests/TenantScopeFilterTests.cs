@@ -118,6 +118,86 @@ public class TenantScopeFilterTests
         TestDb.Cleanup(id, dbFile);
     }
 
+    /// <summary>
+    /// 写路径越权兜底(<c>SqlSugarRepository.InScopeAsync</c>)对 <see cref="ITenantScoped"/> 实体同样生效——
+    /// 全局 SELECT 过滤器管不到按主键的 Update/Delete,这里补的正是这个口子。<see cref="TenantScopeDoc"/> 只实现
+    /// <see cref="ITenantScoped"/>、不实现 <see cref="IOrgScoped"/>,专门验证这条守卫不是靠机构范围那条路径顺带生效的。
+    /// 只在调用者持有真实租户时才启用(见 <see cref="Null_tenant_caller_can_still_update_and_delete_by_primary_key"/>)。
+    /// </summary>
+    [Fact]
+    public async Task Primary_key_update_and_delete_reject_a_different_tenants_row()
+    {
+        var id = $"tenantscope-write-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+
+        long tenant10DocId;
+        await using (var spA = await BuildProvider(id, dbFile, tenantId: 10))
+        {
+            using var scope = spA.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRepository<TenantScopeDoc>>();
+            var doc = new TenantScopeDoc { Title = "A-doc" };
+            await repo.InsertAsync(doc);
+            tenant10DocId = doc.Id;
+        }
+
+        // 租户 20 的调用者(有真实租户上下文)按主键改/删租户 10 的行:全局 SELECT 过滤器不拦这条路径(按主键直查),
+        // 写路径守卫必须自己堵上——两个操作都得是 0 行受影响,而不是误改/误删了别的租户的数据。
+        await using (var spB = await BuildProvider(id, dbFile, tenantId: 20))
+        {
+            using var scope = spB.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRepository<TenantScopeDoc>>();
+            Assert.Equal(0, await repo.UpdateAsync(new TenantScopeDoc { Id = tenant10DocId, Title = "hacked" }));
+            Assert.Equal(0, await repo.DeleteAsync(tenant10DocId));
+        }
+
+        // 复核:租户 10 的行完好无损,没有被越权改/删
+        await using (var spA2 = await BuildProvider(id, dbFile, tenantId: 10))
+        {
+            using var scope = spA2.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRepository<TenantScopeDoc>>();
+            var doc = await repo.AsQueryable().Where(d => d.Id == tenant10DocId).FirstAsync();
+            Assert.NotNull(doc);
+            Assert.Equal("A-doc", doc!.Title);
+        }
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    /// <summary>
+    /// 无租户上下文的调用者(<c>currentUser.TenantId == null</c>,如登录/MFA/短信登录等预登录自助流程)
+    /// 仍能按主键改/删一个已归属某租户的行——写路径守卫对这类调用者<b>不启用检查</b>,不是"误判为越权"。
+    /// 这些流程本就先经显式 <c>ClearFilter&lt;ITenantScoped&gt;()</c> 读出目标行、再按主键写回同一行
+    /// (<c>AuthService</c>/<c>MfaEnrollmentService</c> 里那些读取点),若写路径的守卫原样套用全局租户过滤器
+    /// (对 null 租户调用者是无逃逸开关的硬拒绝),这些合法自助写入会被静默吞掉(0 行受影响、不抛异常)——
+    /// 这正是本用例要防止回归的那类问题。
+    /// </summary>
+    [Fact]
+    public async Task Null_tenant_caller_can_still_update_and_delete_by_primary_key()
+    {
+        var id = $"tenantscope-nullwrite-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+
+        long docId;
+        await using (var spA = await BuildProvider(id, dbFile, tenantId: 10))
+        {
+            using var scope = spA.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRepository<TenantScopeDoc>>();
+            var doc = new TenantScopeDoc { Title = "A-doc" };
+            await repo.InsertAsync(doc);
+            docId = doc.Id;
+        }
+
+        await using (var spNull = await BuildProvider(id, dbFile, tenantId: null))
+        {
+            using var scope = spNull.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IRepository<TenantScopeDoc>>();
+            Assert.Equal(1, await repo.UpdateAsync(new TenantScopeDoc { Id = docId, Title = "self-service-write" }));
+            Assert.Equal(1, await repo.DeleteAsync(docId));
+        }
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
     [SugarTable("tenant_scope_doc")]
     public class TenantScopeDoc : TenantEntity
     {
