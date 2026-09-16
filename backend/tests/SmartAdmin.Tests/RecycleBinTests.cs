@@ -125,10 +125,11 @@ public class RecycleBinTests
         // soft-delete the user
         await admin.DeleteAsync($"/api/v1/sys/user/{userId}");
 
-        // user_role row should still exist (bypass soft-delete filter to see user)
+        // user_role row should still exist (bypass soft-delete + tenant filter to see it:
+        // SysUserRole is ITenantScoped, this background scope has no tenant context)
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
-        var userRoles = await db.Queryable<SysUserRole>()
+        var userRoles = await db.Queryable<SysUserRole>().ClearFilter<ITenantScoped>()
             .Where(ur => ur.UserId == userId)
             .ToListAsync();
         Assert.NotEmpty(userRoles);
@@ -142,7 +143,7 @@ public class RecycleBinTests
         var purge = await (await admin.DeleteAsync($"/api/v1/sys/recycle/user/{userId}")).ReadEnvelope();
         Assert.Equal(0, purge.GetProperty("code").GetInt32());
 
-        var userRolesAfterPurge = await db.Queryable<SysUserRole>()
+        var userRolesAfterPurge = await db.Queryable<SysUserRole>().ClearFilter<ITenantScoped>()
             .Where(ur => ur.UserId == userId)
             .ToListAsync();
         Assert.Empty(userRolesAfterPurge);
@@ -170,10 +171,11 @@ public class RecycleBinTests
         // soft-delete the role
         await admin.DeleteAsync($"/api/v1/sys/role/{roleId}");
 
-        // user_role row should still exist
+        // user_role row should still exist (SysUserRole is ITenantScoped; this background
+        // scope has no tenant context, so bypass the filter to see the physical row)
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
-        var userRoles = await db.Queryable<SysUserRole>()
+        var userRoles = await db.Queryable<SysUserRole>().ClearFilter<ITenantScoped>()
             .Where(ur => ur.RoleId == roleId)
             .ToListAsync();
         Assert.NotEmpty(userRoles);
@@ -182,7 +184,7 @@ public class RecycleBinTests
         var purge = await (await admin.DeleteAsync($"/api/v1/sys/recycle/role/{roleId}")).ReadEnvelope();
         Assert.Equal(0, purge.GetProperty("code").GetInt32());
 
-        var userRolesAfterPurge = await db.Queryable<SysUserRole>()
+        var userRolesAfterPurge = await db.Queryable<SysUserRole>().ClearFilter<ITenantScoped>()
             .Where(ur => ur.RoleId == roleId)
             .ToListAsync();
         Assert.Empty(userRolesAfterPurge);
@@ -365,7 +367,10 @@ public class RecycleBinTests
         {
             using var scope = f.Services.CreateScope();
             var userRoles = scope.ServiceProvider.GetRequiredService<IRepository<SysUserRole>>();
-            return (await userRoles.AsQueryable().Where(ur => ur.UserId == victimUserId).ToListAsync()).Count;
+            // 验证的是"这行物理上还在不在",与调用时 stub.TenantId 恰好指向哪个租户无关(下面这个 helper
+            // 在断言点前后跨越了 stub.TenantId 从 A 切到 B 的那一刻)——按 Task 7 确立的
+            // ClearFilter<ITenantScoped>() 语义,这是合法的系统级/跨租户验证读,不是业务查询。
+            return (await userRoles.AsQueryable().ClearFilter<ITenantScoped>().Where(ur => ur.UserId == victimUserId).ToListAsync()).Count;
         }
 
         Assert.Equal(1, await RoleAssociationCount());   // 前置条件:软删不清关联,这里应该还在

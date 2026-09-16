@@ -28,6 +28,10 @@ public class CacheBatchInvalidationTests
         var counter = new CountingCacheProvider();
         using var f = Factory(counter);
         using var scope = f.Services.CreateScope();
+        // 后台 DI 作用域没有租户上下文;SysRole/SysUserRole/SysUser 都是 ITenantScoped,借 TestTenantContext
+        // 让建库与下面 InvalidateByRoleAsync 内部按 RoleId 查 SysUserRole 都落在同一个默认租户上,
+        // 否则过滤器会把刚插入的关联行判成"看不见",受影响用户集查出来是空的,批量删也就不会发生。
+        using var tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var sp = scope.ServiceProvider;
         var roles = sp.GetRequiredService<IRepository<SysRole>>();
         var userRoles = sp.GetRequiredService<IRepository<SysUserRole>>();

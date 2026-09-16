@@ -94,6 +94,9 @@ public class SqlSugarTransactionTests
     {
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
+        // 后台 DI 作用域没有租户上下文;SysRole 是 ITenantScoped,借 TestTenantContext 让插入落到默认租户,
+        // 让下面"已回滚"的断言真正验证了回滚(而不是被过滤器恒零行的假阴性掩盖)。
+        using var tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var roles = scope.ServiceProvider.GetRequiredService<IRepository<SysRole>>();
         var code = $"tran-{Guid.NewGuid():N}"[..16];
 
@@ -113,6 +116,7 @@ public class SqlSugarTransactionTests
     {
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
+        using var tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var roles = scope.ServiceProvider.GetRequiredService<IRepository<SysRole>>();
         var code = $"tran-{Guid.NewGuid():N}"[..16];
 
@@ -127,6 +131,8 @@ public class SqlSugarTransactionTests
     {
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
+        // Id=1 是种子角色(默认租户),没有租户上下文的话过滤器恒零行,连种子行都查不到。
+        using var tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var roles = scope.ServiceProvider.GetRequiredService<IRepository<SysRole>>();
 
         var ex = await Assert.ThrowsAsync<AdminException>(() => roles.GetRequiredAsync(9_999_999, ErrorCode.RoleNotFound));
@@ -142,6 +148,7 @@ public class SqlSugarTransactionTests
     {
         using var f = new AdminAppFactory();
         using var scope = f.Services.CreateScope();
+        using var tenant = TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID);
         var roles = scope.ServiceProvider.GetRequiredService<IRepository<SysRole>>();
         var code = $"del-{Guid.NewGuid():N}"[..16];
 

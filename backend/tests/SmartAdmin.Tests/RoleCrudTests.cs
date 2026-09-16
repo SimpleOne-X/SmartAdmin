@@ -87,6 +87,9 @@ public class RoleCrudTests
         Assert.Equal(0, (await (await c.DeleteAsync($"/api/v1/sys/role/{roleId}")).ReadEnvelope()).GetProperty("code").GetInt32());
 
         using (var scope = f.Services.CreateScope())
+        // 后台 DI 作用域没有租户上下文;SysRoleMenu/SysRoleDataScope/SysUserRole 都是 ITenantScoped,借
+        // TestTenantContext 让这段验证查询看到上面经 HTTP 以 superAdmin 身份(tid=1)建出的关联行。
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
             Assert.NotEmpty(await db.Queryable<SysRoleMenu>().Where(x => x.RoleId == roleId).ToListAsync());
@@ -98,6 +101,7 @@ public class RoleCrudTests
         Assert.Equal(0, (await (await c.DeleteAsync($"/api/v1/sys/recycle/role/{roleId}")).ReadEnvelope()).GetProperty("code").GetInt32());
 
         using (var scope = f.Services.CreateScope())
+        using (TestTenantContext.Use(f.Services, DefaultTenantSeed.DEFAULT_TENANT_ID))
         {
             var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
             Assert.Empty(await db.Queryable<SysRoleMenu>().Where(x => x.RoleId == roleId).ToListAsync());

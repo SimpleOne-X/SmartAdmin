@@ -173,8 +173,13 @@ public class SeedUpgradeTests
                 await db.Insertable(new SysUserRole { Id = SnowflakeId, UserId = UserId, RoleId = RoleId })
                     .ExecuteCommandAsync();
             },
-            async db =>
+            async sp =>
             {
+                // 后台 DI 作用域没有租户上下文;SysUserRole 是 ITenantScoped,借 TestTenantContext 让这段
+                // 查询看得见 DefaultUserRoleSeed 播的默认租户数据(与上面 tamper 阶段物理插入的雪花号那行一致)。
+                using var tenant = TestTenantContext.Use(sp, DefaultTenantSeed.DEFAULT_TENANT_ID);
+                var db = sp.GetRequiredService<ISqlSugarClient>();
+
                 // 起得来 = 没撞唯一索引(CreateClient 已在 RestartWithAsync 里跑过而未抛)
                 var rows = await db.Queryable<SysUserRole>()
                     .Where(x => x.UserId == UserId && x.RoleId == RoleId).ToListAsync();
