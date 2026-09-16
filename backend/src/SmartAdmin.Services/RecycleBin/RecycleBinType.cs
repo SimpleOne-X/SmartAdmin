@@ -75,8 +75,18 @@ public class RecycleBinType<TEntity>(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// 越权/越范围兜底必须在 <see cref="BeforePurgeAsync"/> 之前:<see cref="BeforePurgeAsync"/> 的动作
+    /// (清角色关联、解绑外部身份等)本身不带范围检查、且不可逆——若像之前那样先跑它、再靠
+    /// <c>HardDeleteAsync</c> 内部的 <c>InScopeAsync</c> 兜底拒绝越权,关联早已被清空,行本身却因越权
+    /// 拒删而原样留着,落成"账号还在但关联已丢"的半成品状态,比整体成功或整体失败都更糟。
+    /// 这里复用 <see cref="Query"/>(已 <c>ClearFilter&lt;ISoftDelete&gt;()</c> 且叠了子类的范围/租户/
+    /// 数据范围过滤——用户类型在 <c>Query</c> 里另叠了机构范围)判一次存在性,不在范围内就直接判"没找到"、
+    /// 不进 <see cref="BeforePurgeAsync"/>,与列表/详情走同一套可见性口径。
+    /// </remarks>
     public override async Task<int> PurgeAsync(IServiceProvider sp, long id)
     {
+        if (!await Query(sp).Where(e => e.Id == id).AnyAsync()) return 0;
         await BeforePurgeAsync(sp, id);
         return await Repo(sp).HardDeleteAsync(id);
     }

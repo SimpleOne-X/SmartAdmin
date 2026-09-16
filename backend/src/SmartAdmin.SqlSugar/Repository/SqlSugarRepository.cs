@@ -13,7 +13,10 @@ namespace SmartAdmin.SqlSugar;
 /// 用户可继承本类只改想改的方法,再以 TryAdd 前置注册接管。</para>
 /// <para><paramref name="time"/> / <paramref name="currentUser"/> <b>必须保持可选参数</b>:本类是消费者可继承的
 /// public 类型(ReplaceabilityContract 扩展点契约),加必需构造参数就是源码破坏性变更——现有 <c>: SqlSugarRepository&lt;T&gt;(db)</c>
-/// 的子类会编译不过。两者只在软删审计留痕时用到,缺省即回退系统时钟 / 无操作人。</para>
+/// 的子类会编译不过。<paramref name="time"/> 只在软删审计留痕时用到,缺省即回退系统时钟。<paramref name="currentUser"/>
+/// 缺省时同样回退"无操作人",但它<b>还是</b> <see cref="InScopeAsync"/> 里 <c>ITenantScoped</c> 写路径守卫的启用判据——
+/// 子类若继承本类却不把 <c>currentUser</c> 传下去,该守卫对自己的实体会悄悄失效(<c>needsCheck</c> 恒不含
+/// <c>ITenantScoped</c> 那一支),不是只丢一条审计留痕那么轻。</para>
 /// </summary>
 public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time = null, ICurrentUser? currentUser = null)
     : IRepository<TEntity>
@@ -57,7 +60,9 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     /// <para>查询显式 <c>ClearFilter&lt;ISoftDelete&gt;()</c>:范围/租户守卫要回答的是"这行是否属于调用者",
     /// 与"这行当前是否软删"是两件事——不清掉软删过滤器,已软删行会被判"不存在",回收站彻底删除
     /// (<c>RecycleBinType&lt;TEntity&gt;.PurgeAsync</c> → <c>HardDeleteAsync</c>,目标行此刻必然是软删态)
-    /// 会被这道门误挡,0 行受影响。普通 BaseEntity 不受影响(未实现 ISoftDelete 时该调用即空操作)。
+    /// 会被这道门误挡,0 行受影响。普通 BaseEntity(<c>IsOrgScoped</c>/<c>IsTenantScoped</c> 皆假)不受影响——
+    /// 不是因为它不实现 <c>ISoftDelete</c>(<c>BaseEntity</c> 恰恰实现了),而是 <c>needsCheck</c> 恒假,
+    /// 查询本身从不执行,<c>ClearFilter</c> 这一句自然也不会跑到。
     /// </para>
     /// </summary>
     protected virtual async Task<bool> InScopeAsync(long id)

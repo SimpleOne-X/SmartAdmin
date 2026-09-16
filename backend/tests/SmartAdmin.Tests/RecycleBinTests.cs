@@ -307,4 +307,99 @@ public class RecycleBinTests
         c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await c.LoginToken(account, password));
         return c;
     }
+
+    /// <summary>
+    /// 回归:<c>RecycleBinType&lt;TEntity&gt;.PurgeAsync</c> 之前先跑 <c>BeforePurgeAsync</c>(用户类型会清空
+    /// <c>SysUserRole</c> 关联、解绑外部身份)再跑 <c>HardDeleteAsync</c>——租户守卫只在 <c>HardDeleteAsync</c>
+    /// 内部生效,越权的彻底删除会在关联已被清空之后才被拒。净效果不是"整个操作原样放行"(账号本身没被删掉,
+    /// 好于此前),但也不是"整体失败、关联原样保留"——是介于两者之间的半成品:账号还在,关联却没了。
+    /// B 租户管理员拿 A 租户一个已软删用户的 Id 去彻底删除,必须真正是<b>整体失败</b>:PurgeAsync 本身以
+    /// <see cref="ErrorCode.RecycleNotFound"/> 拒绝(单独这一条本身不能证明关联没被动过——顺序错了照样会先
+    /// 抛这个错误,只是关联已经没了),且 A 租户那个用户的角色关联必须原封不动地留着。
+    /// </summary>
+    [Fact]
+    public async Task Purge_across_tenants_is_rejected_without_touching_role_associations()
+    {
+        var stub = new MutableCurrentUserStub { IsPlatformAdmin = true, TenantId = null };
+        using var f = new AdminAppFactory { Overrides = s => s.AddSingleton<ICurrentUser>(stub) };
+        _ = f.CreateClient();
+
+        long tenantAId, tenantBId;
+        using (var scope = f.Services.CreateScope())
+        {
+            var tenants = scope.ServiceProvider.GetRequiredService<ITenantService>();
+            tenantAId = await tenants.AddAsync(new TenantCreateInput
+            {
+                Code = "purge-a", Name = "Purge Tenant A", IsolationMode = TenantIsolationMode.Shared,
+                AdminAccount = "purge_a_admin", AdminPassword = "Test@123456",
+            });
+            tenantBId = await tenants.AddAsync(new TenantCreateInput
+            {
+                Code = "purge-b", Name = "Purge Tenant B", IsolationMode = TenantIsolationMode.Shared,
+                AdminAccount = "purge_b_admin", AdminPassword = "Test@123456",
+            });
+        }
+
+        // A 租户内:建角色、建带该角色的用户、软删该用户(进回收站)
+        long roleId, victimUserId;
+        stub.IsPlatformAdmin = false;
+        stub.TenantId = tenantAId;
+        using (var scope = f.Services.CreateScope())
+        {
+            var roles = scope.ServiceProvider.GetRequiredService<IRepository<SysRole>>();
+            var role = new SysRole { Name = "purge-role", Code = "purge-role-code" };
+            await roles.InsertAsync(role);
+            roleId = role.Id;
+
+            var users = scope.ServiceProvider.GetRequiredService<IUserService>();
+            var added = await users.AddAsync(new AddUserInput
+            {
+                Account = "purge_victim", Password = "Test@123456", Name = "受害用户", Enabled = true, RoleIds = [roleId],
+            });
+            victimUserId = added.Id;
+
+            await users.DeleteAsync(victimUserId);   // 软删,进回收站
+        }
+
+        async Task<int> RoleAssociationCount()
+        {
+            using var scope = f.Services.CreateScope();
+            var userRoles = scope.ServiceProvider.GetRequiredService<IRepository<SysUserRole>>();
+            return (await userRoles.AsQueryable().Where(ur => ur.UserId == victimUserId).ToListAsync()).Count;
+        }
+
+        Assert.Equal(1, await RoleAssociationCount());   // 前置条件:软删不清关联,这里应该还在
+
+        // B 租户管理员(与受害用户不同租户)拿受害用户的 Id 去彻底删除
+        stub.TenantId = tenantBId;
+        using (var scope = f.Services.CreateScope())
+        {
+            var recycle = scope.ServiceProvider.GetRequiredService<IRecycleBinService>();
+            var ex = await Assert.ThrowsAsync<AdminException>(() => recycle.PurgeAsync("user", victimUserId));
+            Assert.Equal(ErrorCode.RecycleNotFound, ex.Code);
+        }
+
+        // 关键断言:越权彻底删除必须整体失败——角色关联不能被提前清空。仅断言上面抛了 RecycleNotFound
+        // 证明不了这一点(顺序反了同样会抛这个错误,只是关联已经没了)。
+        Assert.Equal(1, await RoleAssociationCount());
+
+        f.Dispose();
+    }
+
+    /// <summary>
+    /// 同 <c>TenantServiceTests.MutableCurrentUserStub</c>:<c>TenantId</c>/<c>IsPlatformAdmin</c> 可变,
+    /// 同一条测试里先以平台管理员身份建两个租户,再切到各租户内的(非平台)管理员身份分别操作。
+    /// </summary>
+    private sealed class MutableCurrentUserStub : ICurrentUser
+    {
+        public bool IsAuthenticated => true;
+        public long? UserId => 1;
+        public string? SessionId => null;
+        public bool IsSuperAdmin => true;
+        public long? OrgId => null;
+        public long? TenantId { get; set; }
+        public bool IsPlatformAdmin { get; set; }
+        public string? IpAddress => null;
+        public string? UserAgent => null;
+    }
 }
