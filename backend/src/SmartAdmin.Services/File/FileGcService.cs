@@ -110,11 +110,13 @@ public class FileGcService(
         // currentUser.TenantId 恒 null——租户过滤器谓词又要求 currentUser.TenantId != null 才放行任何行,
         // 不清掉这层就会让磁盘回收对所有租户永远查到 0 行(不报错、不告警,静默失效)。GC 本就该跨租户全库扫,
         // 这与"软删行对普通查询不可见"是同一件事的另一维度,清法一致。
-        // 用无参 ClearFilter()(= 清掉这张表挂的全部过滤器)而不是链式 ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>():
-        // 实测同一 ISugarQueryable 链上连续两次 ClearFilter<T>()、且两层过滤条件此刻都在真实拦截时,只有最后一次
-        // 调用的清除生效,前一次被覆盖回去——GC 本就要越过 SysFile 挂的全部两层,无参版本没有这个坑。
+        // 用双类型参数的单次调用 ClearFilter<ISoftDelete, ITenantScoped>(),不是链式
+        // ClearFilter<ISoftDelete>().ClearFilter<ITenantScoped>()——后者只有最后一次调用真的生效
+        // (ClearFilter 对内部状态是赋值不是追加,见 ClearFilterChainedCallRegressionTests)。
+        // 也不用无参 ClearFilter():它会连消费者给 SysFile 额外挂的自定义过滤器一起跳过,
+        // 而这里要越过的只有上面点名的这两层(同 SqlSugarRepository.ReleaseUniqueColumnsAsync 的取舍)。
         var deleted = await files.AsQueryable()
-            .ClearFilter()
+            .ClearFilter<ISoftDelete, ITenantScoped>()
             .Where(f => f.IsDelete)
             .ToListAsync();
 
@@ -128,10 +130,10 @@ public class FileGcService(
             try
             {
                 // 共享判定:秒传去重下多条独立记录可共享同一物理文件。删盘前查是否仍有他行(含未删/软删/别的租户,
-                // 故用无参 ClearFilter() 越过全部过滤器,理由同上)引用同一 StoragePath——有则只硬删本记录、
+                // 故同样清掉软删与租户两层过滤器,写法与理由同上)引用同一 StoragePath——有则只硬删本记录、
                 // 保留物理文件,由最后一个引用方回收时删盘。
                 var sharedByOthers = await files.AsQueryable()
-                    .ClearFilter()
+                    .ClearFilter<ISoftDelete, ITenantScoped>()
                     .Where(f => f.StoragePath == file.StoragePath && f.Id != file.Id)
                     .AnyAsync();
                 if (!sharedByOthers)

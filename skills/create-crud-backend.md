@@ -311,35 +311,35 @@ public class PositionController(IPositionService positionService) : ControllerBa
 
 **取号规则**（见 `DefaultMenuSeed` 头部注释，`MenuSeedIdLayoutTests` 锁定）：
 
-- **百位是分区**：1xx 工作台、2xx 留给规划中的租户管理(尚未落地，不占行)、3xx 组织管理、4xx 系统运维、5xx 任务调度、6xx 日志审计、7xx 文件管理、8xx AI 管理，9xx 留给新目录。整百是目录本身。
+- **百位是分区**：1xx 工作台、2xx 租户管理、3xx 组织管理、4xx 系统运维、5xx 任务调度、6xx 日志审计、7xx 文件管理、8xx AI 管理，9xx 留给新目录。整百是目录本身。
 - **十位是页面**：页面 Id 取整十，一页独占一个十位段，新页面接在所属目录已有页面之后。一个目录最多九页（X10–X90）。
 - **个位是按钮，语义固定**：**1 查询、2 新增、3 更新、4 删除**，5–9 放本页特有操作（导入、导出、启停……）。页面没有的标准按钮空着位，不往前挪。测试会核对 1–4 号位的 HTTP 方法：1 全是 GET，2 全是 POST，3 全是 PUT，4 含 DELETE。
-- **目录下无页面的接口按钮**取目录的 01–09（如 301 探针）。
+- **目录下无页面的接口按钮**取目录的 01–09（如 401 探针）。
 - 内核种子上限 999；撞号、越界会被启动检查与 `SeedIdRangeTests` 当场拒绝。
 
 ```csharp
 // 页面节点:Component 对应前端 views/ 下的路径
 new SysMenu {
-    Id = 220, ParentId = 200,                    // 组织管理(200)下第二个页面
+    Id = 320, ParentId = 300,                    // 组织管理(300)下第二个页面
     Type = MenuType.Menu, Title = "岗位管理", Permission = "",
     Path = "/system/position", Component = "system/position/index",
     Icon = "ph:identification-badge-duotone", Sort = 2,
     Enabled = true, Visible = true,
 },
 // 权限按钮:Permission = "METHOD:/路由模板",权限码就是路由;一颗按钮挂多条路由用 PermissionCode.Join
-new SysMenu { Id = 221, ParentId = 220, Type = MenuType.Button,
+new SysMenu { Id = 321, ParentId = 320, Type = MenuType.Button,
     Title = "岗位-查询",   Permission = PermissionCode.Join(["GET:/api/v1/sys/position/page", "GET:/api/v1/sys/position/{id}"]), Sort = 1, Enabled = true },
-new SysMenu { Id = 222, ParentId = 220, Type = MenuType.Button,
+new SysMenu { Id = 322, ParentId = 320, Type = MenuType.Button,
     Title = "岗位-新增",   Permission = "POST:/api/v1/sys/position/add",      Sort = 2, Enabled = true },
-new SysMenu { Id = 223, ParentId = 220, Type = MenuType.Button,
+new SysMenu { Id = 323, ParentId = 320, Type = MenuType.Button,
     Title = "岗位-更新",   Permission = "PUT:/api/v1/sys/position/{id}",      Sort = 3, Enabled = true },
-new SysMenu { Id = 224, ParentId = 220, Type = MenuType.Button,
+new SysMenu { Id = 324, ParentId = 320, Type = MenuType.Button,
     Title = "岗位-删除",   Permission = PermissionCode.Join(["DELETE:/api/v1/sys/position/{id}", "POST:/api/v1/sys/position/batch-delete"]), Sort = 4, Enabled = true },
 ```
 
 **Permission 格式 = `METHOD:/路由模板`**，与 Controller 路由严格一致；多条以 `;` 连接（`PermissionCode.Join` / `Split`）。前端按钮门控的值仍是单条路由码（`v-auth` 指令），与按钮挂几条无关。`PermissionCodeConsistencyTests` 双向锁：种子里每条码都要有真实端点，每个 `[RolePermission]` 端点都要出现在某颗按钮里——新加受权端点必须同批进种子。
 
-**接口没有页面时**（只给移动端 / PDA / 第三方系统调）：不要建 `Visible=false`、`Path=""` 的假页面当容器。建一个 `MenuType.Catalog` 目录当权限组（不填 `Path`/`Component`），把 `MenuType.Button` 直接挂在它下面。后端权限收集不看节点类型与层级；前端不生成路由、侧栏不显示；角色授权界面把它们渲染成该目录组里「接口权限(无页面)」一行。内核的 `GET:/api/v1/ping`（`Id=301`，挂在「系统运维」目录 300 下）就是现成写法。
+**接口没有页面时**（只给移动端 / PDA / 第三方系统调）：不要建 `Visible=false`、`Path=""` 的假页面当容器。建一个 `MenuType.Catalog` 目录当权限组（不填 `Path`/`Component`），把 `MenuType.Button` 直接挂在它下面。后端权限收集不看节点类型与层级；前端不生成路由、侧栏不显示；角色授权界面把它们渲染成该目录组里「接口权限(无页面)」一行。内核的 `GET:/api/v1/ping`（`Id=401`，挂在「系统运维」目录 400 下）就是现成写法。
 
 业务模块通常通过后台「菜单管理」UI 添加，而不是写种子数据。
 

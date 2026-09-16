@@ -130,6 +130,19 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <b>租户过滤器在这里是故意留着的。</b>下面按 Id 取回那一查只清了 <c>ISoftDelete</c>——
+    /// <c>ITenantScoped</c> 照常拦截。这条路径是真实可达的(<c>RecycleBinController</c> →
+    /// <c>IRecycleBinService.RestoreAsync</c> → <c>RecycleBinType.RestoreAsync</c> → 这里),
+    /// 拿别的租户一个已软删行的 Id 来恢复会"查不到 → 返 0 → 上层报 <c>RecycleNotFound</c>",
+    /// 方向对:fail-closed。
+    /// <para>真正要提防的是<b>另一个方向</b>:将来若出现没有租户上下文的调用者(后台系统任务、运维脚本)
+    /// 走到这里,同一层过滤器会让它<b>恒查不到任何行</b>(无租户上下文时该过滤器是"谁都看不见"的硬拒绝,
+    /// 见 <c>SqlSugarSetup</c> 里它的注释),于是恢复静默失效——不报错、不告警,只是永远返 0。
+    /// 这与 <see cref="ReleaseUniqueColumnsAsync"/> 真实炸过的那次是同一个形状:那边是软删释放唯一列时
+    /// 恒查不到行。真到那天,修法也同它一致——在那条系统上下文的路径上显式
+    /// <c>ClearFilter&lt;ITenantScoped&gt;()</c>,而不是把这里的过滤器一并拆掉。</para>
+    /// </remarks>
     public virtual async Task<int> RestoreAsync(long id)
     {
         // 非软删实体(AuditEntity 系)物理删不可逆,无回收站可恢复 —— 显式报错而非静默返 0。
