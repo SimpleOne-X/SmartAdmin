@@ -62,8 +62,8 @@ public class UserDataScopeTests
         using (var scope = f.Services.CreateScope())
         {
             var sp = scope.ServiceProvider;
-            // 11 = 用户-查询 permission seed menu
-            scopedAccount = await CreateScopedUser(sp, orgTech, "list", [231]);
+            // 331 = 用户-查询 permission seed menu
+            scopedAccount = await CreateScopedUser(sp, orgTech, "list", [331]);
 
             // Create a user in HR (out of scope for the tech user)
             await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput
@@ -125,8 +125,8 @@ public class UserDataScopeTests
         using (var scope = f.Services.CreateScope())
         {
             var sp = scope.ServiceProvider;
-            // 12 = 用户-新增 permission
-            scopedAccount = await CreateScopedUser(sp, orgTech, "add", [232]);
+            // 332 = 用户-新增 permission
+            scopedAccount = await CreateScopedUser(sp, orgTech, "add", [332]);
         }
 
         var c = f.CreateClient();
@@ -156,8 +156,8 @@ public class UserDataScopeTests
         using (var scope = f.Services.CreateScope())
         {
             var sp = scope.ServiceProvider;
-            // 13 = 机构-查询 permission
-            scopedAccount = await CreateScopedUser(sp, orgTech, "orglist", [211]);
+            // 311 = 机构-查询 permission
+            scopedAccount = await CreateScopedUser(sp, orgTech, "orglist", [311]);
         }
 
         var c = f.CreateClient();
