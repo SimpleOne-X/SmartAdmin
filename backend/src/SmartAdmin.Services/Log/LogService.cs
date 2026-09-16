@@ -101,8 +101,9 @@ public class LogService(
                 UserId = entry.UserId,
                 Ip = currentUser.IpAddress,
                 UserAgent = currentUser.UserAgent,
-                // 登录成功时 AuthService 显式带上(此刻请求尚无认证头,插入 AOP 回填不了,见 LoginLogEntry.TenantId
-                // 注释);登录失败时 entry.TenantId 为 null——没有已知用户可归属,是尚待产品裁定的已知缺口。
+                // 由 AuthService 显式带上(此刻请求尚无认证头,插入 AOP 回填不了,见 LoginLogEntry.TenantId 注释):
+                // 登录成功带,账号确实存在的失败(密码错、停用、TOTP/短信失败)也带;只有"账号根本不存在"
+                // 那一支为 null——无人可归属,是尚待产品裁定的已知缺口。
                 TenantId = entry.TenantId,
             });
         }

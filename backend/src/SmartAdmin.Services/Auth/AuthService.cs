@@ -90,6 +90,10 @@ public class AuthService(
             throw new AdminException(ErrorCode.PasswordWrong);
         }
 
+        // 账号确实存在——这一刻就把租户记下,供后面任何一步失败时的审计日志归属(见字段注释)。
+        // 必须在密码校验之前:密码错是最常见的失败,等校验通过再记就永远记不到这一支。
+        _lastResolvedTenantIdForFailedLoginAudit = user.TenantId;
+
         if (!hasher.Verify(input.Password, user.Password))
             throw new AdminException(ErrorCode.PasswordWrong);
 
@@ -189,6 +193,7 @@ public class AuthService(
             // 建的短时关联票据,不是租户上下文的替代品,按其解出的 userId 取人必须跨租户查找。
             user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
             AdminException.ThrowIf(user is null, ErrorCode.TotpWrong);
+            _lastResolvedTenantIdForFailedLoginAudit = user!.TenantId;   // 人已查到,后面哪一步失败都能归属(见字段注释)
             await CheckLoginPolicyAsync(user!);
             var pair = await CreateTokenAsync(user!);
             await OnLoginSucceededAsync(user!, pair);
@@ -218,6 +223,7 @@ public class AuthService(
             // 短信二次验证同 TOTP:挑战完成前尚无令牌/租户上下文,按挑战解出的 userId 取人须跨租户查找。
             user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Id == userId).FirstAsync();
             AdminException.ThrowIf(user is null, ErrorCode.SmsCodeExpired);
+            _lastResolvedTenantIdForFailedLoginAudit = user!.TenantId;   // 同 TOTP 下半场:人已查到即归属
 
             await CheckLoginPolicyAsync(user!);
             // 短信二次验证完成后仍过 TOTP 门禁(防其它入口签发路径旁路;密码路径已先 TOTP)
@@ -561,9 +567,24 @@ public class AuthService(
     private string? _plainPasswordForRehash;
 
     /// <summary>
+    /// 本次登录尝试已解出的用户所属租户,仅用于失败登录日志的租户归属。
+    /// <para>由 <see cref="ValidateUserAsync"/>(以及 TOTP/短信挑战两条下半场)在"用户行确实查到了"之后立即写入,
+    /// 由 <see cref="OnLoginFailedAsync"/> 读取后清空。走私有字段而不是给 <see cref="OnLoginFailedAsync"/> /
+    /// <see cref="ValidateUserAsync"/> 加参数:这两个都是 protected virtual 的模板方法步骤,改签名会让任何
+    /// 已经覆写过它们的消费方子类编译不过——同 <see cref="_plainPasswordForRehash"/> 的处境与写法。</para>
+    /// <para><see cref="AuthService"/> 是 Scoped(每请求一个实例)所以它不跨请求;仍然读完即清,
+    /// 免得实例万一被复用时把上一次失败尝试的租户粘到下一次。</para>
+    /// </summary>
+    private long? _lastResolvedTenantIdForFailedLoginAudit;
+
+    /// <summary>
     /// 登录失败后置钩子:写失败登录日志。记<b>原始输入账号</b>(哪怕账号不存在)+ 具体失败码,
     /// 供暴力破解/账号探测排查;IP/UA 由日志服务从当前请求补全。绝不记密码。
     /// <para>仅"密码错误"计入失败锁定——验证码错/已锁定/停用/TOTP 信令等不累加,避免把锁定窗口无限延长或误伤。</para>
+    /// <para>账号确实存在(密码错、停用、TOTP/短信失败……)时带上该账号所属的 TenantId:用户行早在
+    /// <see cref="ValidateUserAsync"/> 里就按账号跨租户解出来了,不带上等于把全平台租户的爆破痕迹堆进同一个
+    /// 无主分区,租户管理员在自己的登录日志里一条都看不到。真正无从归属的只有"账号根本不存在"那一支,
+    /// 它留 null。</para>
     /// </summary>
     protected virtual async Task OnLoginFailedAsync(LoginInput input, ErrorCode code)
     {
@@ -573,7 +594,12 @@ public class AuthService(
         if (code == ErrorCode.PasswordWrong)
             await loginLock.RecordFailureAsync(input.Account);
         // TOTP/短信二次验证信令不是失败,但仍记审计轨迹;不计锁定
-        await logService.RecordLoginAsync(new LoginLogEntry { Account = input.Account, Success = false, ResultCode = (int)code });
+        await logService.RecordLoginAsync(new LoginLogEntry
+        {
+            Account = input.Account, Success = false, ResultCode = (int)code,
+            TenantId = _lastResolvedTenantIdForFailedLoginAudit,
+        });
+        _lastResolvedTenantIdForFailedLoginAudit = null;   // 取一次就丢,见字段注释
     }
 
     /// <summary>组装登录出参(要给前端加返回字段,覆写这步)。</summary>

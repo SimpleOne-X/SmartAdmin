@@ -156,4 +156,47 @@ public class TenantOperationalEntitiesTests
             Assert.Null(rowA!.RevokedAt);
         }
     }
+
+    /// <summary>
+    /// 账号<b>确实存在</b>的登录失败(密码错),审计日志必须归属到该账号所属的租户。
+    /// <para><c>ValidateUserAsync</c> 早已按账号跨租户把用户行解出来了,"没有已知用户可归属"只对
+    /// "账号根本不存在"那一支成立;把这类失败一律留成 <c>TenantId=null</c>,等于全平台所有租户的
+    /// 爆破痕迹堆在同一个无主分区里——租户管理员在自己的登录日志页一条都看不到针对自家账号的失败尝试。</para>
+    /// </summary>
+    [Fact]
+    public async Task Failed_login_of_an_existing_account_is_attributed_to_that_accounts_tenant()
+    {
+        using var f = new AdminAppFactory();
+        var platform = await SuperAdminClient(f);
+        var (tenantAdmin, account) = await NewTenantAdminClient(f, platform, "failog");
+
+        // 故意用错密码登一次(一次不触发锁定阈值)
+        var anonymous = f.CreateClient();
+        var bad = await (await anonymous.PostJson("/api/v1/auth/login",
+            new { account, password = "Wrong@000000" })).ReadEnvelope();
+        Assert.Equal((int)ErrorCode.PasswordWrong, bad.GetProperty("code").GetInt32());
+
+        using var scope = f.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+        var logs = scope.ServiceProvider.GetRequiredService<IRepository<SysLoginLog>>();
+
+        var user = await users.AsQueryable().ClearFilter<ITenantScoped>().Where(u => u.Account == account).FirstAsync();
+        Assert.NotNull(user);
+        Assert.NotNull(user!.TenantId);
+
+        // 后台 DI 作用域没有租户上下文 → 清过滤器直读存量值(验证读,同上面几条)。
+        // 布尔列写成 `== false` 而非 `!x`:SqlServer 的谓词上下文不接受裸标量。
+        var failed = await logs.AsQueryable().ClearFilter<ITenantScoped>()
+            .Where(l => l.Account == account && l.Success == false).ToListAsync();
+        var row = Assert.Single(failed);
+        Assert.Equal(user.TenantId, row.TenantId);
+
+        // HTTP 侧的等价事实:这条失败记录落在该租户名下,所以租户自己的管理员在登录日志页看得到它
+        var page = await (await tenantAdmin.GetAsync(
+            $"/api/v1/sys/log/login/page?Current=1&Size=100&Account={account}&Success=false")).ReadEnvelope();
+        Assert.Equal(0, page.GetProperty("code").GetInt32());
+        var accounts = page.GetProperty("data").GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("account").GetString()).ToList();
+        Assert.Contains(account, accounts);
+    }
 }

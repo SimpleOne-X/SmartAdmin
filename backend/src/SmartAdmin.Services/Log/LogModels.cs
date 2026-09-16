@@ -31,10 +31,12 @@ public record LoginLogEntry
     public long? UserId { get; init; }
 
     /// <summary>
-    /// 登录成功时所属的租户 Id;<c>AuthService</c> 必须显式带上——这条日志写在登录成功、令牌尚未签发的
-    /// 同一请求内,此刻请求还没有认证头,插入 AOP 按当前登录者回填 TenantId 的路径不会命中
+    /// 本次登录尝试所属的租户 Id;<c>AuthService</c> 必须显式带上——这条日志写在令牌尚未签发的同一请求内,
+    /// 此刻请求还没有认证头,插入 AOP 按当前登录者回填 TenantId 的路径不会命中
     /// (与 <see cref="SessionService.OpenAsync"/> 对 <c>SysSession.TenantId</c> 同一原因,同一修法)。
-    /// 登录失败时没有已知用户,留空——这是尚待产品裁定的已知缺口(登录失败审计的租户归属),不在此处强填。
+    /// <para>登录成功固然带;<b>账号确实存在的失败</b>(密码错、停用、TOTP/短信校验失败……)同样带——
+    /// 用户行早在 <c>AuthService.ValidateUserAsync</c> 里就按账号跨租户解出来了。
+    /// 只有"账号根本不存在"这一支留 null(无人可归属),那部分是尚待产品裁定的已知缺口。</para>
     /// </summary>
     public long? TenantId { get; init; }
 }
