@@ -469,7 +469,9 @@ public class AuthService(
     {
         var sessionId = Guid.CreateVersion7().ToString("N");
         var (accessMin, refreshMin) = await policy.GetSessionTtlAsync();   // 令牌时长运行时可配
-        var pair = tokens.Create(new TokenSubject(user.Id, user.Account, sessionId, user.IsSuperAdmin, user.OrgId),
+        var pair = tokens.Create(
+            new TokenSubject(user.Id, user.Account, sessionId, user.IsSuperAdmin, user.OrgId,
+                TenantId: user.TenantId, IsPlatformAdmin: user.IsPlatformAdmin == true),
             TimeSpan.FromMinutes(accessMin), TimeSpan.FromMinutes(refreshMin));
         await sessions.OpenAsync(user, sessionId, pair);
         return pair;

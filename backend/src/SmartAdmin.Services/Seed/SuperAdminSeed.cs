@@ -54,6 +54,8 @@ public class SuperAdminSeed(
                 Name = "超级管理员",
                 Enabled = true,
                 IsSuperAdmin = true,
+                TenantId = DefaultTenantSeed.DEFAULT_TENANT_ID,
+                IsPlatformAdmin = true,
             },
         ];
     }

@@ -9,7 +9,7 @@ namespace SmartAdmin.Services;
 /// </summary>
 [SugarTable("sys_user", TableDescription = "用户")]
 [SugarIndex("idx_sys_user_account", nameof(Account), OrderByType.Asc, IsUnique = true)]
-public class SysUser : BaseEntity
+public class SysUser : TenantEntity
 {
     [SugarColumn(Length = 64, ColumnDescription = "登录账号(唯一)")]
     public string Account { get; set; } = "";
@@ -112,4 +112,12 @@ public class SysUser : BaseEntity
     /// <summary>TOTP 绑定完成时刻</summary>
     [SugarColumn(IsNullable = true, ColumnDescription = "TOTP 绑定时刻")]
     public DateTime? TotpBoundAt { get; set; }
+
+    /// <summary>
+    /// 是否平台管理员(可管理全部租户,包括 SysTenant 注册表本身)。与 IsSuperAdmin 独立、不互相派生。
+    /// 只能由种子/数据库手工设置,接口永远不暴露修改入口——防提权(同 IsSuperAdmin 的写法)。
+    /// 演进列必须可空:MSSQL 无法对有数据的表 ADD 无 DEFAULT 的 NOT NULL 列(同 ForceTotp 的成法)。
+    /// </summary>
+    [SugarColumn(IsNullable = true, ColumnDescription = "是否平台管理员")]
+    public bool? IsPlatformAdmin { get; set; }
 }
