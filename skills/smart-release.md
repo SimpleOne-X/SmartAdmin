@@ -166,12 +166,15 @@ if ($LASTEXITCODE -eq 0) { Write-Host '可 ff' } else { Write-Host '有分叉，
 
 ### 2.2 合 main（需用户确认）
 
+**铁律：`main` 只接受来自 `dev` 的 PR，不直推**——分支保护已经在仓库层面硬性拦截 `git push origin main`（含管理员 token），任何 agent 会话发现自己想直推 main 都应该停下来改走这条 PR 流程，不要尝试绕过或临时关掉保护规则。
+
 向用户复述将执行：
 
-1. `main` 快进（或合并）到含准备提交的 `$source`
-2. `git push origin main`
+1. 从 `$source` 开一个到 `main` 的 PR
+2. 等 PR 的必需检查（`backend (sqlite)`、`web (lint + vitest + build)`）跑绿
+3. `--rebase` 方式合并（`$source` 已经是 `main` 的直系后继时，这等价于快进，不产生多余的 merge commit）
 
-用户同意后再跑。此处绝不重置或强推本地 `main`；本地 `main` 与远端不一致时停下，查明未推送提交的归属后再继续。PowerShell：
+用户同意后再跑。此处绝不重置或强推本地 `main`，也不用 `--admin` 跳过必需检查；本地 `main` 与远端不一致时停下，查明未推送提交的归属后再继续。PowerShell：
 
 ```powershell
 git fetch origin
@@ -183,9 +186,15 @@ if (git show-ref --verify --quiet refs/heads/main) {
 if ((git rev-parse main) -ne (git rev-parse origin/main)) {
   throw 'Local main differs from origin/main; inspect it before merging.'
 }
-git merge --ff-only "origin/$source" # 有分叉时，用户确认后改为 git merge "origin/$source"
-git push origin main
+$pr = gh pr create --base main --head $source --title "chore(release): 合并 $source 到 main" --body "发布合并，见 CHANGELOG。" | Select-Object -Last 1
+gh pr checks $pr --watch
+gh pr merge $pr --rebase
+git fetch origin
+git switch main
+git merge --ff-only "origin/main"
 ```
+
+有分叉（`origin/main` 领先于 `$source` 的共同祖先）时：先在 `$source` 上合并 `origin/main`、确认 CHANGELOG / 版本号没被顶回旧值，`git push origin $source`，再重新开 PR，用户确认后走 `gh pr merge $pr --merge`（保留合并提交，不用 `--rebase`）。
 
 **完成标准**：`origin/main` 的 tip 含 `chore(release): 准备 X.Y.Z`。
 
