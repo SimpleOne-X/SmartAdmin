@@ -50,18 +50,24 @@ public class TenantService(
             Enabled = input.Enabled,
             Remark = input.Remark,
         };
-        await tenants.InsertAsync(tenant);
 
-        // 新租户的初始管理员——租户内超管,不是平台管理员。TenantId 必须显式指定:
-        // 插入 AOP 会按"当前登录者"(平台管理员自己所在的默认租户)回填,那不是这个新用户该归属的租户。
-        await users.InsertAsync(new SysUser
+        // 租户行与它的初始管理员必须一起有、一起没:半途失败(哈希异常/DB 抖动/唯一约束竞态)会留下
+        // 没有管理员的孤儿租户,且孤儿租户的 Code 还占着唯一索引,朴素重试会先撞 TenantCodeExists——同一事务整体回滚。
+        await tenants.Db.RunInTransactionAsync(async () =>
         {
-            TenantId = tenant.Id,
-            Account = input.AdminAccount,
-            Password = hasher.Hash(input.AdminPassword),
-            Name = input.Name + "管理员",
-            IsSuperAdmin = true,
-            MustChangePassword = true,
+            await tenants.InsertAsync(tenant);
+
+            // 新租户的初始管理员——租户内超管,不是平台管理员。TenantId 必须显式指定:
+            // 插入 AOP 会按"当前登录者"(平台管理员自己所在的默认租户)回填,那不是这个新用户该归属的租户。
+            await users.InsertAsync(new SysUser
+            {
+                TenantId = tenant.Id,
+                Account = input.AdminAccount,
+                Password = hasher.Hash(input.AdminPassword),
+                Name = input.Name + "管理员",
+                IsSuperAdmin = true,
+                MustChangePassword = true,
+            });
         });
 
         return tenant.Id;
