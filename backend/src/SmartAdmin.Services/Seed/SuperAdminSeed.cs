@@ -23,8 +23,10 @@ public class SuperAdminSeed(
     /// <inheritdoc />
     public virtual IEnumerable<SysUser> HasData()
     {
-        // 表里已有任何用户就不再产种子:既保幂等,也避免每次启动重新生成/打印一个根本没写进库的密码
-        if (users.AsQueryable().Any()) return [];
+        // 表里已有任何用户就不再产种子:既保幂等,也避免每次启动重新生成/打印一个根本没写进库的密码。
+        // 必须 ClearFilter<ITenantScoped>():本方法在启动期由 SystemCurrentUser 跑(TenantId 恒 null),
+        // 租户隔离过滤器硬性要求 currentUser.TenantId != null,不清掉就恒判"表是空的",每次重启都误判成首次启动。
+        if (users.AsQueryable().ClearFilter<ITenantScoped>().Any()) return [];
 
         var password = options.Seed.AdminPassword;
         var generated = string.IsNullOrEmpty(password);
