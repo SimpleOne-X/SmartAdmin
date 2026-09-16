@@ -83,6 +83,8 @@ public class SoftDeleteAuditTests
         public string? SessionId => null;
         public bool IsSuperAdmin => false;
         public long? OrgId => null;
+        public long? TenantId => null;
+        public bool IsPlatformAdmin => false;
         public string? IpAddress => null;
         public string? UserAgent => null;
     }

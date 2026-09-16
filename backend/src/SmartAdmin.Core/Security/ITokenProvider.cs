@@ -16,7 +16,15 @@ namespace SmartAdmin.Core;
 /// 归属机构 Id(数据范围锚点):写入令牌 claim,供审计 AOP 把 <c>DataEntity.CreateOrgId</c>
 /// 填成创建者当时所属机构,免每次插入查库。为 null 表示用户无归属机构。
 /// </param>
-public record TokenSubject(long UserId, string Account, string SessionId, bool IsSuperAdmin = false, long? OrgId = null);
+/// <param name="TenantId">
+/// 所属租户 Id:写入令牌 tid claim。为 null 表示尚未接入租户(升级过渡态或系统上下文)。
+/// </param>
+/// <param name="IsPlatformAdmin">
+/// 平台管理员标志:写入令牌 padm claim。与 <paramref name="IsSuperAdmin"/> 独立——
+/// 超管绕过 [RolePermission],但仍受 ITenantScoped 过滤器约束;只有平台管理员能管理 SysTenant 本身。
+/// </param>
+public record TokenSubject(long UserId, string Account, string SessionId, bool IsSuperAdmin = false, long? OrgId = null,
+    long? TenantId = null, bool IsPlatformAdmin = false);
 
 /// <summary>令牌自定义 claim 名常量(禁硬编码字符串纪律)</summary>
 public static class TokenClaimNames
@@ -32,6 +40,12 @@ public static class TokenClaimNames
 
     /// <summary>API Key 的名字(机器端接入主体独有;有它即表示本请求经 API Key 认证)</summary>
     public const string API_KEY = "akn";
+
+    /// <summary>所属租户 Id(ITenantScoped 过滤器与 AOP TenantId 填充的读取源)</summary>
+    public const string TENANT_ID = "tid";
+
+    /// <summary>平台管理员标志(值为 "true" 时可管理 SysTenant 注册表本身)</summary>
+    public const string PLATFORM_ADMIN = "padm";
 }
 
 /// <summary>

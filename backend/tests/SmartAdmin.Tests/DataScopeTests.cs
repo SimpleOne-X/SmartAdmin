@@ -185,6 +185,8 @@ public class DataScopeTests
         public string? SessionId => null;
         public bool IsSuperAdmin => false;
         public long? OrgId => orgId;
+        public long? TenantId => null;
+        public bool IsPlatformAdmin => false;
         public string? IpAddress => null;
         public string? UserAgent => null;
     }

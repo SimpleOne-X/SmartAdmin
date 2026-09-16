@@ -22,6 +22,14 @@ public interface ICurrentUser
     /// <summary>当前用户归属机构 Id(令牌 org claim);未认证/无机构为 null。数据范围锚点 CreateOrgId 的 AOP 填充源。</summary>
     long? OrgId { get; }
 
+    /// <summary>当前用户所属租户 Id(令牌 tid claim);未认证/无租户为 null。
+    /// ITenantScoped 过滤器与 TenantId 的 AOP 填充源(见 SqlSugarSetup)。</summary>
+    long? TenantId { get; }
+
+    /// <summary>是否平台管理员(令牌 padm claim)。与 IsSuperAdmin 独立:唯一能管理
+    /// SysTenant 注册表本身的身份,不因某个租户内部有超管账号而被绕过。</summary>
+    bool IsPlatformAdmin { get; }
+
     /// <summary>当前请求来源 IP(原文);非 HTTP 上下文或取不到为 null。登录/操作日志记录用。</summary>
     string? IpAddress { get; }
 

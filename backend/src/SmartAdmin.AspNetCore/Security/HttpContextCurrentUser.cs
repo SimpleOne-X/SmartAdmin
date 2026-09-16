@@ -39,6 +39,13 @@ public class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
         long.TryParse(Principal?.FindFirstValue(TokenClaimNames.ORG_ID), out var orgId) ? orgId : null;
 
     /// <inheritdoc />
+    public virtual long? TenantId =>
+        long.TryParse(Principal?.FindFirstValue(TokenClaimNames.TENANT_ID), out var tenantId) ? tenantId : null;
+
+    /// <inheritdoc />
+    public virtual bool IsPlatformAdmin => Principal?.HasClaim(TokenClaimNames.PLATFORM_ADMIN, "true") == true;
+
+    /// <inheritdoc />
     // ponytail: 直接取 TCP 连接对端 IP。反向代理后面拿到的是代理 IP——上正式网关时按需接
     //           ForwardedHeaders 中间件解析 X-Forwarded-For,这里不预埋。
     public virtual string? IpAddress => accessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
