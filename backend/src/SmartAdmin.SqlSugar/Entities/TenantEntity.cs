@@ -20,6 +20,8 @@ public interface ITenantScoped
 /// </summary>
 public abstract class TenantEntity : BaseEntity, ITenantScoped
 {
+    /// <summary>所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null 表示不受租户隔离约束。</summary>
+    [SugarColumn(IsNullable = true, ColumnDescription = "所属租户 Id")]
     public long? TenantId { get; set; }
 }
 
@@ -28,5 +30,7 @@ public abstract class TenantEntity : BaseEntity, ITenantScoped
 /// </summary>
 public abstract class TenantDataEntity : DataEntity, ITenantScoped
 {
+    /// <summary>所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null 表示不受租户隔离约束。</summary>
+    [SugarColumn(IsNullable = true, ColumnDescription = "所属租户 Id")]
     public long? TenantId { get; set; }
 }
