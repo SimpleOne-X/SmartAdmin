@@ -44,9 +44,9 @@ public class ModulePortalTests
     [Fact]
     public async Task Module_access_is_derived_from_menu_grants()
     {
-        // 授菜单 Id 2 = "GET:/api/v1/ping",挂在顶级目录 20(系统运维)下 → 属内置 system 模块(Id 1)
+        // 授菜单 Id 401 = "GET:/api/v1/ping",挂在顶级目录 400(系统运维)下 → 属内置 system 模块(Id 1)
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);
+        var (account, password) = await SeedUser(f, menuId: 401);
 
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken(account, password));
@@ -63,14 +63,14 @@ public class ModulePortalTests
     public async Task Disabled_menu_grant_does_not_expose_module()
     {
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);
+        var (account, password) = await SeedUser(f, menuId: 401);
 
         // 模拟管理员停用已授权菜单。RBAC 权限提供者已按 Enabled 过滤,门户模块反推也必须同口径,
         // 否则用户会看到一个实际无任何生效权限的应用入口。
         using (var scope = f.Services.CreateScope())
         {
             var menus = scope.ServiceProvider.GetRequiredService<IRepository<SysMenu>>();
-            var ping = await menus.GetByIdAsync(301);
+            var ping = await menus.GetByIdAsync(401);
             Assert.NotNull(ping);
             ping!.Enabled = false;
             await menus.UpdateAsync(ping);
@@ -92,7 +92,7 @@ public class ModulePortalTests
         // 权限码路径已按 Enabled 角色过滤;门户模块的可见性是从权限码反推的,若反推时漏查 Enabled,
         // 就会出现停用角色后 ping 403、侧栏却仍看得到 system 模块的不一致。
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);
+        var (account, password) = await SeedUser(f, menuId: 401);
 
         using (var scope = f.Services.CreateScope())
         {
@@ -164,7 +164,7 @@ public class ModulePortalTests
     public async Task Set_default_module_succeeds_for_accessible_and_rejects_inaccessible()
     {
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);   // 可访问 system(Id 1)
+        var (account, password) = await SeedUser(f, menuId: 401);   // 可访问 system(Id 1)
 
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken(account, password));
@@ -213,7 +213,7 @@ public class ModulePortalTests
             var sp = scope.ServiceProvider;
             var uid = (await sp.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.Account == account))!.Id;
             var roleId = (await sp.GetRequiredService<IRbacService>().GetUserRoleIdsAsync(uid)).First();
-            await sp.GetRequiredService<IRbacService>().SetRoleMenusAsync(roleId, [301]);   // 授 GET:/api/v1/ping(挂 system 模块下)
+            await sp.GetRequiredService<IRbacService>().SetRoleMenusAsync(roleId, [401]);   // 授 GET:/api/v1/ping(挂 system 模块下)
         }
 
         Assert.Equal([1L], ModuleIds(await (await c.GetAsync("/api/v1/personal/modules")).ReadEnvelope()).ToList());   // 即时见 system

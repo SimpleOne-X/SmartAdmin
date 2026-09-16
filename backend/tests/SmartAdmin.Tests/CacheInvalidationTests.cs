@@ -40,7 +40,7 @@ public class CacheInvalidationTests
     {
         // 停用用户须即时下线其在线会话——原访问令牌下次请求即 401,不必等它自然过期。
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);   // 授 GET:/api/v1/ping
+        var (account, password) = await SeedUser(f, menuId: 401);   // 授 GET:/api/v1/ping
 
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken(account, password));
@@ -65,18 +65,18 @@ public class CacheInvalidationTests
     {
         // 遗漏二:改菜单(停用/改权限码)须即时失效被授该菜单用户的权限缓存,不等 TTL。
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUser(f, menuId: 301);   // 授 GET:/api/v1/ping
+        var (account, password) = await SeedUser(f, menuId: 401);   // 授 GET:/api/v1/ping
 
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken(account, password));
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/v1/ping")).StatusCode);   // 首次请求预热 perm 缓存
 
-        // 管理员经菜单服务停用菜单 301(经 MenuService.UpdateAsync → 扇出失效受影响用户 perm)
+        // 管理员经菜单服务停用菜单 401(经 MenuService.UpdateAsync → 扇出失效受影响用户 perm)
         using (var scope = f.Services.CreateScope())
         {
             var sp = scope.ServiceProvider;
-            var menu = (await sp.GetRequiredService<IRepository<SysMenu>>().GetByIdAsync(301))!;
-            await sp.GetRequiredService<IMenuService>().UpdateAsync(301, new MenuInput
+            var menu = (await sp.GetRequiredService<IRepository<SysMenu>>().GetByIdAsync(401))!;
+            await sp.GetRequiredService<IMenuService>().UpdateAsync(401, new MenuInput
             {
                 ParentId = menu.ParentId, Type = menu.Type, Title = menu.Title, Permission = menu.Permission,
                 Sort = menu.Sort, Enabled = false, ModuleId = menu.ModuleId,

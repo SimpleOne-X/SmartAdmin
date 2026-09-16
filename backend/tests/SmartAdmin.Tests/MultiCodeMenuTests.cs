@@ -11,8 +11,8 @@ namespace SmartAdmin.Tests;
 /// </summary>
 public class MultiCodeMenuTests
 {
-    private const long UserQueryButtonId = 231;   // DefaultMenuSeed:用户-查询
-    private const long OpsCatalogId = 300;        // DefaultMenuSeed:系统运维目录(运行时建的按钮挂这里)
+    private const long UserQueryButtonId = 331;   // DefaultMenuSeed:用户-查询
+    private const long OpsCatalogId = 400;        // DefaultMenuSeed:系统运维目录(运行时建的按钮挂这里)
 
     private static async Task<HttpClient> SuperAdminClient(AdminAppFactory f)
     {

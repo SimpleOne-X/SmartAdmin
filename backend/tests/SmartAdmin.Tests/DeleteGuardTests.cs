@@ -109,8 +109,8 @@ public class DeleteGuardTests
             var rbac = sp.GetRequiredService<IRbacService>();
             var role = new SysRole { Name = "自删角色", Code = "self-del-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
             await roles.InsertAsync(role);
-            // 234 = 用户-删除
-            await rbac.SetRoleMenusAsync(role.Id, [234]);
+            // 334 = 用户-删除
+            await rbac.SetRoleMenusAsync(role.Id, [334]);
             await rbac.SetRoleDataScopeAsync(role.Id, DataScopeType.All);
 
             var result = await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput
@@ -143,8 +143,8 @@ public class DeleteGuardTests
             var rbac = sp.GetRequiredService<IRbacService>();
             var role = new SysRole { Name = "自停角色", Code = "self-dis-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
             await roles.InsertAsync(role);
-            // 236 = 用户-启停
-            await rbac.SetRoleMenusAsync(role.Id, [236]);
+            // 336 = 用户-启停
+            await rbac.SetRoleMenusAsync(role.Id, [336]);
             await rbac.SetRoleDataScopeAsync(role.Id, DataScopeType.All);
 
             var result = await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput

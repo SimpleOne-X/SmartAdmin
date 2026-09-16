@@ -41,9 +41,9 @@ public class AuthorizationTests
     [Fact]
     public async Task Authenticated_user_allowed_on_granted_code_denied_otherwise()
     {
-        // 授予菜单 Id 301 = "GET:/api/v1/ping"(见 DefaultMenuSeed)
+        // 授予菜单 Id 401 = "GET:/api/v1/ping"(见 DefaultMenuSeed)
         using var f = new AdminAppFactory();
-        var (account, password) = await SeedUserWithPermission(f, menuId: 301);
+        var (account, password) = await SeedUserWithPermission(f, menuId: 401);
 
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken(account, password));

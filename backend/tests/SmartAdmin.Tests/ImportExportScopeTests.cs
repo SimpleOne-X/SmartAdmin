@@ -51,7 +51,7 @@ public class ImportExportScopeTests
             var menus = sp.GetRequiredService<IRepository<SysMenu>>();
             var commitMenu = new SysMenu
             {
-                ParentId = 230, Type = MenuType.Button, Title = "测试-导入提交",
+                ParentId = 330, Type = MenuType.Button, Title = "测试-导入提交",
                 Permission = "POST:/api/v1/sys/user/import/commit", Enabled = true, Visible = true,
             };
             await menus.InsertAsync(commitMenu);

@@ -22,7 +22,7 @@ public class RbacSuperAdminGuardTests
     {
         using var f = new AdminAppFactory();
 
-        // Seed: 角色授予 menuId=246 ("PUT:/api/v1/sys/role/datascope") + 普通用户
+        // Seed: 角色授予 menuId=346 ("PUT:/api/v1/sys/role/datascope") + 普通用户
         long targetRoleId;
         string account, password;
         using (var scope = f.Services.CreateScope())
@@ -40,7 +40,7 @@ public class RbacSuperAdminGuardTests
             // 操作者的角色:拥有数据范围路由权限
             var opRole = new SysRole { Name = "操作者角色", Code = "op-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
             await roles.InsertAsync(opRole);
-            await rbac.SetRoleMenusAsync(opRole.Id, [246]);   // menuId=246 = PUT:/api/v1/sys/role/datascope
+            await rbac.SetRoleMenusAsync(opRole.Id, [346]);   // menuId=346 = PUT:/api/v1/sys/role/datascope
 
             account = "qa09-" + Guid.CreateVersion7().ToString("N")[..8];
             password = "Qa09@123456";
