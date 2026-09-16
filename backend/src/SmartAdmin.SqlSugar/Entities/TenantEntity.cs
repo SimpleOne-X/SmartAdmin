@@ -20,7 +20,12 @@ public interface ITenantScoped
 /// </summary>
 public abstract class TenantEntity : BaseEntity, ITenantScoped
 {
-    /// <summary>所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null 表示不受租户隔离约束。</summary>
+    /// <summary>
+    /// 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+    /// 硬化后的过滤器谓词显式要求 <c>currentUser.TenantId != null</c>,null 行对任何调用者(含无租户上下文的
+    /// 系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、<c>TenantBackfillHook</c> 尚未处理过的
+    /// 存量行,稳态下不该有活的这类行。
+    /// </summary>
     [SugarColumn(IsNullable = true, ColumnDescription = "所属租户 Id")]
     public long? TenantId { get; set; }
 }
@@ -30,7 +35,12 @@ public abstract class TenantEntity : BaseEntity, ITenantScoped
 /// </summary>
 public abstract class TenantDataEntity : DataEntity, ITenantScoped
 {
-    /// <summary>所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null 表示不受租户隔离约束。</summary>
+    /// <summary>
+    /// 所属租户 Id。插入时由审计 AOP 从租户上下文自动填充。为 null <b>不是</b>"不受租户隔离约束"——
+    /// 硬化后的过滤器谓词显式要求 <c>currentUser.TenantId != null</c>,null 行对任何调用者(含无租户上下文的
+    /// 系统调用者)都恒不可见。null 只表示"还没回填":老库升级补列后、<c>TenantBackfillHook</c> 尚未处理过的
+    /// 存量行,稳态下不该有活的这类行。
+    /// </summary>
     [SugarColumn(IsNullable = true, ColumnDescription = "所属租户 Id")]
     public long? TenantId { get; set; }
 }

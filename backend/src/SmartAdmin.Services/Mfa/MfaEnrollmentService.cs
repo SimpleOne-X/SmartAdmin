@@ -187,10 +187,13 @@ public class MfaEnrollmentService(
     /// <see cref="AuthService"/>/本类自助绑定三个方法不同,本方法只在已认证管理员会话内被调用
     /// (<c>MfaController.ClearMfa</c>,<c>[Authorize][RolePermission][RequireReauth]</c>),
     /// <c>operatorUserId</c> 取自调用者自己的令牌,<c>currentUser.TenantId</c> 此刻必然有效。
-    /// <c>op</c> 是自查,天然同租户;<c>target</c> 则是越权守卫的关键一步——同 <see cref="SessionService.ForceLogoutAsync"/>
-    /// 的既有先例(那里操作者不得跨租户强退会话),清除 MFA 比强退更敏感(等于摘掉对方账号的二次验证),
+    /// <c>op</c> 是自查,天然同租户;<c>target</c> 则是越权守卫的关键一步——清除 MFA 等于摘掉对方账号的二次验证,
     /// 一个租户内被授予 <see cref="HighSensitivityPermissions.MfaClear"/> 的管理员必须只能对本租户内的用户生效,
-    /// 不能靠猜/连续试 Id 跨租户摘掉别人的 MFA。清过滤器会打开这个口子,故保持按租户过滤不变。
+    /// 不能靠猜/连续试 Id 跨租户摘掉别人的 MFA。保护落在紧随其后的取回结果上:<c>target is null</c>
+    /// 即失败关闭(<c>AdminException.ThrowIf(target is null, ErrorCode.UserNotFound)</c>)——其他租户的
+    /// Id 经租户过滤器查不到行,自然落到这条判空,跟"查到了但不是本租户"一样拒绝。清过滤器会打开这个口子,
+    /// 故保持按租户过滤不变。(不与 <see cref="SessionService.ForceLogoutAsync"/> 类比:那边的跨租户会话隔离
+    /// 是另一个尚未收口的缺口——<c>SysSession</c> 目前还不是 <see cref="ITenantScoped"/>,属于单独排期的后续任务。)
     /// </remarks>
     public virtual async Task ClearUserMfaAsync(long targetUserId, long operatorUserId)
     {

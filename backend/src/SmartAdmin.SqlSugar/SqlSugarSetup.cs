@@ -103,7 +103,7 @@ public static class SqlSugarSetup
             var idGen = sp.GetRequiredService<IIdGenerator>();
             var time = sp.GetService<TimeProvider>() ?? TimeProvider.System; // 统一时间源,可测试
             var dataScope = sp.GetRequiredService<IDataScopeContext>();      // 数据范围载体(单例,过滤器闭包捕获)
-            var currentUser = sp.GetRequiredService<ICurrentUser>();         // 当前用户(单例,审计字段填充用)
+            var currentUser = sp.GetRequiredService<ICurrentUser>();         // 当前用户(单例,审计字段填充用、租户隔离过滤器判据)
             // SQL 诊断日志。类别名固定,便于消费者单独调级别(Logging:LogLevel:SmartAdmin.Sql)。
             // GetService 而非 GetRequiredService:本方法是公开装配入口,允许在裸容器上单独调用(测试与只要数据层的消费者
             // 都这么用),不能凭空多出一个必需依赖 —— 没有日志就静默不打,不该因此起不来。
