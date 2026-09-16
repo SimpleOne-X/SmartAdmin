@@ -23,7 +23,7 @@ namespace SmartAdmin.Services;
 /// 每个页面的权限按钮一目了然。<b>没有页面的接口</b>(只给移动端 / PDA / 第三方系统调的)把按钮直接挂在目录下,
 /// 目录就是它们的权限组(如 401 探针挂在系统运维下):不生成路由、不进侧栏,角色授权界面把它们渲染成
 /// 该目录组里「接口权限(无页面)」一行,照常勾选;只被授了这类权限的用户不会在门户看到该应用。</para>
-/// <para><b>Id 编号</b>:百位是分区,1xx 工作台、2xx 留给规划中的租户管理(尚未落地,不占行)、3xx 组织管理、4xx 系统运维、
+/// <para><b>Id 编号</b>:百位是分区,1xx 工作台、2xx 租户管理、3xx 组织管理、4xx 系统运维、
 /// 5xx 任务调度、6xx 日志审计、7xx 文件管理、8xx AI 管理,9xx 留给新目录。整百是目录本身,目录下无页面的接口按钮取 01–09(如 401 探针);页面取整十,一页独占一个十位段;
 /// 根级页面(各应用的工作台)在 1xx 各占一个十位段。按钮的个位有固定语义:<b>1 查询、2 新增、3 更新、4 删除</b>,
 /// 5–9 是本页特有操作;页面没有的标准按钮空着位,不往前挪。规则由 <c>MenuSeedIdLayoutTests</c> 锁定;
@@ -61,8 +61,17 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 110, ParentId = 0, Type = MenuType.Menu, Title = "工作台", Permission = "", Path = "/business/workbench", Component = "dashboard/biz", Icon = "ph:squares-four-duotone", Sort = 0, Enabled = true, Visible = true, ModuleId = DefaultModuleSeed.BUSINESS_MODULE_ID },
 
         // ═══ 2xx 租户管理 ═══════════════════════════════════════════
-        // 规划中,尚未落地:多租户(共享库)特性还没实现 TenantController/租户列表页,本批先不占行——
-        // 号段已经在上面的分区表里留好,落地时从 200/210/211 起补,不用再挪别的目录。
+        new SysMenu { Id = 200, ParentId = 0, Type = MenuType.Catalog, Title = "租户管理", Permission = "", Icon = "ph:buildings-duotone", Sort = 1, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
+
+        // 租户列表页(TenantController)。只有平台管理员实际能操作,菜单本身对所有角色可授权,
+        // 门禁在 TenantService.RequirePlatformAdmin(见 Task 4),不是靠菜单可见性把人挡在外面。
+        new SysMenu { Id = 210, ParentId = 200, Type = MenuType.Menu, Title = "租户列表", Permission = "", Path = "/system/tenant", Component = "system/tenant/index", Icon = "ph:identification-card-duotone", Sort = 1, Enabled = true, Visible = true },
+        new SysMenu { Id = 211, ParentId = 210, Type = MenuType.Button, Title = "租户-查询", Permission = Codes("GET:/api/v1/sys/tenant/page", "GET:/api/v1/sys/tenant/{id}"), Sort = 1, Enabled = true },
+        new SysMenu { Id = 212, ParentId = 210, Type = MenuType.Button, Title = "租户-新增", Permission = "POST:/api/v1/sys/tenant/add", Sort = 2, Enabled = true },
+        new SysMenu { Id = 213, ParentId = 210, Type = MenuType.Button, Title = "租户-更新", Permission = "PUT:/api/v1/sys/tenant/{id}", Sort = 3, Enabled = true },
+        new SysMenu { Id = 214, ParentId = 210, Type = MenuType.Button, Title = "租户-删除", Permission = "DELETE:/api/v1/sys/tenant/{id}", Sort = 4, Enabled = true },
+
+        // 220(数据库配置)留给二期独立库,现在不占行——见头部分区表注释。
 
         // ═══ 3xx 组织管理 ═══════════════════════════════════════════
         new SysMenu { Id = 300, ParentId = 0, Type = MenuType.Catalog, Title = "组织管理", Permission = "", Icon = "ph:buildings-duotone", Sort = 2, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
