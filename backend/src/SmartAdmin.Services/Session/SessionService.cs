@@ -164,7 +164,9 @@ public class SessionService(
         var refreshTtl = TimeSpan.FromMinutes(refreshMin);
         if (refreshTtl > maxRemain) refreshTtl = maxRemain;
 
-        var pair = tokens.Create(new TokenSubject(user.Id, user.Account, rt.SessionId, user.IsSuperAdmin, user.OrgId),
+        var pair = tokens.Create(
+            new TokenSubject(user.Id, user.Account, rt.SessionId, user.IsSuperAdmin, user.OrgId,
+                TenantId: user.TenantId, IsPlatformAdmin: user.IsPlatformAdmin == true),
             accessTtl, refreshTtl);
         var expiresAt = Min(pair.RefreshExpiresAt.UtcDateTime, absolute);
 
