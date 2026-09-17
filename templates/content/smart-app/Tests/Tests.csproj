@@ -19,9 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="xunit.v3" Version="4.0.0" />
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
     <!-- 必须直接引:它的 build targets(定位宿主 ContentRoot)只对直接引用方生效,经 SmartAdmin.Testing 传递拿不到 -->
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <!-- 内核的测试基础设施:AdminAppFactory<Program>(一次性库 + 固定超管密码 / JWT 密钥)、
          TestDb(按 SMART_TEST_DBTYPE 切四种方言)、PostJson / ReadEnvelope / LoginToken。版本与内核包一致 -->
     <PackageReference Include="SmartAdmin.Testing" Version="SMART_PKG_VERSION" />
