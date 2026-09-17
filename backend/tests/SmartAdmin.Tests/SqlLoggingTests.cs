@@ -85,6 +85,39 @@ public class SqlLoggingTests
             e.Level == LogLevel.Warning && e.Text.Contains("sys_menu", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// issue #9:超时/执行失败的语句耗时早就过了阈值,但只有 OnError 会触发——SqlSugar 的
+    /// OnLogExecuted(慢 SQL 判定的唯一落点)只在成功路径上由 ExecuteAfter 调用,失败直接走异常分支,
+    /// 那一步被整个跳过。最该被看见的语句(跑到超时)反而不进慢 SQL 日志,只剩异常堆栈。
+    /// <para>失败路径的真实耗时没法靠"跑够多次赌一次够慢"稳定复现——SQLite 对不存在的表是编译期就
+    /// 拒绝,几乎不花时间,阈值再低也几乎撞不上(实测:单独跑能撞上,和其它用例一起跑几乎必挂,
+    /// 因为进程热身后编译失败快到测不出来)。改用 OnLogExecuting(BeforeTime 刷新之后、真正下发
+    /// SQL 之前)人为插入一段确定性延迟,让这条语句的耗时不依赖机器/进程状态。</para>
+    /// </summary>
+    [Fact]
+    public void 慢SQL_执行失败也要告警()
+    {
+        var log = new CaptureLoggerProvider();
+        using var f = new AdminAppFactory
+        {
+            Settings = new Dictionary<string, string?> { ["SmartAdmin:Database:SlowSqlMillis"] = "20" },
+            Overrides = s => s.AddSingleton<ILoggerProvider>(log),
+        };
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+
+        db.Aop.OnLogExecuting = (sql, _) =>
+        {
+            if (sql.Contains("smart_no_such_table", StringComparison.Ordinal)) Thread.Sleep(50);
+        };
+
+        Assert.ThrowsAny<Exception>(() => db.Ado.ExecuteCommand("SELECT 1 FROM smart_no_such_table"));
+
+        Assert.Contains(log.Entries, e =>
+            e.Level == LogLevel.Warning && e.Text.Contains("慢 SQL", StringComparison.Ordinal)
+            && e.Text.Contains("smart_no_such_table", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void 慢SQL_默认阈值下不刷屏()
     {

@@ -208,16 +208,30 @@ public static class SqlSugarSetup
                 // 输出只走 ILogger。**绝不能把这两条写进 SysOpLog**:那条 INSERT 自己又会触发一次
                 // OnLogExecuted / 可能再失败触发 OnError —— 直接递归。日志的归日志(诊断),审计的归审计(sys_op_log)。
 
+                var threshold = policy.SlowSqlMillis;
+
                 // 失败的 SQL:没有这一条,线上查询一炸就只剩驱动层异常 —— 没有语句、没有参数,复现无从谈起。
                 // 不给关的开关:失败却打不出 SQL,等于没有可运维性。主库与副库一律挂上。
                 client.Aop.OnError = ex =>
+                {
                     sqlLog.LogError(ex, "SQL 执行失败[{ConfigId}]: {Sql} | 参数: {Parameters}",
                         configId, ex.Sql, FormatSqlParameters(ex.Parametres));
+
+                    // 超时/执行失败直接走这条分支——SqlSugar 只在成功路径由 ExecuteAfter 调 OnLogExecuted,
+                    // 下面那个钩子挂了也不会再触发,慢 SQL 判定整个被跳过。最该被看见的语句(跑到超时)
+                    // 反而不进慢 SQL 日志。SqlSugarException 由 ExecuteErrorEvent 构造,AfterTime 已在那之前
+                    // 刷新,这里的 SqlExecutionTime 仍是失败前的真实耗时,不是陈旧值。
+                    var millis = client.Ado.SqlExecutionTime.TotalMilliseconds;
+                    if (threshold > 0 && millis >= threshold)
+                    {
+                        sqlLog.LogWarning("慢 SQL[{ConfigId}]({Elapsed}ms ≥ {Threshold}ms,执行失败): {Sql} | 参数: {Parameters}",
+                            configId, (long)millis, threshold, ex.Sql, FormatSqlParameters(ex.Parametres));
+                    }
+                };
 
                 // 执行完成:慢 SQL 告警(生产)与控制台全量日志(开发)共用这一个钩子。
                 // 合成一个而不是两个:SqlSugar 的 OnLogExecuted 是单个委托,分开挂后者会把前者覆盖掉;
                 // 而且同一条语句该只出现一次——两处各打一遍,慢语句在日志里就是重影。
-                var threshold = policy.SlowSqlMillis;
                 if (threshold > 0 || sqlLogOptions.Enabled)
                 {
                     client.Aop.OnLogExecuted = (sql, pars) =>
