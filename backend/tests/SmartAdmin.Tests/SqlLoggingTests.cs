@@ -86,6 +86,34 @@ public class SqlLoggingTests
     }
 
     [Fact]
+    public void 慢SQL_超时失败也照样告警()
+    {
+        // GitHub #14:SqlSugar 的 OnLogExecuted(慢 SQL 统计)只在成功路径触发,查询一超时/一失败,
+        // 耗时越过阈值的语句反而记不到慢 SQL —— 这里断言 OnError 路径把同样的阈值判断补上了。
+        //
+        // "表不存在" 是绑定期(parse/bind)就会报的语义错误,不管语句里还写了多少东西,真正执行前就
+        // 短路——不能指望它自己耗时够长。改成一条足够长的 UNION ALL(几千个 SELECT 1,四种数据库通用
+        // 语法),真正报错前光解析这条语句就要花掉可观时间,这个耗时来自"要解析的字符数",跟机器快慢、
+        // SQLite 是内嵌还是 MySQL/PostgreSQL/SqlServer 要走网络都无关,不是在赌"这台机器恰好够慢"。
+        var log = new CaptureLoggerProvider();
+        using var f = new AdminAppFactory
+        {
+            Settings = new Dictionary<string, string?> { ["SmartAdmin:Database:SlowSqlMillis"] = "1" },
+            Overrides = s => s.AddSingleton<ILoggerProvider>(log),
+        };
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+
+        var sql = string.Join(" UNION ALL ", Enumerable.Repeat("SELECT 1", 5000)) + " UNION ALL SELECT 1 FROM smart_no_such_table";
+        Assert.ThrowsAny<Exception>(() => db.Ado.ExecuteCommand(sql));
+
+        Assert.Contains(log.Entries, e =>
+            e.Level == LogLevel.Error
+            && e.Text.Contains("慢 SQL", StringComparison.Ordinal)
+            && e.Text.Contains("smart_no_such_table", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void 慢SQL_默认阈值下不刷屏()
     {
         var log = new CaptureLoggerProvider();

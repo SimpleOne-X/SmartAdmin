@@ -1,6 +1,6 @@
 {
   "name": "smart-admin-app",
-  "version": "10.12.1",
+  "version": "10.13.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,9 +19,9 @@
     "@vueuse/core": "^14.4.0",
     "naive-ui": "^2.45.3",
     "pinia": "^4.0.3",
-    "smart-admin-web": "10.12.1",
+    "smart-admin-web": "10.13.1",
     "smart-naive-icon": "^2.0.0",
-    "smart-naive-table": "^2.0.0",
+    "smart-naive-table": "^2.1.1",
     "vue": "^3.5.42",
     "vue-i18n": "^11.4.10",
     "vue-router": "^4.5.0"
