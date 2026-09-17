@@ -181,6 +181,12 @@ async function logout() {
          而全站唯一的登出入口就在最右边的用户下拉里 —— 手机上不能因为一排图标而退不出登录。
          搜索有 Ctrl+K 兜底、全屏在手机上无意义、语言与设置属低频(设置抽屉本就是宽屏调布局用的)。 -->
     <div class="right">
+      <!-- 所属租户,只读展示(stores/user.ts 的 tenantName 注释):不做切换交互,窄屏隐藏。 -->
+      <span v-if="user.userInfo?.tenantName" class="tenant-tag mobile-hide">
+        <Icon icon="ph:buildings" :width="16" class="tenant-tag-icon" />
+        <span class="tenant-tag-text">{{ user.userInfo.tenantName }}</span>
+      </span>
+
       <n-tooltip>
         <template #trigger>
           <n-button quaternary circle class="mobile-hide" @click="searchOpen = true">
@@ -319,6 +325,21 @@ async function logout() {
 }
 .uname {
   margin-left: 6px;
+}
+.tenant-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  /* 跟"超级管理员"同色:n-button quaternary 的文字色取自 NaiveUI 主题的 textColor2 → --color-text-secondary */
+  color: var(--color-text-secondary);
+}
+.tenant-tag-icon {
+  display: block;
+  flex-shrink: 0;
+}
+.tenant-tag-text {
+  line-height: 1;
 }
 .center {
   flex: 1;
