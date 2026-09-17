@@ -6,14 +6,17 @@ import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NButton,
-  NCard,
   NTree,
   NSpace,
   NTag,
   NAvatar,
   NPopconfirm,
   NDropdown,
+  NInput,
+  NSpin,
+  NTooltip,
   useMessage,
+  type TreeOption,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { SmartTable, type SmartTableColumn, type SmartTableInst } from 'smart-naive-table'
@@ -30,7 +33,7 @@ import { mfaApi, userApi, positionApi, roleApi, orgApi } from '#/api'
 import { useAuthStore } from '#/stores/auth'
 import { translateError } from '#/utils/error'
 import { triggerBlobDownload } from '#/utils/download'
-import { buildTree, type Tree } from '#/utils/tree'
+import { buildTree, expandableIds } from '#/utils/tree'
 import type { ExportColumnDef, SysOrg, UserItem } from '#/types/api'
 
 const { t } = useI18n()
@@ -74,7 +77,12 @@ const positionOptions = ref<{ label: string; value: number }[]>([])
 const roleOptions = ref<{ label: string; value: number }[]>([])
 const directorOptions = ref<{ label: string; value: number }[]>([])
 // 左侧机构树筛选:选中节点即按其机构过滤用户;params 深监听联动 SmartTable(回第 1 页重查)。
-const orgTree = ref<Tree<SysOrg>[]>([])
+// 面板交互对齐内核 layout.css 的 .side-filter 约定(机构管理页搜索/展开收起用的同一套):
+// 搜索走 NTree 自带 pattern/filter;展开受控,进页面全折叠,选中节点自动展开其祖先链。
+const orgFlat = ref<SysOrg[]>([])
+// 拉取期间给树位占位(见下方 n-spin),避免树从空白直接跳成展开好的一整棵——那一下比慢半拍更扎眼。
+const orgLoading = ref(true)
+const orgTree = computed(() => buildTree(orgFlat.value))
 const selectedOrgId = ref<number | null>(null)
 const tableParams = computed(() =>
   selectedOrgId.value == null ? {} : { orgId: selectedOrgId.value },
@@ -83,6 +91,40 @@ function onOrgSelect(keys: (string | number)[]) {
   // 再点选中项 → 取消选中 → 恢复全部
   selectedOrgId.value = keys.length ? Number(keys[0]) : null
 }
+
+const orgPattern = ref('')
+function filterOrg(input: string, node: TreeOption) {
+  const kw = input.trim().toLowerCase()
+  if (!kw) return true
+  const org = node as unknown as SysOrg
+  return org.name.toLowerCase().includes(kw) || (org.code ?? '').toLowerCase().includes(kw)
+}
+
+const orgExpandedKeys = ref<number[]>([])
+const expandableOrgKeys = computed(() => expandableIds(orgTree.value))
+const allOrgExpanded = computed(
+  () =>
+    expandableOrgKeys.value.length > 0 &&
+    orgExpandedKeys.value.length >= expandableOrgKeys.value.length,
+)
+function toggleExpandAllOrg() {
+  orgExpandedKeys.value = allOrgExpanded.value ? [] : [...expandableOrgKeys.value]
+}
+// 受控展开:一旦传了 expanded-keys,naive 就以它为准,不会自己默认展开——进页面全展开得自己播种。
+watch(expandableOrgKeys, keys => (orgExpandedKeys.value = keys), { immediate: true })
+
+// 选中的机构可能藏在收起的父级里(典型:切换搜索结果后选中项被折叠的祖先挡住),把祖先链补进展开集。
+watch(selectedOrgId, id => {
+  if (id == null) return
+  const byId = new Map(orgFlat.value.map(o => [o.id, o]))
+  const next = new Set(orgExpandedKeys.value)
+  let cursor = byId.get(id)?.parentId ?? 0
+  while (cursor && byId.has(cursor)) {
+    next.add(cursor)
+    cursor = byId.get(cursor)!.parentId
+  }
+  orgExpandedKeys.value = [...next]
+})
 onMounted(async () => {
   try {
     const { items } = await positionApi.page({ page: 1, pageSize: 200 })
@@ -104,9 +146,11 @@ onMounted(async () => {
     // 静默:主管下拉是配角,拉取失败不打断列表
   }
   try {
-    orgTree.value = buildTree(await orgApi.list())
+    orgFlat.value = await orgApi.list()
   } catch {
     // 静默:机构树是筛选辅助,拉取失败不打断列表
+  } finally {
+    orgLoading.value = false
   }
 })
 
@@ -330,31 +374,69 @@ const columns: SmartTableColumn<UserItem>[] = [
 <template>
   <!-- 「左分组栏 + 右列表」= styles/layout.css 里的形状 3:.side-page 负责 display/gap/拉伸/整屏高度。 -->
   <div class="user-layout side-page">
-    <!-- 左侧机构树筛选 -->
-    <n-card class="org-filter fill-card" :bordered="false" size="small">
-      <div class="org-filter-head">
-        <span class="org-filter-title">{{ t('user.org') }}</span>
-        <n-button
-          v-if="selectedOrgId != null"
-          text
-          size="tiny"
-          type="primary"
-          @click="selectedOrgId = null"
-        >
-          {{ t('user.allOrgs') }}
-        </n-button>
+    <!-- 左侧机构树筛选:面板外观/交互对齐内核 .side-filter 约定(机构管理页搜索、展开收起同款) -->
+    <aside class="side-filter">
+      <div class="side-filter__head">
+        <div class="side-filter__actions">
+          <n-tooltip v-if="expandableOrgKeys.length">
+            <template #trigger>
+              <n-button quaternary circle size="small" @click="toggleExpandAllOrg">
+                <template #icon>
+                  <AppIcon
+                    :icon="
+                      allOrgExpanded ? 'ph:arrows-in-line-vertical' : 'ph:arrows-out-line-vertical'
+                    "
+                    :size="18"
+                  />
+                </template>
+              </n-button>
+            </template>
+            {{ allOrgExpanded ? t('common.collapseAll') : t('common.expandAll') }}
+          </n-tooltip>
+        </div>
       </div>
-      <n-tree
-        block-line
-        selectable
-        :data="orgTree"
-        key-field="id"
-        label-field="name"
-        children-field="children"
-        :selected-keys="selectedOrgId == null ? [] : [selectedOrgId]"
-        @update:selected-keys="onOrgSelect"
-      />
-    </n-card>
+
+      <n-input
+        v-model:value="orgPattern"
+        size="small"
+        clearable
+        :placeholder="t('org.searchPlaceholder')"
+      >
+        <template #prefix><AppIcon icon="ph:magnifying-glass" :size="14" /></template>
+      </n-input>
+
+      <button
+        type="button"
+        class="side-row"
+        :class="{ 'is-active': selectedOrgId === null }"
+        @click="selectedOrgId = null"
+      >
+        <AppIcon class="side-row__icon" icon="ph:squares-four" :size="15" />
+        <span class="side-row__label">{{ t('user.allOrgs') }}</span>
+      </button>
+
+      <div class="side-filter__divider" />
+
+      <n-spin :show="orgLoading" class="fill-pass">
+        <n-tree
+          class="side-tree"
+          block-line
+          selectable
+          show-line
+          key-field="id"
+          label-field="name"
+          children-field="children"
+          :data="orgTree"
+          :pattern="orgPattern"
+          :filter="filterOrg"
+          :show-irrelevant-nodes="false"
+          :selected-keys="selectedOrgId == null ? [] : [selectedOrgId]"
+          :expanded-keys="orgExpandedKeys"
+          @update:selected-keys="onOrgSelect"
+          @update:expanded-keys="keys => (orgExpandedKeys = keys as unknown as number[])"
+        />
+      </n-spin>
+    </aside>
 
     <SmartTable
       :default-page-size="100"
@@ -424,24 +506,8 @@ const columns: SmartTableColumn<UserItem>[] = [
 </template>
 
 <style scoped>
-/* 左树 + 右表:display / gap / 拉伸 / 整屏高度都在 styles/layout.css 的 .side-page,这里只定侧栏宽度。 */
-.org-filter {
-  flex: 0 0 200px;
-}
-/* 整页定高,侧栏不跟着内容长高:树吃满卡片剩余高度,自己竖向滚动。 */
-.org-filter :deep(.n-tree) {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-.org-filter-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.org-filter-title {
-  font-weight: 600;
-  font-size: var(--font-size-sm, 13px);
+/* 树形比平铺分类宽一点:缩进和展开箭头要留出空间,默认 --side-filter-width(224px)偏窄。 */
+.user-layout {
+  --side-filter-width: 248px;
 }
 </style>

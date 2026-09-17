@@ -7,6 +7,7 @@ import { loadingBar } from '#/lib/loadingBar'
 import { reloadOnChunkError } from '#/lib/chunkReload'
 import { ensureAccessToken } from '#/api/client'
 import { isSessionDead } from './bootFailure'
+import { personalApi } from '#/api'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -118,4 +119,13 @@ router.afterEach(to => {
   if (['login', 'module', 'not-found', 'personal'].includes(to.name as string)) return
   if (!to.matched.some(r => r.name === 'layout')) return
   useTabsStore().addTab(to)
+})
+
+// 记一次工作台快捷方式访问(高频自动补位用)。守卫条件与上面记标签页的那个一致,
+// 失败静默——这不是用户能感知的操作,不值得为它弹错误提示。
+router.afterEach(to => {
+  if (to.meta.public) return
+  if (['login', 'module', 'not-found', 'personal'].includes(to.name as string)) return
+  if (!to.matched.some(r => r.name === 'layout')) return
+  personalApi.recordShortcutVisit(to.path).catch(() => {})
 })

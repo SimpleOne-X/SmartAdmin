@@ -40,6 +40,7 @@ const TEXT = {
         { title: '领域服务', sub: ['用户 · 角色 · 菜单 · 机构', '字典 · 配置 · 日志 · 文件'], tag: 'TryAdd 可替换', color: 'teal' },
         { title: '缓存', sub: ['Memory / Redis', '会话 · 权限 · 字典'], tag: 'ICacheProvider', color: 'amber' },
         { title: '定时任务调度', sub: ['cron · 固定间隔 · 一次性', 'IAdminJob · HTTP · SQL'], tag: '内核自带', color: 'teal' },
+        { title: 'AI 网关', sub: ['IAiChatClient · 用量记账', 'OpenAI · Anthropic'], tag: '[Module("Ai")]', color: 'teal' },
         { title: '可选 Worker', sub: ['AddSmartAdminWorker', 'API 下线时任务继续跑'], tag: '可选', color: 'teal', dashed: true }] },
       { name: '数据层', idx: '04', pkg: 'SmartAdmin.SqlSugar', pkgSub: 'CodeFirst · 种子 · 全局过滤器', color: 'amber', nodes: [
         { title: 'SqlSugar', sub: ['仓储 · CodeFirst 建表', '软删 / 数据范围全局过滤'], tag: '单例 Scope', color: 'teal' },
@@ -70,6 +71,7 @@ const TEXT = {
         { title: 'Domain services', sub: ['users · roles · menus · orgs', 'dicts · config · logs · files'], tag: 'TryAdd replaceable', color: 'teal' },
         { title: 'Cache', sub: ['Memory / Redis', 'sessions · permissions · dicts'], tag: 'ICacheProvider', color: 'amber' },
         { title: 'Job scheduler', sub: ['cron · interval · one-shot', 'IAdminJob · HTTP · SQL'], tag: 'in-kernel', color: 'teal' },
+        { title: 'AI gateway', sub: ['IAiChatClient · usage', 'OpenAI · Anthropic'], tag: '[Module("Ai")]', color: 'teal' },
         { title: 'Optional worker', sub: ['AddSmartAdminWorker', 'jobs keep running if API is down'], tag: 'optional', color: 'teal', dashed: true }] },
       { name: 'Data', idx: '04', pkg: 'SmartAdmin.SqlSugar', pkgSub: 'CodeFirst · seeds · global filters', color: 'amber', nodes: [
         { title: 'SqlSugar', sub: ['repository · CodeFirst tables', 'soft-delete / data-scope filters'], tag: 'singleton scope', color: 'teal' },

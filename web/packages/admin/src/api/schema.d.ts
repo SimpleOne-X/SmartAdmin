@@ -1667,6 +1667,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/personal/last-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 看自己上一次成功登录的信息(排除本次);首次登录返回 null。 */
+        get: operations["Personal_GetLastLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/personal/workbench/todo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 看自己的工作台待办摘要。内核默认恒空,消费方接入真实审批/工单系统后有数据。 */
+        get: operations["Personal_GetWorkbenchTodo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/personal/shortcuts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 看自己的工作台快捷方式(置顶优先 + 高频自动补位)。 */
+        get: operations["Personal_GetShortcuts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/personal/shortcuts/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 置顶一个快捷方式(幂等)。 */
+        put: operations["Personal_PinShortcut"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/personal/shortcuts/unpin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 取消置顶(幂等)。 */
+        put: operations["Personal_UnpinShortcut"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/personal/shortcuts/visit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 记一次快捷方式访问(高频自动补位用)。前端静默调用,不挂操作日志——每次导航都会打,不是有意义的审计事件。 */
+        post: operations["Personal_RecordShortcutVisit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -3358,6 +3460,13 @@ export interface components {
             /** Format: date-time */
             nextRunTime: string;
         };
+        /** @description 上一次成功登录的信息(时间/IP/UA)。 */
+        LastLoginOutput: {
+            /** Format: date-time */
+            time?: string;
+            ip?: null | string;
+            userAgent?: null | string;
+        };
         /** @description 登录入参。验证码字段在 `Security:Captcha:Enabled` 关闭时可不传(默认关)。 */
         LoginInput: {
             /** @description 登录账号 */
@@ -4876,6 +4985,28 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfIReadOnlyListOfUserShortcutItem: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["UserShortcutItem"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfJobDashboardOutput: {
             /**
              * Format: int32
@@ -4910,6 +5041,27 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["JobHandlersOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfLastLoginOutput: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["LastLoginOutput"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5715,6 +5867,27 @@ export interface components {
             message?: null | string;
             data?: null | components["schemas"]["UserProfile"];
         };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfWorkbenchTodoSummary: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["WorkbenchTodoSummary"];
+        };
         /** @description 角色新增/编辑入参(增改共用同一份字段)。 */
         RoleInput: {
             /** @description 角色名称 */
@@ -5830,6 +6003,10 @@ export interface components {
             roleId?: number | string;
             /** @description 关联的用户 Id 列表(全量替换;空列表 = 收回全部) */
             userIds?: (number | string)[];
+        };
+        /** @description 快捷方式操作的请求体——菜单路由 path 本身带斜杠,只能走 body,不能塞进路由段。 */
+        ShortcutMenuPathInput: {
+            menuPath: string;
         };
         /** @description 站点信息(匿名可读的展示类配置白名单;登录前/无配置读权限的用户也能取)。 */
         SiteInfoOutput: {
@@ -7084,6 +7261,26 @@ export interface components {
             /** @description 头像(文件签名直链 ViewUrl,直接进 img)。 */
             avatar?: null | string;
             isSuperAdmin: boolean;
+        };
+        UserShortcutItem: {
+            menuPath?: string;
+            pinned?: boolean;
+            title?: string;
+            icon?: null | string;
+        };
+        WorkbenchTodoItem: {
+            /** Format: int64 */
+            id?: number | string;
+            title?: string;
+            description?: null | string;
+            url?: null | string;
+            /** Format: date-time */
+            createTime?: string;
+        };
+        WorkbenchTodoSummary: {
+            /** Format: int32 */
+            totalCount?: number | string;
+            items?: components["schemas"]["WorkbenchTodoItem"][];
         };
     };
     responses: never;
@@ -9964,6 +10161,156 @@ export interface operations {
                 "application/json": components["schemas"]["SetDefaultModuleInput"];
                 "text/json": components["schemas"]["SetDefaultModuleInput"];
                 "application/*+json": components["schemas"]["SetDefaultModuleInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Personal_GetLastLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfLastLoginOutput"];
+                    "application/json": components["schemas"]["ResultOfLastLoginOutput"];
+                    "text/json": components["schemas"]["ResultOfLastLoginOutput"];
+                };
+            };
+        };
+    };
+    Personal_GetWorkbenchTodo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfWorkbenchTodoSummary"];
+                    "application/json": components["schemas"]["ResultOfWorkbenchTodoSummary"];
+                    "text/json": components["schemas"]["ResultOfWorkbenchTodoSummary"];
+                };
+            };
+        };
+    };
+    Personal_GetShortcuts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfUserShortcutItem"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfUserShortcutItem"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfUserShortcutItem"];
+                };
+            };
+        };
+    };
+    Personal_PinShortcut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShortcutMenuPathInput"];
+                "text/json": components["schemas"]["ShortcutMenuPathInput"];
+                "application/*+json": components["schemas"]["ShortcutMenuPathInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Personal_UnpinShortcut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShortcutMenuPathInput"];
+                "text/json": components["schemas"]["ShortcutMenuPathInput"];
+                "application/*+json": components["schemas"]["ShortcutMenuPathInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Personal_RecordShortcutVisit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShortcutMenuPathInput"];
+                "text/json": components["schemas"]["ShortcutMenuPathInput"];
+                "application/*+json": components["schemas"]["ShortcutMenuPathInput"];
             };
         };
         responses: {

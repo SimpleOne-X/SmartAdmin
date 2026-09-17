@@ -70,7 +70,7 @@ const enThemeConfig = {
     { text: 'Components', link: '/components/' },
     { text: 'Standards', link: '/standard/backend' },
     { text: 'Community', link: '/community/contributing' },
-    { text: '10.12.1', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.12.2', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/guide/': enGuideSidebar,
@@ -243,7 +243,7 @@ const zhThemeConfig = {
     { text: '组件', link: '/zh/components/' },
     { text: '规范', link: '/zh/standard/backend' },
     { text: '参与', link: '/zh/community/contributing' },
-    { text: '10.12.1', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.12.2', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/zh/guide/': zhGuideSidebar,
@@ -417,14 +417,14 @@ export default defineConfig({
     root: {
       label: 'English',
       lang: 'en',
-      description: 'The replaceable, modern admin kernel for .NET: simple, efficient, AI-assisted development. Install and go, upgrade by bumping a version.',
+      description: 'AI+ enterprise admin kernel for .NET: built-in AI gateway, AI-assisted development. Install and go, upgrade by bumping a version.',
       themeConfig: enThemeConfig,
     },
     zh: {
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: '可替换的现代企业后台管理内核：AI 辅助开发，简单高效；装上即用，升级只改版本号。',
+      description: 'AI+企业后台管理内核：内置 AI 网关，AI 辅助开发；开箱即用，升级只改版本号。',
       themeConfig: zhThemeConfig,
     },
   },

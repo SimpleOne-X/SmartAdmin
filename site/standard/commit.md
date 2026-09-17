@@ -72,4 +72,5 @@ A body is not a restatement of the diff — the diff already shows which lines c
 - Write `type` or `scope` in Chinese — that half is parsed by tooling and its vocabulary is fixed.
 - Pack unrelated changes into one commit and paper over them with a vague `type` (a `feat` and a `fix` in the same commit, say). Split them by meaning.
 - Use a `type` that never appears in this repository's history (`update`, `change`). `feat` / `fix` / `refactor` already cover the meaning; a new word only makes the history inconsistent.
+- Name a consumer project or one of its pages, in the commit body or in code comments alike. Describe a borrowed idea by its mechanism, in the most generic terms — the source doesn't need crediting.
 :::

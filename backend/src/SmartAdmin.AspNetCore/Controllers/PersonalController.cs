@@ -13,7 +13,14 @@ namespace SmartAdmin.AspNetCore;
 [ApiController]
 [Route("api/v1/personal")]
 [ActiveSession]
-public class PersonalController(IPersonalService personal, IMenuService menu, IPermissionProvider permissions, ICurrentUser currentUser, ISessionService sessions) : ControllerBase
+public class PersonalController(
+    IPersonalService personal,
+    IMenuService menu,
+    IPermissionProvider permissions,
+    ICurrentUser currentUser,
+    ISessionService sessions,
+    IWorkbenchTodoProvider todoProvider,
+    IUserShortcutService shortcuts) : ControllerBase
 {
     /// <summary>当前用户 Id;类上的 [ActiveSession] 已保证认证与会话活性,理论上不为空,兜底当令牌异常处理。</summary>
     private long CurrentUserId => currentUser.UserId ?? throw new AdminException(ErrorCode.TokenInvalid);
@@ -102,4 +109,48 @@ public class PersonalController(IPersonalService personal, IMenuService menu, IP
         await personal.SetDefaultModuleAsync(CurrentUserId, input);
         return Result<bool>.Ok(true);
     }
+
+    /// <summary>看自己上一次成功登录的信息(排除本次);首次登录返回 null。</summary>
+    [HttpGet("last-login")]
+    public async Task<Result<LastLoginOutput?>> GetLastLogin() =>
+        Result<LastLoginOutput?>.Ok(await personal.GetLastLoginAsync(CurrentUserId));
+
+    /// <summary>看自己的工作台待办摘要。内核默认恒空,消费方接入真实审批/工单系统后有数据。</summary>
+    [HttpGet("workbench/todo")]
+    public async Task<Result<WorkbenchTodoSummary>> GetWorkbenchTodo() =>
+        Result<WorkbenchTodoSummary>.Ok(await todoProvider.GetMineAsync(CurrentUserId));
+
+    /// <summary>看自己的工作台快捷方式(置顶优先 + 高频自动补位)。</summary>
+    [HttpGet("shortcuts")]
+    public async Task<Result<IReadOnlyList<UserShortcutItem>>> GetShortcuts() =>
+        Result<IReadOnlyList<UserShortcutItem>>.Ok(await shortcuts.ListMineAsync(CurrentUserId));
+
+    /// <summary>置顶一个快捷方式(幂等)。</summary>
+    [HttpPut("shortcuts/pin")]
+    [OperationLog("置顶工作台快捷方式")]
+    public async Task<Result<bool>> PinShortcut(ShortcutMenuPathInput input)
+    {
+        await shortcuts.PinAsync(CurrentUserId, input.MenuPath);
+        return Result<bool>.Ok(true);
+    }
+
+    /// <summary>取消置顶(幂等)。</summary>
+    [HttpPut("shortcuts/unpin")]
+    [OperationLog("取消置顶工作台快捷方式")]
+    public async Task<Result<bool>> UnpinShortcut(ShortcutMenuPathInput input)
+    {
+        await shortcuts.UnpinAsync(CurrentUserId, input.MenuPath);
+        return Result<bool>.Ok(true);
+    }
+
+    /// <summary>记一次快捷方式访问(高频自动补位用)。前端静默调用,不挂操作日志——每次导航都会打,不是有意义的审计事件。</summary>
+    [HttpPost("shortcuts/visit")]
+    public async Task<Result<bool>> RecordShortcutVisit(ShortcutMenuPathInput input)
+    {
+        await shortcuts.RecordVisitAsync(CurrentUserId, input.MenuPath);
+        return Result<bool>.Ok(true);
+    }
 }
+
+/// <summary>快捷方式操作的请求体——菜单路由 path 本身带斜杠,只能走 body,不能塞进路由段。</summary>
+public record ShortcutMenuPathInput(string MenuPath);

@@ -14,6 +14,13 @@
 
 ## Unreleased
 
+## 10.12.2 - 2026-09-16
+
+### Added
+
+- **业务工作台重设计:在线状态、待办摘要、可控快捷方式。** 后端新增两个扩展点:`IWorkbenchTodoProvider`(工作台待办数据源,内核不产生审批/工单数据,默认恒空,消费方接入真实业务系统后在 `AddSmartAdmin()` 之前注册自己的实现即可整体替换)与 `IUserShortcutService`(快捷方式:用户手动置顶 + 未置顶项按访问频次自动补位,跨设备持久化,对应菜单被删除或禁用后自动从列表消失,不需要联动清理)。`PersonalController` 新增 `GET /api/v1/personal/last-login`(上次成功登录信息,首次登录返回 `null`)、`GET .../workbench/todo`(待办摘要)、`GET .../shortcuts`(取列表)、`PUT .../shortcuts/pin`(置顶)、`PUT .../shortcuts/unpin`(取消置顶)、`POST .../shortcuts/visit`(记一次访问,不挂操作日志)六个端点。前端 `dashboard/biz.vue` 重做:登录时长实时显示、待办摘要卡片、`ShortcutPicker` 快捷方式选择与置顶面板。
+- **用户管理页机构树侧栏接入统一的侧栏筛选面板。** 复用 `layout.css` 既有的 `.side-filter`/`.side-row`/`.side-tree` 侧栏筛选约定与 `expandableIds` 工具(此前没有内置页面用到):加搜索过滤、展开/收起全部,选中项自动展开祖先链;机构本身的增删改仍在机构管理页,这里保持只读筛选语义。展开按钮尺寸从 14px 图标改为 18px、对齐表格工具栏的刷新/列设置按钮,机构拉取期间给树一个占位避免空树到展开完成之间的空白跳变。
+
 ## 10.12.1 - 2026-09-14
 
 ### Fixed

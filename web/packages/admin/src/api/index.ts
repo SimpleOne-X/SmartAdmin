@@ -31,6 +31,7 @@ import type {
   JobDashboard,
   JobHandlersOutput,
   JobInput,
+  LastLoginInfo,
   LoginOutput,
   ModuleInput,
   ModuleRow,
@@ -67,6 +68,8 @@ import type {
   UserDetail,
   UserItem,
   UserProfile,
+  UserShortcutItem,
+  WorkbenchTodoSummary,
 } from '#/types/api'
 import type { MenuInput, MenuNode, MenuTreeNode } from '#/types/menu'
 
@@ -466,6 +469,30 @@ export const personalApi = {
     client.PUT('/api/v1/personal/password', { body }).then(r => unwrap<boolean>(r)),
   /** 当前用户权限码集合(= 规范化路由);喂给 authStore.permissionCodes 驱动 v-auth。超管返回空集。 */
   permissions: () => client.GET('/api/v1/personal/permissions', {}).then(r => unwrap<string[]>(r)),
+  /** 上一次成功登录的信息(排除本次);首次登录返回 null。 */
+  lastLogin: () =>
+    client.GET('/api/v1/personal/last-login', {}).then(r => unwrap<LastLoginInfo | null>(r)),
+  /** 工作台待办摘要;内核默认恒空,消费方接入真实审批/工单系统后有数据。 */
+  workbenchTodo: () =>
+    client.GET('/api/v1/personal/workbench/todo', {}).then(r => unwrap<WorkbenchTodoSummary>(r)),
+  /** 工作台快捷方式(置顶优先 + 高频自动补位,已按此排好序)。 */
+  shortcuts: () =>
+    client.GET('/api/v1/personal/shortcuts', {}).then(r => unwrap<UserShortcutItem[]>(r)),
+  /** 置顶一个快捷方式(幂等)。 */
+  pinShortcut: (menuPath: string) =>
+    client
+      .PUT('/api/v1/personal/shortcuts/pin', { body: { menuPath } })
+      .then(r => unwrap<boolean>(r)),
+  /** 取消置顶(幂等)。 */
+  unpinShortcut: (menuPath: string) =>
+    client
+      .PUT('/api/v1/personal/shortcuts/unpin', { body: { menuPath } })
+      .then(r => unwrap<boolean>(r)),
+  /** 记一次快捷方式访问(高频自动补位用);失败静默,不是用户能感知的操作。 */
+  recordShortcutVisit: (menuPath: string) =>
+    client
+      .POST('/api/v1/personal/shortcuts/visit', { body: { menuPath } })
+      .then(r => unwrap<boolean>(r)),
 }
 
 // 用户管理:CRUD + 启停 / 重置密码 + xlsx 导入导出。
