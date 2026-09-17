@@ -187,16 +187,32 @@ public static class SqlSugarSetup
                 // 输出只走 ILogger。**绝不能把这两条写进 SysOpLog**:那条 INSERT 自己又会触发一次
                 // OnLogExecuted / 可能再失败触发 OnError —— 直接递归。日志的归日志(诊断),审计的归审计(sys_op_log)。
 
+                var threshold = policy.SlowSqlMillis;
+
                 // 失败的 SQL:没有这一条,线上查询一炸就只剩驱动层异常 —— 没有语句、没有参数,复现无从谈起。
                 // 不给关的开关:失败却打不出 SQL,等于没有可运维性。主库与副库一律挂上。
+                //
+                // SqlSugar 的 OnLogExecuted(慢 SQL 统计)只在成功路径触发,异常分支永远不会调用它
+                // (AdoProvider 每个执行方法的 catch 块都只调 ExecuteErrorEvent→OnError,从不再调
+                // ExecuteAfter→OnLogExecuted)——越慢越可能超时的语句,反而越拿不到慢 SQL 记录,这正是
+                // GitHub #14 报的问题。ExecuteErrorEvent 在回调前会先 this.AfterTime = DateTime.Now,
+                // BeforeTime 则是本次调用开头 ExecuteBefore 打的,所以此刻 client.Ado.SqlExecutionTime
+                // 与 OnLogExecuted 里读到的是同一本账,可以在这里补上同样的阈值判断。
                 client.Aop.OnError = ex =>
-                    sqlLog.LogError(ex, "SQL 执行失败[{ConfigId}]: {Sql} | 参数: {Parameters}",
-                        configId, ex.Sql, FormatSqlParameters(ex.Parametres));
+                {
+                    var millis = client.Ado.SqlExecutionTime.TotalMilliseconds;
+                    var slow = threshold > 0 && millis >= threshold;
+                    if (slow)
+                        sqlLog.LogError(ex, "慢 SQL(执行失败)[{ConfigId}]({Elapsed}ms ≥ {Threshold}ms): {Sql} | 参数: {Parameters}",
+                            configId, (long)millis, threshold, ex.Sql, FormatSqlParameters(ex.Parametres));
+                    else
+                        sqlLog.LogError(ex, "SQL 执行失败[{ConfigId}]: {Sql} | 参数: {Parameters}",
+                            configId, ex.Sql, FormatSqlParameters(ex.Parametres));
+                };
 
                 // 执行完成:慢 SQL 告警(生产)与控制台全量日志(开发)共用这一个钩子。
                 // 合成一个而不是两个:SqlSugar 的 OnLogExecuted 是单个委托,分开挂后者会把前者覆盖掉;
                 // 而且同一条语句该只出现一次——两处各打一遍,慢语句在日志里就是重影。
-                var threshold = policy.SlowSqlMillis;
                 if (threshold > 0 || sqlLogOptions.Enabled)
                 {
                     client.Aop.OnLogExecuted = (sql, pars) =>

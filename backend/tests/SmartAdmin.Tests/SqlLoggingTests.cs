@@ -86,6 +86,29 @@ public class SqlLoggingTests
     }
 
     [Fact]
+    public void 慢SQL_超时失败也照样告警()
+    {
+        // GitHub #14:SqlSugar 的 OnLogExecuted(慢 SQL 统计)只在成功路径触发,查询一超时/一失败,
+        // 耗时越过阈值的语句反而记不到慢 SQL —— 这里断言 OnError 路径把同样的阈值判断补上了。
+        var log = new CaptureLoggerProvider();
+        using var f = new AdminAppFactory
+        {
+            Settings = new Dictionary<string, string?> { ["SmartAdmin:Database:SlowSqlMillis"] = "1" },
+            Overrides = s => s.AddSingleton<ILoggerProvider>(log),
+        };
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+
+        for (var i = 0; i < 50; i++)
+            Assert.ThrowsAny<Exception>(() => db.Ado.ExecuteCommand("SELECT 1 FROM smart_no_such_table"));
+
+        Assert.Contains(log.Entries, e =>
+            e.Level == LogLevel.Error
+            && e.Text.Contains("慢 SQL", StringComparison.Ordinal)
+            && e.Text.Contains("smart_no_such_table", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void 慢SQL_默认阈值下不刷屏()
     {
         var log = new CaptureLoggerProvider();
