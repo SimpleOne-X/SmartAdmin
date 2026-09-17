@@ -46,21 +46,38 @@ $env:NUGET_PACKAGES = Join-Path $work 'nuget'
 
 function Check($msg) { if ($LASTEXITCODE -ne 0) { throw "FAILED: $msg (exit $LASTEXITCODE)" } }
 
+# NuGet restore extracts/writes many small files in quick succession; a real-time antivirus scanner
+# (Windows Defender and others) intermittently locks one just long enough for MSBuild/NuGet to hit
+# "The process cannot access the file because it is being used by another process" -- transient, not
+# a real failure (observed on a dev box with Defender real-time protection on; CI runners don't have
+# this problem, but a local run shouldn't need a human to notice and re-invoke the whole script).
+function Invoke-WithRetry([scriptblock]$Action, [string]$Msg, [scriptblock]$BeforeRetry, [int]$MaxAttempts = 3) {
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        & $Action
+        if ($LASTEXITCODE -eq 0) { return }
+        if ($attempt -eq $MaxAttempts) { throw "FAILED: $Msg (exit $LASTEXITCODE) after $MaxAttempts attempts" }
+        Write-Host "-- $Msg failed (exit $LASTEXITCODE), attempt $attempt/$MaxAttempts -- retrying in 3s (likely a transient file lock, e.g. AV real-time scanning)"
+        Start-Sleep -Seconds 3
+        if ($BeforeRetry) { & $BeforeRetry }
+    }
+}
+
 try {
     Write-Host "== pack core packages -> $feed"
-    dotnet pack "$repo/backend/SmartAdmin.slnx" -c Release -o $feed -p:Version=$ver; Check 'pack core'
+    Invoke-WithRetry -Msg 'pack core' -Action { dotnet pack "$repo/backend/SmartAdmin.slnx" -c Release -o $feed -p:Version=$ver }
 
     Write-Host "== pack template package -> $feed"
-    dotnet pack "$repo/templates/SmartAdmin.Templates.csproj" -c Release -o $feed -p:Version=$ver; Check 'pack template'
+    Invoke-WithRetry -Msg 'pack template' -Action { dotnet pack "$repo/templates/SmartAdmin.Templates.csproj" -c Release -o $feed -p:Version=$ver }
 
     Write-Host "== install template"
-    dotnet new install (Join-Path $feed "SmartAdmin.Templates.$ver.nupkg") --force; Check 'template install'
+    Invoke-WithRetry -Msg 'template install' -Action { dotnet new install (Join-Path $feed "SmartAdmin.Templates.$ver.nupkg") --force }
 
     try {
         # No --SmartPkgVersion or --skipRestore on purpose: this is the consumer's first command, verbatim.
         # Passing it would paper over the packaged default, which is exactly the thing that has to be right.
         Write-Host "== scaffold smart-app -> $out (template default version + automatic restore)"
-        dotnet new smart-app -n $name -o $out; Check 'dotnet new + automatic restore'
+        Invoke-WithRetry -Msg 'dotnet new + automatic restore' -Action { dotnet new smart-app -n $name -o $out } `
+            -BeforeRetry { if (Test-Path $out) { Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue } }
 
         $assets = Join-Path $out 'obj/project.assets.json'
         if (-not (Test-Path $assets)) {
@@ -142,7 +159,7 @@ try {
         # inherits a red build. It restores on its own (the template post-action only restores the host project),
         # so this also proves the wildcard ProjectReference survives the sourceName rename.
         Write-Host "== run the scaffolded test project (WebApplicationFactory CRUD smoke)"
-        dotnet test (Join-Path $out 'Tests') -c Release; Check 'dotnet test (scaffolded Tests project)'
+        Invoke-WithRetry -Msg 'dotnet test (scaffolded Tests project)' -Action { dotnet test (Join-Path $out 'Tests') -c Release }
 
         # A .gitignore is a security control here, not tidiness: without it the consumer's first "git add ."
         # commits data/dev-jwt.key, and anyone with the repo can mint super-admin tokens.
