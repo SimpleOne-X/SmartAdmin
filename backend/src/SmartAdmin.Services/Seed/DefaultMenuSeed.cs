@@ -166,8 +166,10 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 387, ParentId = 380, Type = MenuType.Button, Title = "缓存-清配置", Permission = "POST:/api/v1/sys/cache/flush-config", Sort = 3, Enabled = true },
         new SysMenu { Id = 388, ParentId = 380, Type = MenuType.Button, Title = "缓存-重建门户菜单", Permission = "POST:/api/v1/sys/cache/rebuild-portal", Sort = 4, Enabled = true },
 
-        // 接口文档页(Scalar API 文档 UI,匿名访问 /scalar)。权限码由 ScalarAccessAuthorizationHandler 实施,生产启用时强制;菜单行承载其权限码。
-        new SysMenu { Id = 390, ParentId = 300, Type = MenuType.Menu, Title = "接口文档", Permission = "GET:/openapi/{documentname}.json", Path = "/system/api-docs", Component = "system/api-docs/index", Icon = "ph:book-open-text-duotone", Sort = 9, Enabled = true, Visible = true },
+        // 接口文档页(Scalar API 文档 UI,匿名访问 /scalar)。页面行只管可见性,能力照本文件的通例挂到按钮上:
+        // 权限码落在真正有数据的 /openapi/{documentname}.json 上,由 ScalarAccessAuthorizationHandler 实施(生产显式开启时强制)。
+        new SysMenu { Id = 390, ParentId = 300, Type = MenuType.Menu, Title = "接口文档", Permission = "", Path = "/system/api-docs", Component = "system/api-docs/index", Icon = "ph:book-open-text-duotone", Sort = 9, Enabled = true, Visible = true },
+        new SysMenu { Id = 391, ParentId = 390, Type = MenuType.Button, Title = "接口文档-查看契约", Permission = "GET:/openapi/{documentname}.json", Sort = 1, Enabled = true },
 
         // ═══ 4xx 任务调度 ═══════════════════════════════════════════
         // 目录名用「任务调度」而非「定时任务」——后者与子菜单重名,菜单树里读着像套娃。
