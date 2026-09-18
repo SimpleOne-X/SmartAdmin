@@ -1509,6 +1509,15 @@ export default {
       job: '定时任务',
     },
   },
+  // 接口文档入口页
+  apiDocs: {
+    title: '接口文档',
+    openedHint: '接口文档已在新标签页打开。',
+    fallbackLink: '没有自动打开?点此手动打开',
+    copyToken: '复制我的接口令牌',
+    copyTokenHint: '在新标签页里点右上角 Authentication → Bearer,粘贴这里复制的令牌',
+    tokenCopied: '已复制',
+  },
   // 用户导入导出:列标题 + 文件名(与 UserImportProfile / UserExportProfile 的列一一对应)
   userExport: {
     account: '登录账号',

@@ -1540,6 +1540,16 @@ export default {
       job: 'Jobs',
     },
   },
+  // API docs entry page
+  apiDocs: {
+    title: 'API Docs',
+    openedHint: 'API docs opened in a new tab.',
+    fallbackLink: "Didn't open automatically? Click here",
+    copyToken: 'Copy my API token',
+    copyTokenHint:
+      'In the new tab, click Authentication → Bearer in the top right and paste the token you just copied',
+    tokenCopied: 'Copied',
+  },
   // User import / export: column titles + file names (mirror UserImportProfile / UserExportProfile columns)
   userExport: {
     account: 'Account',
