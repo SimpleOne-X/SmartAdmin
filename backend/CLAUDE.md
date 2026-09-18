@@ -37,4 +37,4 @@ Each layer's DI wiring is a `*Setup.cs` extension (`SqlSugarSetup`, `ServicesSet
 
 Config lives under the `SmartAdmin` section of `appsettings.json`, bound to `SmartAdminOptions` (see `Core/Options/*`). `appsettings.Development.json` is gitignored (holds credentials) — copy from the `.example`.
 
-Health/OpenAPI: `/health` (liveness), `/health/ready` (DB+cache), and `/openapi/v1.json` (dev-only, the frontend's contract source).
+Health/OpenAPI: `/health` (liveness), `/health/ready` (DB+cache), `/openapi/v1.json` (the frontend's contract source) and the Scalar docs UI at `/scalar`. The last two are dev-only **unless** `SmartAdmin:Scalar:EnabledInProduction` is set — with it on, `/scalar` stays anonymous and the contract JSON is gated by the `ScalarAccess` policy (permission code `GET:/openapi/{documentname}.json`); see `site/zh/backend/api-docs.md` and `docs/adr/0010-scalar-api-docs-in-core.md`.

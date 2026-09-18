@@ -43,6 +43,8 @@ playwright-report/
 .omc/
 .omx/
 .codegraph/
+# Subagent-driven-development 的任务账本/评审包草稿（每个 plan 一份，git-ignored scratch）
+.superpowers/
 # 本地 Claude Code 钩子脚本：提交的 .claude/settings.json 只有权限白名单，没有引用任何钩子，
 # 所以此目录是各人自己的。
 # 如果将来需要所有协作者都获得某个钩子（如"版本号只能写入 Directory.Packages.props"），

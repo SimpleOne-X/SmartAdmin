@@ -60,7 +60,7 @@ The data layer only provides `IRepository<>` and entity base classes; the concre
 :::
 
 ::: warning Runtime dependency red line
-The core packages' only third-party runtime dependencies are SqlSugarCore + Microsoft.*. Capabilities that are usually pulled from third-party libraries — logging, snowflake IDs (typically Serilog, Yitter.IdGenerator) — instead ship as single-file implementations inside the kernel (`FileLoggerProvider`, `SnowflakeIdGenerator`), precisely to hold this line.
+The core packages' only third-party runtime dependencies are SqlSugarCore + Microsoft.*. Capabilities that are usually pulled from third-party libraries — logging, snowflake IDs (typically Serilog, Yitter.IdGenerator) — instead ship as single-file implementations inside the kernel (`FileLoggerProvider`, `SnowflakeIdGenerator`), precisely to hold this line. The one documented exception is `Scalar.AspNetCore` (zero transitive dependencies, UI rendering only) for the built-in API docs UI.
 :::
 
 ## One `*Setup.cs` per layer

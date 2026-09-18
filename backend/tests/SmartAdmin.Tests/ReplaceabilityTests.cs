@@ -1,7 +1,10 @@
 using System.Net;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using SqlSugar;
 using SmartAdmin.AspNetCore;
 using SmartAdmin.Core;
@@ -224,6 +227,40 @@ public class ReplaceabilityTests
         using var sp = services.BuildServiceProvider();
         using var scope = sp.CreateScope();
         Assert.IsType<FakeRepository<SysUser>>(scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>());
+    }
+
+    /// <summary>
+    /// ScalarAccess 授权策略的「<b>前置</b>注册即胜出」。
+    /// <para><c>AuthorizationOptions.AddPolicy</c> 是对策略字典的直接写入,后写覆盖先写——照搬
+    /// <c>AddAuthorizationBuilder().AddPolicy(...)</c> 会让内核悄悄盖掉消费者自建的同名策略,
+    /// 正好与本仓其余一切的 TryAdd 契约相反。内核那边改用判空的 <c>Configure</c> 委托来保证这一条。</para>
+    /// <para>变异:把 SmartAdminSetup 里那段 Configure 的判空去掉 → 内核策略覆盖消费者的 → 本条红。</para>
+    /// </summary>
+    [Fact]
+    public void PreRegisteredScalarAccessPolicy_ShouldWinOverBuiltIn()
+    {
+        var consumer = BareContainer();
+        // 消费者的前置注册(在 AddSmartAdmin 之前)
+        consumer.AddAuthorizationBuilder()
+            .AddPolicy(ScalarAccessRequirement.PolicyName, p => p.RequireAssertion(_ => true));
+        RegisterKernel(consumer);
+
+        using var sp = consumer.BuildServiceProvider();
+        var policy = sp.GetRequiredService<IOptions<AuthorizationOptions>>().Value
+            .GetPolicy(ScalarAccessRequirement.PolicyName);
+
+        Assert.NotNull(policy);
+        Assert.DoesNotContain(policy.Requirements, r => r is ScalarAccessRequirement);
+        Assert.Contains(policy.Requirements, r => r is AssertionRequirement);
+
+        // 对照组:消费者不管的时候,内核仍然要把自己的策略装上,否则生产网关直接没了
+        var kernelOnly = BareContainer();
+        RegisterKernel(kernelOnly);
+        using var kernelSp = kernelOnly.BuildServiceProvider();
+        var builtIn = kernelSp.GetRequiredService<IOptions<AuthorizationOptions>>().Value
+            .GetPolicy(ScalarAccessRequirement.PolicyName);
+        Assert.NotNull(builtIn);
+        Assert.Contains(builtIn.Requirements, r => r is ScalarAccessRequirement);
     }
 
     /// <summary>裸容器 + 装配链所需的最小前置(日志),不含任何被测扩展点。</summary>

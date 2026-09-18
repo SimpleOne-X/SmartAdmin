@@ -60,7 +60,7 @@ SmartAdmin.Core
 :::
 
 ::: warning 运行时依赖红线
-核心包的第三方运行时依赖只有 SqlSugarCore + Microsoft.*。日志、雪花 ID 这些通常靠三方库（Serilog、Yitter.IdGenerator）的能力，内核都自带了单文件实现（`FileLoggerProvider`、`SnowflakeIdGenerator`），就是为了守住这条线。
+核心包的第三方运行时依赖只有 SqlSugarCore + Microsoft.*。日志、雪花 ID 这些通常靠三方库（Serilog、Yitter.IdGenerator）的能力，内核都自带了单文件实现（`FileLoggerProvider`、`SnowflakeIdGenerator`），就是为了守住这条线。红线开了一个具名例外：`Scalar.AspNetCore`（内置 API 文档 UI 用它，零传递依赖，只做页面渲染）。
 :::
 
 ## 每层一个 `*Setup.cs`

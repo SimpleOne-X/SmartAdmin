@@ -33,7 +33,7 @@ AspNetCore  宿主集成：AddSmartAdmin/MapSmartAdmin、JWT、过滤器、内�
 SmartAdmin  元包：只引用 AspNetCore，消费方装它即拉全栈。
 ```
 
-- 运行时依赖**仅** SqlSugarCore + Microsoft.\*，核心包不得引入其它第三方框架。
+- 运行时依赖**仅** SqlSugarCore + Microsoft.\*，核心包不得引入其它第三方框架(唯一例外:`Scalar.AspNetCore`，零依赖的内置 API 文档 UI，见 `docs/superpowers/specs/2026-09-17-scalar-api-docs-design.md`)。
 - 每层装配是一个 `*Setup.cs` 扩展方法：`SqlSugarSetup` → `ServicesSetup` → `SmartAdminSetup`（组合根，`AddSmartAdmin` 逐层向下调）。
 
 ### 1.2 可替换性契约（`ReplaceabilityTests` 锁定）

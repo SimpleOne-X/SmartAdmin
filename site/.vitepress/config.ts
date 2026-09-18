@@ -70,7 +70,7 @@ const enThemeConfig = {
     { text: 'Components', link: '/components/' },
     { text: 'Standards', link: '/standard/backend' },
     { text: 'Community', link: '/community/contributing' },
-    { text: '10.13.1', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.14.0', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/guide/': enGuideSidebar,
@@ -102,6 +102,7 @@ const enThemeConfig = {
         text: 'Ops',
         items: [
           { text: 'Ops Endpoints', link: '/backend/ops' },
+          { text: 'API Docs', link: '/backend/api-docs' },
           { text: 'Tracing & Metrics', link: '/backend/observability' },
           { text: 'SQL Console Log', link: '/backend/sql-log' },
         ],
@@ -243,7 +244,7 @@ const zhThemeConfig = {
     { text: '组件', link: '/zh/components/' },
     { text: '规范', link: '/zh/standard/backend' },
     { text: '参与', link: '/zh/community/contributing' },
-    { text: '10.13.1', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.14.0', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/zh/guide/': zhGuideSidebar,
@@ -275,6 +276,7 @@ const zhThemeConfig = {
         text: '运维',
         items: [
           { text: '运维端点', link: '/zh/backend/ops' },
+          { text: '接口文档', link: '/zh/backend/api-docs' },
           { text: '追踪与指标', link: '/zh/backend/observability' },
           { text: 'SQL 控制台日志', link: '/zh/backend/sql-log' },
         ],

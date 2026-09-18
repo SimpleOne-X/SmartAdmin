@@ -32,6 +32,7 @@ const SEED_ICONS = [
   'ph:clipboard-text-duotone',
   'ph:clock-countdown-duotone',
   'ph:database-duotone',
+  'ph:file-code-duotone',
   'ph:files-duotone',
   'ph:folder-duotone',
   'ph:gauge-duotone',

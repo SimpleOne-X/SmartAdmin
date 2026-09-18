@@ -3,7 +3,7 @@
 > A distributable admin-system kernel for ASP.NET Core. Install one NuGet package, call `AddSmartAdmin` and `MapSmartAdmin` in `Program.cs`, and get authentication, RBAC, multi-org data permissions, dictionaries, config, logging and uploads — every service interface-backed, `virtual`, and registered with `TryAdd` so any piece can be swapped without forking.
 
 Repository: https://github.com/SmartCode-X/SmartAdmin
-Runtime dependencies of the core packages: SqlSugarCore plus Microsoft.* only.
+Runtime dependencies of the core packages: SqlSugarCore plus Microsoft.* only (one documented exception: the zero-dependency Scalar.AspNetCore, used for the built-in API docs UI).
 Databases: SQLite, MySQL, SQL Server, PostgreSQL. Frontend: the `smart-admin-web` npm package (Vue 3 + Naive UI), versioned in lockstep with the NuGet packages; the thin app template in `web/template` is the starting point a consumer pulls with degit and owns.
 
 The docs are bilingual. English lives at the root path and is a translation; Simplified Chinese lives under `/zh/` and is the source of truth for wording. Both sides carry the same facts and the same section structure.
@@ -50,6 +50,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [Event Bus](https://smartcode-x.github.io/SmartAdmin/backend/event-bus)
 - [Realtime Notifications](https://smartcode-x.github.io/SmartAdmin/backend/realtime)
 - [Ops Endpoints](https://smartcode-x.github.io/SmartAdmin/backend/ops)
+- [API Docs (Scalar)](https://smartcode-x.github.io/SmartAdmin/backend/api-docs)
 - [Tracing and Metrics](https://smartcode-x.github.io/SmartAdmin/backend/observability)
 - [SQL Console Log](https://smartcode-x.github.io/SmartAdmin/backend/sql-log)
 
@@ -115,6 +116,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [事件总线](https://smartcode-x.github.io/SmartAdmin/zh/backend/event-bus)
 - [实时通知](https://smartcode-x.github.io/SmartAdmin/zh/backend/realtime)
 - [运维端点](https://smartcode-x.github.io/SmartAdmin/zh/backend/ops)
+- [接口文档（Scalar）](https://smartcode-x.github.io/SmartAdmin/zh/backend/api-docs)
 - [追踪与指标](https://smartcode-x.github.io/SmartAdmin/zh/backend/observability)
 - [SQL 控制台日志](https://smartcode-x.github.io/SmartAdmin/zh/backend/sql-log)
 - [项目结构与启动](https://smartcode-x.github.io/SmartAdmin/zh/frontend/structure)

@@ -118,7 +118,7 @@ curl -i https://<你的域名>/api/v1/ping # 401:API 路由通了(该端点需�
 
 再打开前端登录一次，能拿到菜单就说明 JWT 密钥、数据库、种子数据全对上了。
 
-最后提一个容易误报的点。`/openapi/v1.json` 在生产返回 404 是预期行为，不是部署漏了什么。它只在 Development 环境挂载，是给前端 `npm run gen:api` 用的契约源，不是生产端点。
+最后提一个容易误报的点。`/openapi/v1.json` 在生产返回 404 是预期行为，不是部署漏了什么。它默认只在 Development 环境挂载，是给前端 `npm run gen:api` 用的契约源。线上确实要查接口，把 `SmartAdmin:Scalar:EnabledInProduction` 打开，它和 `/scalar` 一起挂上来，契约 JSON 也随之收紧到权限码，见[接口文档](/zh/backend/api-docs)。
 
 ## 版本回滚
 

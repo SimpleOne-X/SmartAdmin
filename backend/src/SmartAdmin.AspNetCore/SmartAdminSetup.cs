@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
@@ -226,6 +228,17 @@ public static class SmartAdminSetup
         // 默认拒绝走 MapControllers().RequireAuthorization()(见 MapSmartAdmin),只作用于真实控制器端点、
         // 尊重 [AllowAnonymous],且不影响未匹配路由的 404(FallbackPolicy 会把 404 劫持成 401,故不用它)。
         services.AddAuthorization();
+        // ScalarAccess:生产环境显式开启时网关 /openapi/{documentName}.json(见 MapSmartAdmin、
+        // ScalarAccessAuthorizationHandler)。
+        // 这里刻意不用 AddAuthorizationBuilder().AddPolicy():它是对策略字典的直接写入,后注册者覆盖前者,
+        // 与本仓"消费者前置注册即胜出"的 TryAdd 契约(ReplaceabilityTests)正好相反。Configure 委托按注册
+        // 顺序执行,所以在 AddSmartAdmin() 之前自建同名策略的消费者,其委托先跑,这里判空后就不再覆盖。
+        services.Configure<AuthorizationOptions>(o =>
+        {
+            if (o.GetPolicy(ScalarAccessRequirement.PolicyName) is null)
+                o.AddPolicy(ScalarAccessRequirement.PolicyName, p => p.AddRequirements(new ScalarAccessRequirement()));
+        });
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, ScalarAccessAuthorizationHandler>());
 
         // ── 外部登录 / SSO:按 appsettings 装内置 OIDC provider(零新包);未配则整段跳过 ──
         services.AddExternalAuthProviders(options.ExternalAuth);
@@ -303,6 +316,8 @@ public static class SmartAdminSetup
         {
             o.AddOperationTransformer<SmartAdminOperationTransformer>();
             o.AddDocumentTransformer<ErrorCodeDocumentTransformer>();
+            // Bearer securityScheme:Scalar 的 Authentication 面板据此渲染,没有它生产环境的令牌粘贴流程没有入口
+            o.AddDocumentTransformer<ScalarBearerSecuritySchemeTransformer>();
         });
         services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("db", tags: ["ready"])
@@ -321,7 +336,8 @@ public static class SmartAdminSetup
 
     /// <summary>
     /// 映射 SmartAdmin 的端点:内置控制器路由(默认拒绝,<c>[AllowAnonymous]</c> 显式豁免)、
-    /// 实时通知 Hub(若已开启)、开发环境的 OpenAPI 文档、健康检查。
+    /// 实时通知 Hub(若已开启)、API 文档 UI 与 OpenAPI 契约(开发环境始终暴露,生产环境按
+    /// <c>SmartAdmin:Scalar:EnabledInProduction</c> 显式开启)、健康检查。
     /// </summary>
     public static IEndpointRouteBuilder MapSmartAdmin(this IEndpointRouteBuilder endpoints)
     {
@@ -336,11 +352,25 @@ public static class SmartAdminSetup
         if (realtime?.Enabled == true)
             endpoints.MapHub<SmartHub>(realtime.HubPath);
 
-        // OpenAPI 文档:仅开发环境暴露(生产匿名开放会泄露完整 API 契约作侦察面);
-        // 匿名可访问(否则被上面的 FallbackPolicy 挡成 401)。契约源本就是开发期前端代码生成用。
+        // OpenAPI 文档 UI(Scalar)与契约 JSON:开发环境(含 env is null 兜底)全部匿名暴露,契约源本就是
+        // 开发期前端代码生成用。生产环境默认都不挂载(避免匿名开放泄露完整 API 契约作侦察面);显式开启
+        // (SmartAdmin:Scalar:EnabledInProduction)时,/scalar 壳页面(无契约数据)仍匿名,只有
+        // /openapi/{documentName}.json 收紧到 ScalarAccess 策略——鉴权边界划在"壳"与"数据"之间,见 spec。
         var env = endpoints.ServiceProvider.GetService<IHostEnvironment>();
-        if (env is null || env.IsDevelopment())
-            endpoints.MapOpenApi().AllowAnonymous();
+        var scalarOptions = endpoints.ServiceProvider.GetService<AdminScalarOptions>();
+        var isDevLike = env is null || env.IsDevelopment();
+        if (isDevLike || scalarOptions?.EnabledInProduction == true)
+        {
+            // DisableDefaultFonts:Scalar 默认从自家 CDN 拉 Inter / JetBrains Mono。本内核连图标都自己做子集
+            // 就是为了页面加载不出网(内网、离线部署照常可用),这里放任一次 CDN 往返等于把那条线自己破了。
+            endpoints.MapScalarApiReference("/scalar", o => o.DisableDefaultFonts()).AllowAnonymous();
+
+            var openApiBuilder = endpoints.MapOpenApi();
+            if (isDevLike)
+                openApiBuilder.AllowAnonymous();
+            else
+                openApiBuilder.RequireAuthorization(ScalarAccessRequirement.PolicyName);
+        }
 
         // 健康检查:/health 只报进程存活(不跑依赖检查),/health/ready 探 DB/缓存就绪。
         // 匿名(供编排层 liveness/readiness 探针),不受默认拒绝约束。

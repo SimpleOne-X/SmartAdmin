@@ -14,6 +14,7 @@
     <!-- 跟随 2.x 线上的最新补丁,不上 3.x:AspNetCore.OpenApi 10.0.11 声明的区间就是 [2.7.5, 3.0.0),3.x 的 IOpenApiMediaType 把 Schema/Example 做成只读,OpenApi 转换器编不过。
          下界 2.7.5 同时是 CVE 修补线(NU1903 GHSA-v5pm-xwqc-g5wc,漏洞范围 2.0.0-preview.11~2.7.4) -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.4" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
     <!-- DI/Logging 抽象与其余 Microsoft.Extensions.* 一起走补丁线:StackExchange.Redis 3.1.31 传递依赖 Logging.Abstractions,
          集中版本落后会报 NU1605 降级;补丁级上抬对既有项目安全 -->

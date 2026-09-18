@@ -9,7 +9,7 @@ The kernel ships as NuGet packages, so a consumer can replace any part without t
 ## Where things go across layers
 
 - Dependencies point downward only; skipping layers is forbidden: `Core` (contracts) ← `SqlSugar` (data) ← `Services` (domain + entities) ← `AspNetCore` (host) ← `SmartAdmin` (meta-package). Decide which layer new code belongs to first. See [architecture layering](/backend/architecture) for the full picture.
-- Runtime dependencies are **only** SqlSugarCore + Microsoft.\* — core packages pull in no other third-party framework.
+- Runtime dependencies are **only** SqlSugarCore + Microsoft.\* — core packages pull in no other third-party framework, except `Scalar.AspNetCore` (zero dependencies, the built-in API docs UI).
 - Entities live in the `Services` layer, not the `SqlSugar` layer.
 - Each layer's wiring is centralized in one `*Setup.cs` (`SqlSugarSetup` → `ServicesSetup` → `SmartAdminSetup`, the composition root) — no scattered registrations.
 

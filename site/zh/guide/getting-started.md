@@ -30,11 +30,11 @@ curl http://localhost:5100/health
 # 就绪探针:数据库 + 缓存都连通才返回 Healthy
 curl http://localhost:5100/health/ready
 
-# OpenAPI 契约,仅 Development 环境挂载,是前端 gen:api 的数据源
+# OpenAPI 契约,默认仅 Development 环境挂载,是前端 gen:api 的数据源
 curl http://localhost:5100/openapi/v1.json
 ```
 
-前两个应该返回 `Healthy`。`/openapi/v1.json` 返回一大坨 JSON，后面生成前端类型要用到它。这个端点生产环境不挂载，线上请求它拿到 404 是预期行为，不是漏配。
+前两个应该返回 `Healthy`。`/openapi/v1.json` 返回一大坨 JSON，后面生成前端类型要用到它。这个端点默认不在生产环境挂载，线上请求它拿到 404 是预期行为，不是漏配。线上也想要它，[接口文档](/zh/backend/api-docs)那页讲怎么开、开了之后归谁看。
 
 ## 登录，调第一个接口
 
@@ -114,7 +114,7 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-`AddSmartAdmin` 负责绑配置，把 JWT、RBAC、数据权限、日志这些服务全注册上。`MapSmartAdmin` 负责挂路由、健康检查，还有 OpenAPI 文档，后者只在 dev 下挂。默认走 SQLite，零配置就能跑。
+`AddSmartAdmin` 负责绑配置，把 JWT、RBAC、数据权限、日志这些服务全注册上。`MapSmartAdmin` 负责挂路由、健康检查，还有 OpenAPI 契约与 `/scalar` 文档 UI，后两者默认只在 dev 下挂。默认走 SQLite，零配置就能跑。
 
 想跨副本共享会话和缓存，也就是多实例部署，得额外装 `SmartAdmin.Caching.Redis`，并且在 `AddSmartAdmin` **之前**调 `AddSmartAdminRedisCache(builder.Configuration)`。为什么要抢在前面？内核的可替换服务都用 `TryAdd` 注册，谁先注册谁赢。晚于 `AddSmartAdmin`，就抢不过内置的进程内缓存了。没配 `Cache:Provider=Redis` 的时候这行是空操作，单实例开发不受影响。
 

@@ -11,7 +11,7 @@
 ## API 契约
 
 ::: warning schema.d.ts 是生成产物，禁手改
-`schema.d.ts` 由后端 OpenAPI 生成，命令是 `npm run gen:api`。生成时**后端必须正在运行**，不然拉不到 `/openapi/v1.json`。手改它，下次一生成就被覆盖。要调类型，只能改后端接口或 DTO，再重新生成。生产环境为什么不挂这个端点，见 [常见问题](/zh/faq)。
+`schema.d.ts` 由后端 OpenAPI 生成，命令是 `npm run gen:api`。生成时**后端必须正在运行**，不然拉不到 `/openapi/v1.json`。手改它，下次一生成就被覆盖。要调类型，只能改后端接口或 DTO，再重新生成。这个端点生产环境默认不挂，要开它、开了归谁看，见[接口文档](/zh/backend/api-docs)。
 :::
 
 - API 调用集中在 `api/` 层按域分组（内置的在内核包 `api/index.ts`：`authApi`/`userApi`/`moduleApi`/`menuApi` …；你自己的模块新建 `src/api/<域>.ts`，`client` 用应用的 `./client`，`unwrap`/`pageParams`/`toPage` 从 `smart-admin-web` 导入），每个方法形如 `client.X(...).then(r => unwrap<T>(r))`，不在视图里裸调 `client`。

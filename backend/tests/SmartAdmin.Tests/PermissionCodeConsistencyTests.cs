@@ -63,6 +63,11 @@ public class PermissionCodeConsistencyTests
                 }
             }
         }
+
+        // ScalarAccess policy 端点(Minimal API,不挂 [RolePermission],鉴权走独立的
+        // ScalarAccessAuthorizationHandler)。见 docs/superpowers/specs/2026-09-17-scalar-api-docs-design.md。
+        codes.Add(PermissionCode.Build("GET", "/openapi/{documentname}.json"));
+
         return codes;
     }
 
