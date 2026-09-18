@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
@@ -225,7 +227,11 @@ public static class SmartAdminSetup
             });
         // 默认拒绝走 MapControllers().RequireAuthorization()(见 MapSmartAdmin),只作用于真实控制器端点、
         // 尊重 [AllowAnonymous],且不影响未匹配路由的 404(FallbackPolicy 会把 404 劫持成 401,故不用它)。
-        services.AddAuthorization();
+        // ScalarAccess:生产环境显式开启时网关 /openapi/{documentName}.json(见 MapSmartAdmin、
+        // ScalarAccessAuthorizationHandler)。
+        services.AddAuthorizationBuilder()
+            .AddPolicy(ScalarAccessRequirement.PolicyName, p => p.AddRequirements(new ScalarAccessRequirement()));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, ScalarAccessAuthorizationHandler>());
 
         // ── 外部登录 / SSO:按 appsettings 装内置 OIDC provider(零新包);未配则整段跳过 ──
         services.AddExternalAuthProviders(options.ExternalAuth);
@@ -336,11 +342,23 @@ public static class SmartAdminSetup
         if (realtime?.Enabled == true)
             endpoints.MapHub<SmartHub>(realtime.HubPath);
 
-        // OpenAPI 文档:仅开发环境暴露(生产匿名开放会泄露完整 API 契约作侦察面);
-        // 匿名可访问(否则被上面的 FallbackPolicy 挡成 401)。契约源本就是开发期前端代码生成用。
+        // OpenAPI 文档 UI(Scalar)与契约 JSON:开发环境(含 env is null 兜底)全部匿名暴露,契约源本就是
+        // 开发期前端代码生成用。生产环境默认都不挂载(避免匿名开放泄露完整 API 契约作侦察面);显式开启
+        // (SmartAdmin:Scalar:EnabledInProduction)时,/scalar 壳页面(无契约数据)仍匿名,只有
+        // /openapi/{documentName}.json 收紧到 ScalarAccess 策略——鉴权边界划在"壳"与"数据"之间,见 spec。
         var env = endpoints.ServiceProvider.GetService<IHostEnvironment>();
-        if (env is null || env.IsDevelopment())
-            endpoints.MapOpenApi().AllowAnonymous();
+        var scalarOptions = endpoints.ServiceProvider.GetService<AdminScalarOptions>();
+        var isDevLike = env is null || env.IsDevelopment();
+        if (isDevLike || scalarOptions?.EnabledInProduction == true)
+        {
+            endpoints.MapScalarApiReference("/scalar").AllowAnonymous();
+
+            var openApiBuilder = endpoints.MapOpenApi();
+            if (isDevLike)
+                openApiBuilder.AllowAnonymous();
+            else
+                openApiBuilder.RequireAuthorization(ScalarAccessRequirement.PolicyName);
+        }
 
         // 健康检查:/health 只报进程存活(不跑依赖检查),/health/ready 探 DB/缓存就绪。
         // 匿名(供编排层 liveness/readiness 探针),不受默认拒绝约束。

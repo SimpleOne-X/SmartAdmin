@@ -16,5 +16,9 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- 直接引用抬到修补版,压过 AspNetCore.OpenApi 传递来的 2.0.0(消 NU1903 高危) -->
     <PackageReference Include="Microsoft.OpenApi" />
+    <!-- 内置 Scalar API 文档 UI:核心包"只依赖 SqlSugarCore + Microsoft.*"这条红线目前唯一的第三方例外。
+         零传递依赖、UI 资源本地内嵌、只做端点映射渲染,不参与序列化/存储/鉴权等核心逻辑。
+         见 docs/superpowers/specs/2026-09-17-scalar-api-docs-design.md -->
+    <PackageReference Include="Scalar.AspNetCore" />
   </ItemGroup>
 </Project>
