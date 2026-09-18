@@ -14,6 +14,10 @@
 
 ## Unreleased
 
+### Added
+
+- **内置 Scalar API 文档 UI。** 装了包就有：开发环境 `/scalar` 零配置可用，渲染的正是前端 `npm run gen:api` 取数的那份 `/openapi/v1.json`。生产环境两个端点默认都不挂载，经 `SmartAdmin:Scalar:EnabledInProduction` 显式开启后，壳页面 `/scalar` 仍匿名（它不含契约数据），契约 JSON 收紧到权限码 `GET:/openapi/{documentname}.json`，在「角色-菜单」里把内置的「接口文档」授给谁、谁才取得到。后台同步新增「接口文档」入口页：打开文档并复制当前登录态的接口令牌，粘进 Scalar 自带的 Authentication 面板即可调试。`Scalar.AspNetCore` 是核心包「只依赖 SqlSugarCore + Microsoft.\*」这条红线上唯一的具名例外（零传递依赖、只做 UI 渲染），取舍见 [ADR 0010](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/adr/0010-scalar-api-docs-in-core.md)，用法见[文档](https://smartcode-x.github.io/SmartAdmin/zh/backend/api-docs)。
+
 ## 10.13.1 - 2026-09-17
 
 ### Added
