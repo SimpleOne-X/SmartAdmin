@@ -31,12 +31,7 @@ public class ScalarAccessAuthorizationHandler : AuthorizationHandler<ScalarAcces
         var user = context.User;
         if (user.Identity?.IsAuthenticated != true) return;
 
-        var sessionId = user.FindFirstValue(TokenClaimNames.SESSION_ID);
-        if (!string.IsNullOrEmpty(sessionId))
-        {
-            var sessions = httpContext.RequestServices.GetRequiredService<ISessionService>();
-            if (!await sessions.IsActiveAsync(sessionId)) return;
-        }
+        if (!await IsSessionActiveAsync(user, httpContext)) return;
 
         if (user.HasClaim(TokenClaimNames.SUPER_ADMIN, "true"))
         {
@@ -51,5 +46,18 @@ public class ScalarAccessAuthorizationHandler : AuthorizationHandler<ScalarAcces
         var codes = await httpContext.RequestServices.GetRequiredService<IPermissionProvider>()
             .GetPermissionCodesAsync(userId, httpContext.RequestAborted);
         if (codes.Contains(code)) context.Succeed(requirement);
+    }
+
+    /// <summary>会话仍活跃(强退/登出后即时失效),规则与 <see cref="RolePermissionAttribute.IsSessionActiveAsync"/> 一致:
+    /// 经 API Key 认证的机器主体没有会话,直接视为活跃;否则没有 sid 视为会话已失效。</summary>
+    private static async Task<bool> IsSessionActiveAsync(ClaimsPrincipal user, HttpContext httpContext)
+    {
+        if (user.HasClaim(c => c.Type == TokenClaimNames.API_KEY)) return true;
+
+        var sessionId = user.FindFirstValue(TokenClaimNames.SESSION_ID);
+        if (string.IsNullOrEmpty(sessionId)) return false;
+
+        var sessions = httpContext.RequestServices.GetRequiredService<ISessionService>();
+        return await sessions.IsActiveAsync(sessionId);
     }
 }
