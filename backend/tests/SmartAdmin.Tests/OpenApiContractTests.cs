@@ -165,6 +165,29 @@ public class OpenApiContractTests
         Assert.Equal("common.success", keys[values.IndexOf(0)]);
         Assert.All(keys.Where((_, i) => values[i] != 0), k => Assert.StartsWith("error.", k!, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// 契约里必须声明 Bearer securityScheme,并逐条挂到 operation 上。
+    /// <para>Scalar 的 Authentication 面板是按契约里声明的方案渲染的:一个方案都不声明 = 面板空白 =
+    /// 生产环境开启后管理员没有地方粘贴令牌,整条 ScalarAccess 网关流程没有入口(已实测过这个失败形态)。</para>
+    /// </summary>
+    [Fact]
+    public async Task 契约声明了Bearer安全方案()
+    {
+        using var f = new AdminAppFactory { DisabledModules = [] };
+        var doc = await DocumentAsync(f);
+
+        var bearer = doc.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer");
+        Assert.Equal("http", bearer.GetProperty("type").GetString());
+        Assert.Equal("bearer", bearer.GetProperty("scheme").GetString());
+        Assert.Equal("JWT", bearer.GetProperty("bearerFormat").GetString());
+
+        // 光声明不够:operation 上没有 security,面板里填了令牌也不会被带上
+        var withBearer = Operations(doc).Count(o =>
+            o.TryGetProperty("security", out var s)
+            && s.EnumerateArray().Any(r => r.TryGetProperty("Bearer", out _)));
+        Assert.True(withBearer > 50, $"只有 {withBearer} 个操作挂了 Bearer 安全要求,内置端点远不止这些");
+    }
 }
 
 /// <summary>

@@ -309,6 +309,8 @@ public static class SmartAdminSetup
         {
             o.AddOperationTransformer<SmartAdminOperationTransformer>();
             o.AddDocumentTransformer<ErrorCodeDocumentTransformer>();
+            // Bearer securityScheme:Scalar 的 Authentication 面板据此渲染,没有它生产环境的令牌粘贴流程没有入口
+            o.AddDocumentTransformer<ScalarBearerSecuritySchemeTransformer>();
         });
         services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("db", tags: ["ready"])
