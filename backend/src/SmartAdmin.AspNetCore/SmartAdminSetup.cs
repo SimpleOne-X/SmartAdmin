@@ -227,10 +227,17 @@ public static class SmartAdminSetup
             });
         // 默认拒绝走 MapControllers().RequireAuthorization()(见 MapSmartAdmin),只作用于真实控制器端点、
         // 尊重 [AllowAnonymous],且不影响未匹配路由的 404(FallbackPolicy 会把 404 劫持成 401,故不用它)。
+        services.AddAuthorization();
         // ScalarAccess:生产环境显式开启时网关 /openapi/{documentName}.json(见 MapSmartAdmin、
         // ScalarAccessAuthorizationHandler)。
-        services.AddAuthorizationBuilder()
-            .AddPolicy(ScalarAccessRequirement.PolicyName, p => p.AddRequirements(new ScalarAccessRequirement()));
+        // 这里刻意不用 AddAuthorizationBuilder().AddPolicy():它是对策略字典的直接写入,后注册者覆盖前者,
+        // 与本仓"消费者前置注册即胜出"的 TryAdd 契约(ReplaceabilityTests)正好相反。Configure 委托按注册
+        // 顺序执行,所以在 AddSmartAdmin() 之前自建同名策略的消费者,其委托先跑,这里判空后就不再覆盖。
+        services.Configure<AuthorizationOptions>(o =>
+        {
+            if (o.GetPolicy(ScalarAccessRequirement.PolicyName) is null)
+                o.AddPolicy(ScalarAccessRequirement.PolicyName, p => p.AddRequirements(new ScalarAccessRequirement()));
+        });
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, ScalarAccessAuthorizationHandler>());
 
         // ── 外部登录 / SSO:按 appsettings 装内置 OIDC provider(零新包);未配则整段跳过 ──
