@@ -122,14 +122,15 @@ SmartAdmin.Testing         ──→ Microsoft.AspNetCore.Mvc.Testing + 各方�
 | `SmartAdmin.Core` | `Result<T>` 统一返回模型、`ErrorCode` + 业务异常体系(`AdminException`)、全部扩展点接口(§5)、Options(§3.2)、雪花 ID 与 `WorkerIdLease`、Channels 事件总线、分页模型、常用扩展方法。**实体基类不在这里**——它们带 SqlSugar 特性,住在 `SmartAdmin.SqlSugar` | 无第三方(只有 Microsoft.* 扩展抽象) |
 | `SmartAdmin.SqlSugar` | `SugarClient` 单例封装、`IRepository<T>` 仓储、**实体基类**(`PrimaryId`/`AuditEntity`/`BaseEntity`/`OrgAuditEntity`/`DataEntity`)、CodeFirst 建表、种子数据机制(`ISeedData`)、多库配置解析(`AdditionalDatabases` 多 ConfigId 开口；读写分离策略仍由消费方自定，见站点「配置多数据库」) | Core + SqlSugarCore |
 | `SmartAdmin.Services` | 全部领域服务及其 DTO:认证、RBAC、用户/机构/职位/角色/菜单、字典、系统配置、操作/登录日志、本地上传、在线用户;内置种子数据 | SqlSugar |
-| `SmartAdmin.AspNetCore` | 控制器(按模块)、`AddSmartAdmin()`/`MapSmartAdmin()`、JWT 接入、统一返回过滤器、全局异常处理、权限/数据范围过滤器、验证码端点、内置 OpenAPI 文档 | Services + ASP.NET Core 框架引用 |
+| `SmartAdmin.AspNetCore` | 控制器(按模块)、`AddSmartAdmin()`/`MapSmartAdmin()`、JWT 接入、统一返回过滤器、全局异常处理、权限/数据范围过滤器、验证码端点、内置 OpenAPI 文档与 Scalar 文档 UI | Services + ASP.NET Core 框架引用 |
 | `SmartAdmin`(元包) | 仅 PackageReference,一键全装 | AspNetCore |
 | `SmartAdmin.Caching.Redis`(可选) | `RedisCacheProvider`,把默认 `MemoryCacheProvider` 换成 Redis | Core + StackExchange.Redis |
 | `SmartAdmin.Excel`(可选) | xlsx 导入向导与导出的 codec 实现 | Core + MiniExcel + DocumentFormat.OpenXml |
 | `SmartAdmin.Auth.*`(可选) | 企业微信 / 钉钉 / GitHub / 个人微信外部登录 provider | Core + Microsoft.Extensions.Http |
 | `SmartAdmin.Testing`(测试支撑,非运行时) | 每测试一库的 `TestDb`(SQLite/MySQL/SqlServer/PostgreSQL,模板库克隆加速)、`AdminAppFactory<TEntryPoint>`(一次性库 + 固定超管密码与 JWT 密钥的 `WebApplicationFactory`)、HTTP 信封小助手;供内核自身与消费方/卫星包测试项目共用,不进元包 `SmartAdmin` | Microsoft.AspNetCore.Mvc.Testing + 各方言测试驱动,不引用任何内核项目 |
 | `SmartAdmin.Mqtt`(规划中) | MQTT 接入(通知推送等) | Core + MQTT 客户端库 |
-| `SmartAdmin.Scalar`(规划中) | `MapSmartAdminApiDocs()`,开发期 API 调试 UI | AspNetCore |
+
+> 上表原本还有一行 `SmartAdmin.Scalar`(规划中,`MapSmartAdminApiDocs()`),已删:API 文档 UI 改为直接内置在 `SmartAdmin.AspNetCore`,`Scalar.AspNetCore` 成为核心包依赖红线的具名例外。这条被否的可选包方案与否掉的理由见 [`adr/0010-scalar-api-docs-in-core.md`](adr/0010-scalar-api-docs-in-core.md)。
 
 ### 2.3 依赖处置(已定稿)
 
@@ -525,7 +526,7 @@ builder.Services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DeviceS
 - **禁硬编码字符串**(全局约定):缓存键集中在 `Core/CacheKeys.cs`;权限码就是规范化路由,不设字符串常量;面向用户的文案走 i18n 资源 + 错误码枚举;魔法数走枚举。代码评审把"裸字面量字符串"当味道。
 - **操作日志**:`[OperationLog]` 特性(标题可取常量/资源键)+ 过滤器自动记录(入参/耗时/结果码),敏感字段脱敏配置。
 - **缓存策略**:用户权限/菜单/字典/配置进缓存,变更即失效(事件总线广播),目标是登录后接口 10-30ms。
-- **OpenAPI**:内置 `AddOpenApi()`,Development 环境挂 `/openapi/v1.json`,是前端 `npm run gen:api` 的契约源;`release` workflow 把 `openapi.json` 随 GitHub Release 一起发布。
+- **OpenAPI**:内置 `AddOpenApi()`,Development 环境挂 `/openapi/v1.json`,是前端 `npm run gen:api` 的契约源;生产环境默认不挂,显式开 `SmartAdmin:Scalar:EnabledInProduction` 后挂载并收紧到权限码(连同 `/scalar` 文档 UI,见 `adr/0010-scalar-api-docs-in-core.md`);`release` workflow 把 `openapi.json` 随 GitHub Release 一起发布。
 
 ---
 

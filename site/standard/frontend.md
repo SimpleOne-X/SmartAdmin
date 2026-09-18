@@ -11,7 +11,7 @@ Check your work against this list before writing a page or wiring up an API. The
 ## API contract
 
 ::: warning schema.d.ts is a generated artifact — don't hand-edit it
-`schema.d.ts` is generated from the backend's OpenAPI (`npm run gen:api`, which needs **the backend running** to fetch `/openapi/v1.json`); hand-edits are overwritten the next time you generate — to change a type, change the backend endpoint/DTO and regenerate. This endpoint isn't mounted in production; see the [FAQ](/faq) for details.
+`schema.d.ts` is generated from the backend's OpenAPI (`npm run gen:api`, which needs **the backend running** to fetch `/openapi/v1.json`); hand-edits are overwritten the next time you generate — to change a type, change the backend endpoint/DTO and regenerate. By default this endpoint isn't mounted in production; [API Docs](/backend/api-docs) covers how to turn it on and who gets to see it.
 :::
 
 - API calls are centralized in the `api/` layer, grouped by domain (`authApi`/`userApi`/`moduleApi`/`menuApi`… in the kernel package's `api/index.ts`; your own modules in `src/api/<domain>.ts`, using the app's `./client` and importing `unwrap`/`pageParams`/`toPage` from `smart-admin-web`); each method is shaped like `client.X(...).then(r => unwrap<T>(r))` — never call `client` bare in a view.

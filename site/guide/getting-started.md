@@ -30,11 +30,11 @@ curl http://localhost:5100/health
 # Readiness probe: returns Healthy only if both DB and cache are reachable
 curl http://localhost:5100/health/ready
 
-# OpenAPI contract, mounted only in Development, the source for the frontend's gen:api
+# OpenAPI contract, mounted only in Development by default, the source for the frontend's gen:api
 curl http://localhost:5100/openapi/v1.json
 ```
 
-The first two should return `Healthy`. `/openapi/v1.json` returns a big blob of JSON that you'll use later to generate the frontend types; this endpoint isn't mounted in production, so a 404 against it there is expected behavior, not a missing setting.
+The first two should return `Healthy`. `/openapi/v1.json` returns a big blob of JSON that you'll use later to generate the frontend types; by default this endpoint isn't mounted in production, so a 404 against it there is expected behavior, not a missing setting. If you want it on a live server too, [API Docs](/backend/api-docs) covers how to turn it on and who gets to see it afterwards.
 
 ## Log in and call your first endpoint
 
@@ -114,7 +114,7 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-`AddSmartAdmin` binds configuration and registers all the services — JWT, RBAC, data permissions, logging, and the rest; `MapSmartAdmin` mounts the routes, health checks, and (in dev) the OpenAPI docs. It runs on the default SQLite, zero-config.
+`AddSmartAdmin` binds configuration and registers all the services — JWT, RBAC, data permissions, logging, and the rest; `MapSmartAdmin` mounts the routes, health checks, and — in dev by default — the OpenAPI contract plus the `/scalar` docs UI. It runs on the default SQLite, zero-config.
 
 To share sessions and cache across replicas (multi-instance deployment), also install `SmartAdmin.Caching.Redis` and call `AddSmartAdminRedisCache(builder.Configuration)` **before** `AddSmartAdmin` — the kernel's replaceable services are registered with `TryAdd`, first registration wins, so anything after `AddSmartAdmin` can't outrun the built-in in-process cache. Without `Cache:Provider=Redis` configured, that line is a no-op, so single-instance development is unaffected.
 

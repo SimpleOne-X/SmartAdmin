@@ -118,7 +118,7 @@ curl -i https://<your-domain>/api/v1/ping # 401: API routing works (this endpoin
 
 Then open the frontend and log in once; getting a menu back means the JWT secret, database, and seed data all line up.
 
-One last easy false alarm: a 404 on `/openapi/v1.json` in production is expected behavior, not something missing from the deployment. It's only mounted in the Development environment as the contract source for the frontend's `npm run gen:api`, not a production endpoint.
+One last easy false alarm: a 404 on `/openapi/v1.json` in production is expected behavior, not something missing from the deployment. By default it's only mounted in the Development environment, as the contract source for the frontend's `npm run gen:api`. If you do need to look up an endpoint on a live server, turn on `SmartAdmin:Scalar:EnabledInProduction` — it mounts alongside `/scalar`, with the contract JSON then gated by a permission code. See [API Docs](/backend/api-docs).
 
 ## Rolling back
 
