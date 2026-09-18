@@ -166,6 +166,9 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 387, ParentId = 380, Type = MenuType.Button, Title = "缓存-清配置", Permission = "POST:/api/v1/sys/cache/flush-config", Sort = 3, Enabled = true },
         new SysMenu { Id = 388, ParentId = 380, Type = MenuType.Button, Title = "缓存-重建门户菜单", Permission = "POST:/api/v1/sys/cache/rebuild-portal", Sort = 4, Enabled = true },
 
+        // 接口文档页(Scalar API 文档 UI,匿名访问 /scalar;权限码仅用于菜单可见性与权限管理页的权限分组)。
+        new SysMenu { Id = 390, ParentId = 300, Type = MenuType.Menu, Title = "接口文档", Permission = "GET:/openapi/{documentname}.json", Path = "/system/api-docs", Component = "system/api-docs/index", Icon = "ph:book-open-text-duotone", Sort = 9, Enabled = true, Visible = true },
+
         // ═══ 4xx 任务调度 ═══════════════════════════════════════════
         // 目录名用「任务调度」而非「定时任务」——后者与子菜单重名,菜单树里读着像套娃。
         new SysMenu { Id = 400, ParentId = 0, Type = MenuType.Catalog, Title = "任务调度", Permission = "", Icon = "ph:timer-duotone", Sort = 3, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
