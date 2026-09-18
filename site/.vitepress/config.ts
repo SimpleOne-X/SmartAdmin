@@ -102,6 +102,7 @@ const enThemeConfig = {
         text: 'Ops',
         items: [
           { text: 'Ops Endpoints', link: '/backend/ops' },
+          { text: 'API Docs', link: '/backend/api-docs' },
           { text: 'Tracing & Metrics', link: '/backend/observability' },
           { text: 'SQL Console Log', link: '/backend/sql-log' },
         ],
@@ -275,6 +276,7 @@ const zhThemeConfig = {
         text: '运维',
         items: [
           { text: '运维端点', link: '/zh/backend/ops' },
+          { text: '接口文档', link: '/zh/backend/api-docs' },
           { text: '追踪与指标', link: '/zh/backend/observability' },
           { text: 'SQL 控制台日志', link: '/zh/backend/sql-log' },
         ],

@@ -50,6 +50,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [Event Bus](https://smartcode-x.github.io/SmartAdmin/backend/event-bus)
 - [Realtime Notifications](https://smartcode-x.github.io/SmartAdmin/backend/realtime)
 - [Ops Endpoints](https://smartcode-x.github.io/SmartAdmin/backend/ops)
+- [API Docs (Scalar)](https://smartcode-x.github.io/SmartAdmin/backend/api-docs)
 - [Tracing and Metrics](https://smartcode-x.github.io/SmartAdmin/backend/observability)
 - [SQL Console Log](https://smartcode-x.github.io/SmartAdmin/backend/sql-log)
 
@@ -115,6 +116,7 @@ The docs are bilingual. English lives at the root path and is a translation; Sim
 - [事件总线](https://smartcode-x.github.io/SmartAdmin/zh/backend/event-bus)
 - [实时通知](https://smartcode-x.github.io/SmartAdmin/zh/backend/realtime)
 - [运维端点](https://smartcode-x.github.io/SmartAdmin/zh/backend/ops)
+- [接口文档（Scalar）](https://smartcode-x.github.io/SmartAdmin/zh/backend/api-docs)
 - [追踪与指标](https://smartcode-x.github.io/SmartAdmin/zh/backend/observability)
 - [SQL 控制台日志](https://smartcode-x.github.io/SmartAdmin/zh/backend/sql-log)
 - [项目结构与启动](https://smartcode-x.github.io/SmartAdmin/zh/frontend/structure)
