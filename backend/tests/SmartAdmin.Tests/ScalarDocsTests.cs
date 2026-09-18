@@ -69,8 +69,13 @@ public class ScalarDocsTests
         using var f = new AdminAppFactory();   // 默认 Development
         var c = f.CreateClient();
 
-        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/scalar")).StatusCode);
+        var shell = await c.GetAsync("/scalar");
+        Assert.Equal(HttpStatusCode.OK, shell.StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/openapi/v1.json")).StatusCode);
+
+        // 壳页面必须关掉 Scalar 默认字体:那是一次 CDN 往返,而本内核连图标都自己做子集就是为了不出网。
+        // 断言盯的是 Scalar 渲染进壳页面的配置键(DisableDefaultFonts 的落点),删掉那个调用本条即红。
+        Assert.Contains("\"withDefaultFonts\":false", await shell.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -336,7 +336,8 @@ public static class SmartAdminSetup
 
     /// <summary>
     /// 映射 SmartAdmin 的端点:内置控制器路由(默认拒绝,<c>[AllowAnonymous]</c> 显式豁免)、
-    /// 实时通知 Hub(若已开启)、开发环境的 OpenAPI 文档、健康检查。
+    /// 实时通知 Hub(若已开启)、API 文档 UI 与 OpenAPI 契约(开发环境始终暴露,生产环境按
+    /// <c>SmartAdmin:Scalar:EnabledInProduction</c> 显式开启)、健康检查。
     /// </summary>
     public static IEndpointRouteBuilder MapSmartAdmin(this IEndpointRouteBuilder endpoints)
     {
@@ -360,7 +361,9 @@ public static class SmartAdminSetup
         var isDevLike = env is null || env.IsDevelopment();
         if (isDevLike || scalarOptions?.EnabledInProduction == true)
         {
-            endpoints.MapScalarApiReference("/scalar").AllowAnonymous();
+            // DisableDefaultFonts:Scalar 默认从自家 CDN 拉 Inter / JetBrains Mono。本内核连图标都自己做子集
+            // 就是为了页面加载不出网(内网、离线部署照常可用),这里放任一次 CDN 往返等于把那条线自己破了。
+            endpoints.MapScalarApiReference("/scalar", o => o.DisableDefaultFonts()).AllowAnonymous();
 
             var openApiBuilder = endpoints.MapOpenApi();
             if (isDevLike)
