@@ -168,7 +168,7 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
 
         // 接口文档页(Scalar API 文档 UI,匿名访问 /scalar)。页面行只管可见性,能力照本文件的通例挂到按钮上:
         // 权限码落在真正有数据的 /openapi/{documentname}.json 上,由 ScalarAccessAuthorizationHandler 实施(生产显式开启时强制)。
-        new SysMenu { Id = 390, ParentId = 300, Type = MenuType.Menu, Title = "接口文档", Permission = "", Path = "/system/api-docs", Component = "system/api-docs/index", Icon = "ph:book-open-text-duotone", Sort = 9, Enabled = true, Visible = true },
+        new SysMenu { Id = 390, ParentId = 300, Type = MenuType.Menu, Title = "接口文档", Permission = "", Path = "/system/api-docs", Component = "system/api-docs/index", Icon = "ph:file-code-duotone", Sort = 9, Enabled = true, Visible = true },
         new SysMenu { Id = 391, ParentId = 390, Type = MenuType.Button, Title = "接口文档-查看契约", Permission = "GET:/openapi/{documentname}.json", Sort = 1, Enabled = true },
 
         // ═══ 4xx 任务调度 ═══════════════════════════════════════════
