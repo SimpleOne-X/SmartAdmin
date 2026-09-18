@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-SmartAdmin is a **distributable admin-system kernel**, not an application. It ships as NuGet packages so a consumer gets a full enterprise back-office (auth, RBAC, multi-org data permissions, dict/config, logging, uploads) by calling `AddSmartAdmin` / `MapSmartAdmin` in `Program.cs`. The overriding design constraint is **replaceability**: every service is interface-backed, `virtual`, and registered via `TryAdd` so a consumer can swap any piece without forking. Runtime deps are **only SqlSugarCore + Microsoft.\*** — no other third-party frameworks in the core packages.
+SmartAdmin is a **distributable admin-system kernel**, not an application. It ships as NuGet packages so a consumer gets a full enterprise back-office (auth, RBAC, multi-org data permissions, dict/config, logging, uploads) by calling `AddSmartAdmin` / `MapSmartAdmin` in `Program.cs`. The overriding design constraint is **replaceability**: every service is interface-backed, `virtual`, and registered via `TryAdd` so a consumer can swap any piece without forking. Runtime deps are **only SqlSugarCore + Microsoft.\*** — no other third-party frameworks in the core packages, with one narrow, documented exception: `Scalar.AspNetCore` (zero transitive dependencies, UI rendering only, no business logic) is built into `SmartAdmin.AspNetCore` for the kernel's built-in API docs UI — see `docs/superpowers/specs/2026-09-17-scalar-api-docs-design.md`.
 
 The repo holds the kernel's two halves, released together under one version number:
 - `backend/` — the .NET 10 kernel (the product) + sample host + tests.

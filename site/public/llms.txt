@@ -3,7 +3,7 @@
 > A distributable admin-system kernel for ASP.NET Core. Install one NuGet package, call `AddSmartAdmin` and `MapSmartAdmin` in `Program.cs`, and get authentication, RBAC, multi-org data permissions, dictionaries, config, logging and uploads — every service interface-backed, `virtual`, and registered with `TryAdd` so any piece can be swapped without forking.
 
 Repository: https://github.com/SmartCode-X/SmartAdmin
-Runtime dependencies of the core packages: SqlSugarCore plus Microsoft.* only.
+Runtime dependencies of the core packages: SqlSugarCore plus Microsoft.* only (one documented exception: the zero-dependency Scalar.AspNetCore, used for the built-in API docs UI).
 Databases: SQLite, MySQL, SQL Server, PostgreSQL. Frontend: the `smart-admin-web` npm package (Vue 3 + Naive UI), versioned in lockstep with the NuGet packages; the thin app template in `web/template` is the starting point a consumer pulls with degit and owns.
 
 The docs are bilingual. English lives at the root path and is a translation; Simplified Chinese lives under `/zh/` and is the source of truth for wording. Both sides carry the same facts and the same section structure.

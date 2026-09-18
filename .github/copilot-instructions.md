@@ -17,7 +17,7 @@ SmartAdmin 是**可分发的后台内核**,不是一个应用。后端以 NuGet 
 2. **权限码就是规范化路由**(`GET:/api/v1/ping`)。代码里**不存在**权限字符串常量,授权是在角色-菜单界面上勾路由。别发明 `"sys:user:add"` 这类串。
 3. **错误只返数字码,不返文案。** 抛 `AdminException(ErrorCode.X)`;文案由前端按 `msgKey` 翻译。分段见 `backend/src/SmartAdmin.Core/ErrorCode.cs`,消费者自己的码从 60000 起。
 4. **审计字段由 AOP 自动填**(`Id`、`CreateTime`、`CreateUserId`、`CreateOrgId`、`UpdateTime`、`UpdateUserId`)。业务代码只写业务字段。`CreateOrgId` 是数据范围的锚点,手工绕开它会让机构范围查询返回 0 行。
-5. **包依赖只能向下**:Core → SqlSugar → Services → AspNetCore。核心四包的运行时依赖只允许 SqlSugarCore + `Microsoft.*`,引第三方就得下沉到可选包。实体住在 `SmartAdmin.Services`,实体基类住在 `SmartAdmin.SqlSugar`,**不在 Core**。
+5. **包依赖只能向下**:Core → SqlSugar → Services → AspNetCore。核心四包的运行时依赖只允许 SqlSugarCore + `Microsoft.*`,引第三方就得下沉到可选包(唯一例外:`Scalar.AspNetCore`,零传递依赖的内置 API 文档 UI,直接进 `SmartAdmin.AspNetCore`,见 spec)。实体住在 `SmartAdmin.Services`,实体基类住在 `SmartAdmin.SqlSugar`,**不在 Core**。
 6. **依赖版本集中在 `backend/Directory.Packages.props`**,不要往各个 `.csproj` 里写 `Version`。
 
 ## 前端

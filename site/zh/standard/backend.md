@@ -9,7 +9,7 @@
 ## 分层落点
 
 - 依赖只能自上而下，越层禁止：`Core`（契约）← `SqlSugar`（数据）← `Services`（领域+实体）← `AspNetCore`（宿主）← `SmartAdmin`（元包）。新增代码先想清楚落哪层；拿不准就回 [架构分层](/zh/backend/architecture) 看全景。
-- 运行时依赖只有 SqlSugarCore + Microsoft.\*，核心包不引入其它第三方框架。
+- 运行时依赖只有 SqlSugarCore + Microsoft.\*，核心包不引入其它第三方框架，唯一例外是零依赖的 `Scalar.AspNetCore`（内置 API 文档 UI）。
 - 实体放 `Services` 层，不放 `SqlSugar` 层。
 - 每层装配集中在一个 `*Setup.cs`（`SqlSugarSetup` → `ServicesSetup` → `SmartAdminSetup` 组合根），不散落注册。
 

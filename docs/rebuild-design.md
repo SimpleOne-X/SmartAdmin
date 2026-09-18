@@ -94,7 +94,7 @@ SmartAdmin/                        # 单仓
 
 ```
 SmartAdmin(元包,无代码)
- └─→ SmartAdmin.AspNetCore
+ └─→ SmartAdmin.AspNetCore ──→ Scalar.AspNetCore(零依赖,内置 API 文档 UI;核心包内唯一的第三方例外)
       └─→ SmartAdmin.Services
            ├─→ SmartAdmin.SqlSugar ──→ SqlSugarCore(唯一重量级第三方)
            └─→ SmartAdmin.Core(零第三方依赖:只有 Microsoft.* 扩展抽象)
@@ -109,8 +109,8 @@ SmartAdmin.Auth.WeCom / .DingTalk / .GitHub / .WeChat ──→ 仅 Core + Micro
 SmartAdmin.Testing         ──→ Microsoft.AspNetCore.Mvc.Testing + 各方言测试驱动(Sqlite/MySqlConnector/SqlClient/Npgsql);不引用任何内核项目,供内核与消费方/卫星包测试项目共用
 ```
 
-> **核心四包(Core / SqlSugar / Services / AspNetCore)运行时依赖只允许 `SqlSugarCore` + `Microsoft.*`。**
-> 一切其余要么自写、要么拷源、要么下沉到可选包 —— 具体逐库处置见 §2.3。
+> **核心四包(Core / SqlSugar / Services / AspNetCore)运行时依赖只允许 `SqlSugarCore` + `Microsoft.*`,外加一个显式例外:`Scalar.AspNetCore`(零传递依赖,只做 API 文档 UI 渲染)。**
+> 一切其余要么自写、要么拷源、要么下沉到可选包 —— 具体逐库处置见 §2.3。例外理由与范围见 `docs/superpowers/specs/2026-09-17-scalar-api-docs-design.md`。
 >
 > 对象映射不引库,analyzer 形式的 Mapperly 也不引:手写 `new Entity { … }` 赋值就够了,
 > 还少一层"新加的字段忘了映射"的静默故障。核心四包连 analyzer 级的第三方依赖也没有。
