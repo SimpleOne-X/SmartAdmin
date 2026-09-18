@@ -33,7 +33,7 @@ Getting the token into Scalar is a manual step: click Authentication in the top 
 
 ## Authorization: who gets the code
 
-The permission code hangs off the built-in "接口文档" (API Docs) menu entry, under the "系统运维" (System Ops) directory. Grant that menu entry to a role in role management and everyone in that role can fetch the contract JSON in production; a super admin bypasses permission codes and can always fetch it. Someone without the code can still open `/scalar` — they just can't pull the contract, so the page stays empty.
+The permission code sits on the "查看契约" (View contract) button under the built-in "系统运维 → 接口文档" (System Ops → API Docs) menu entry — the page row itself only controls visibility, following this repo's rule that capabilities hang off buttons. Grant that button to a role in role management and everyone in that role can fetch the contract JSON in production; a super admin bypasses permission codes and can always fetch it. Someone granted the page but not the button can still open `/scalar` — they just can't pull the contract, so the page stays empty.
 
 Not logged in gives a 401; logged in without the code gives a 403. The two status codes stay distinct, so troubleshooting never comes down to guessing whether the token failed to paste or the permission was never granted.
 
