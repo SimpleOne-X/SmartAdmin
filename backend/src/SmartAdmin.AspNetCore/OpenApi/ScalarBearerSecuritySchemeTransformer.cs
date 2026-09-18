@@ -17,15 +17,13 @@ internal sealed class ScalarBearerSecuritySchemeTransformer : IOpenApiDocumentTr
         OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {
         document.Components ??= new OpenApiComponents();
-        document.Components.SecuritySchemes = new Dictionary<string, IOpenApiSecurityScheme>(StringComparer.Ordinal)
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>(StringComparer.Ordinal);
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
         {
-            ["Bearer"] = new OpenApiSecurityScheme
-            {
-                Type = SecuritySchemeType.Http,
-                Scheme = "bearer",
-                In = ParameterLocation.Header,
-                BearerFormat = "JWT",
-            },
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            In = ParameterLocation.Header,
+            BearerFormat = "JWT",
         };
 
         // 逐个 operation 挂安全要求:文档级 security 只是默认值,逐条声明才是 Scalar/生成器都认的形状。
