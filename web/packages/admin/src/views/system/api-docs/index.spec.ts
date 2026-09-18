@@ -109,6 +109,7 @@ describe('ApiDocsPage', () => {
     // 模拟"关闭标签页再重新打开":销毁这个 keep-alive 实例。asyncPage 定义对象本身没有被重建,
     // 它内部的 resolved 缓存留着——这就是 namedPage() 在真实路由里的行为。
     session1.unmount()
+    apps.splice(apps.indexOf(session1), 1)
     openSpy.mockClear()
 
     // 第二次全新挂载(关闭标签页重开 / F5 / 切模块再切回都是这种场景)。
