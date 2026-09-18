@@ -61,6 +61,7 @@ export default defineConfig(({ command }) => {
       proxy: {
         '/api': { target: apiTarget, changeOrigin: true },
         '/openapi': { target: apiTarget, changeOrigin: true },
+        '/scalar': { target: apiTarget, changeOrigin: true }, // 内核内置的 API 文档 UI;接口文档入口页新开标签页打的就是它
         '/hub': { target: apiTarget, changeOrigin: true, ws: true }, // SignalR 实时通知 Hub;ws:true 反代 WebSocket 升级
       },
     },
@@ -94,6 +95,7 @@ export default defineConfig(({ command }) => {
       proxy: {
         '/api': { target: apiTarget, changeOrigin: true },
         '/openapi': { target: apiTarget, changeOrigin: true },
+        '/scalar': { target: apiTarget, changeOrigin: true },
         '/hub': { target: apiTarget, changeOrigin: true, ws: true },
       },
     },
