@@ -16,7 +16,7 @@ Start the backend and `/scalar` is already sitting there in the browser — ever
 
 While it's off, production doesn't map `/scalar` or `/openapi/{documentName}.json` at all: requesting either one gets a 404, not a 401. Development never consults this switch — both endpoints are always there and both are anonymous, because the contract is the source `npm run gen:api` reads, and putting a gate in front of it on a dev machine only adds a login step to code generation.
 
-The route is fixed at `/scalar`; there's no prefix setting. It lives on the backend side, so when the frontend and backend are deployed separately, the address to open is the backend's, not the frontend site's.
+The route is fixed at `/scalar`; there's no prefix setting. It lives on the backend side: in development the frontend template's Vite proxy forwards it through verbatim, and when the frontend and backend are deployed separately, the address to open is the backend's, not the frontend site's.
 
 ## Authentication: the shell and the data are different things
 
