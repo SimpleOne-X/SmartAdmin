@@ -52,6 +52,9 @@ public class SmartAdminOptions
     /// <summary>AI 网关配置(调用超时/HTTP 围栏,见 <see cref="AdminAiOptions"/>;对应 <c>SmartAdmin:Ai</c>。厂商/Key/模型落库,不在此节)</summary>
     public AdminAiOptions Ai { get; set; } = new();
 
+    /// <summary>Scalar API 文档 UI 配置(见 <see cref="AdminScalarOptions"/>;对应 <c>SmartAdmin:Scalar</c>)</summary>
+    public AdminScalarOptions Scalar { get; set; } = new();
+
     /// <summary>演示模式:开启后仅允许 GET/HEAD/OPTIONS,其余写请求一律拒绝(41002)</summary>
     public bool DemoMode { get; set; }
 
