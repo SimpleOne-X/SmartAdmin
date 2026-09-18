@@ -47,6 +47,9 @@ describe('ApiDocsPage', () => {
     app.use(i18n)
     app.mount(host)
 
+    // 打开动作挂在 onMounted 上(真实挂载会触发),不是 setup 顶层——否则被 <keep-alive> 缓存后再次进入不会重开。
+    // 另一半 onActivated 只有真实 keep-alive 复用缓存实例时才触发,这一层测不到,不为它硬造装置。
+    expect(openSpy).toHaveBeenCalledTimes(1)
     expect(openSpy).toHaveBeenCalledWith('https://api.example.test/scalar', '_blank')
     expect(host.querySelector('a')?.getAttribute('href')).toBe('https://api.example.test/scalar')
     expect(host.textContent).toContain('接口文档已在新标签页打开')
