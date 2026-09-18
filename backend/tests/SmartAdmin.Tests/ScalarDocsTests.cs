@@ -1,6 +1,12 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
+using SmartAdmin.AspNetCore;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
@@ -113,5 +119,87 @@ public class ScalarDocsTests
         var adminClient = f.CreateClient();
         WithToken(adminClient, await adminClient.LoginToken("superAdmin", AdminAppFactory.DefaultAdminPassword));
         Assert.Equal(HttpStatusCode.OK, (await adminClient.GetAsync("/openapi/v1.json")).StatusCode);
+    }
+
+}
+
+/// <summary>
+/// <see cref="ScalarAccessAuthorizationHandler"/> 会话校验那一步的三个分支。
+/// <para>为什么不走 HTTP 端到端:ScalarAccess 策略没有点名 <c>AuthenticationSchemes</c>,授权中间件因此只用
+/// 默认 scheme(JwtBearer)认证,带 <c>X-Api-Key</c> 打 <c>/openapi/v1.json</c> 在认证阶段就是未认证 → 401,
+/// 根本走不到本处理器的会话判定。而 JWT 一定带 sid,"没 sid 也不是机器主体"同样没有 HTTP 路径能进。
+/// 两支今天都只在"消费者换掉 ITokenProvider/BuildClaims 或加第三个 scheme"时才会活过来——正是为此才要求它们
+/// 与 <c>RolePermissionAttribute</c> 保持一致,所以在处理器这一层直接钉住,不为了造可达路径去伪造一个认证 scheme。</para>
+/// </summary>
+public class ScalarAccessHandlerBranchTests
+{
+    private const long USER_ID = 42L;
+    private const string CODE = "GET:/openapi/v1.json";
+
+    /// <summary>只装权限码来源,<b>故意不装 <c>ISessionService</c></b>:一旦机器主体的会话豁免没生效,
+    /// <c>GetRequiredService&lt;ISessionService&gt;()</c> 会直接抛,本用例即红。</summary>
+    private static ServiceProvider ProviderWithoutSessionService()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IPermissionProvider>(new FixedPermissions(CODE));
+        return services.BuildServiceProvider();
+    }
+
+    private static AuthorizationHandlerContext Context(ServiceProvider sp, params Claim[] claims)
+    {
+        var httpContext = new DefaultHttpContext { RequestServices = sp };
+        httpContext.Request.Method = "GET";
+        httpContext.Request.Path = "/openapi/v1.json";
+        var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestScheme"));
+        return new AuthorizationHandlerContext([new ScalarAccessRequirement()], user, httpContext);
+    }
+
+    /// <summary>机器主体(有 akn、没有 sid):跳过会话校验,权限仍按它绑定的用户判 → 放行。</summary>
+    [Fact]
+    public async Task Api_key_principal_skips_the_session_check()
+    {
+        using var sp = ProviderWithoutSessionService();
+        var ctx = Context(sp,
+            new Claim(TokenClaimNames.API_KEY, "docs"),
+            new Claim(JwtRegisteredClaimNames.Sub, USER_ID.ToString(CultureInfo.InvariantCulture)));
+
+        await new ScalarAccessAuthorizationHandler().HandleAsync(ctx);
+
+        Assert.True(ctx.HasSucceeded);
+    }
+
+    /// <summary>既没有 sid 也不是机器主体:视为会话已失效直接拒,不许继续往下比对权限码
+    /// (权限码这里是配齐的,所以一旦漏掉这道拒绝,本用例就会变成放行)。</summary>
+    [Fact]
+    public async Task Principal_without_session_id_is_denied_even_with_the_right_code()
+    {
+        using var sp = ProviderWithoutSessionService();
+        var ctx = Context(sp, new Claim(JwtRegisteredClaimNames.Sub, USER_ID.ToString(CultureInfo.InvariantCulture)));
+
+        await new ScalarAccessAuthorizationHandler().HandleAsync(ctx);
+
+        Assert.False(ctx.HasSucceeded);
+    }
+
+    /// <summary>未认证主体连会话判定都不进。</summary>
+    [Fact]
+    public async Task Anonymous_principal_is_denied()
+    {
+        using var sp = ProviderWithoutSessionService();
+        var httpContext = new DefaultHttpContext { RequestServices = sp };
+        httpContext.Request.Method = "GET";
+        httpContext.Request.Path = "/openapi/v1.json";
+        var ctx = new AuthorizationHandlerContext(
+            [new ScalarAccessRequirement()], new ClaimsPrincipal(new ClaimsIdentity()), httpContext);
+
+        await new ScalarAccessAuthorizationHandler().HandleAsync(ctx);
+
+        Assert.False(ctx.HasSucceeded);
+    }
+
+    private sealed class FixedPermissions(params string[] codes) : IPermissionProvider
+    {
+        public Task<IReadOnlyCollection<string>> GetPermissionCodesAsync(long userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyCollection<string>>(codes);
     }
 }
