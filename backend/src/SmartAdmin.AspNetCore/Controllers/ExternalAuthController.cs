@@ -22,7 +22,7 @@ namespace SmartAdmin.AspNetCore;
 [Route("api/v1/auth/external")]
 [Module("ExternalAuth")]
 public class ExternalAuthController(
-    IEnumerable<IExternalAuthProvider> externalProviders,
+    IExternalAuthProviderRegistry providerRegistry,
     ISysUserExternalService externalBindings,
     IAuthService auth,
     ICacheProvider cache,
@@ -36,32 +36,32 @@ public class ExternalAuthController(
     private static readonly TimeSpan PENDING_LINK_TTL = TimeSpan.FromMinutes(15); // 未绑定→账密登录后认领窗口
     private const string STATE_COOKIE = "tn_oauth_state";                      // 登录态 binder cookie(防登录 CSRF)
     private const string PENDING_COOKIE = "tn_oauth_pending";                  // pending-link binder(防换浏览器抢绑)
-    private const string ROUTE_PATH = "/api/v1/auth/external";                 // 与类上的 [Route] 一致
+    private const string ROUTE_PATH = ExternalAuthCallback.RoutePath;          // 与类上的 [Route] 一致
 
     private long CurrentUserId => currentUser.UserId ?? throw new AdminException(ErrorCode.TokenInvalid);
 
     /// <summary>登录页可用的外部登录方式(仅回 code/名称/图标;读运营启用开关过滤)。</summary>
     [HttpGet("providers")]
     [AllowAnonymous]
-    public async Task<Result<IReadOnlyList<ExternalProviderItem>>> Providers()
+    public async Task<Result<IReadOnlyList<ExternalProviderItem>>> Providers(CancellationToken cancellationToken)
     {
         var items = new List<ExternalProviderItem>();
-        foreach (var p in externalProviders)
+        foreach (var p in await providerRegistry.ListAsync(cancellationToken))
             if (await externalBindings.IsEnabledAsync(p.Code))
                 items.Add(new ExternalProviderItem { Code = p.Code, DisplayName = p.DisplayName, Icon = p.Icon });
         return Result<IReadOnlyList<ExternalProviderItem>>.Ok(items);
     }
 
     /// <summary>
-    /// 管理端:全部已注册 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
+    /// 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
     /// 供系统配置「第三方登录」Tab 的卡片开关。权限码 = 本路由;种子挂在系统配置菜单下。
     /// </summary>
     [HttpGet("providers/all")]
     [RolePermission]
-    public async Task<Result<IReadOnlyList<ExternalProviderAdminItem>>> ProvidersAll()
+    public async Task<Result<IReadOnlyList<ExternalProviderAdminItem>>> ProvidersAll(CancellationToken cancellationToken)
     {
         var items = new List<ExternalProviderAdminItem>();
-        foreach (var p in externalProviders)
+        foreach (var p in await providerRegistry.ListAsync(cancellationToken))
         {
             items.Add(new ExternalProviderAdminItem
             {
@@ -80,7 +80,7 @@ public class ExternalAuthController(
     [AllowAnonymous]
     public async Task<IActionResult> Authorize(string provider, CancellationToken cancellationToken)
     {
-        var p = await ResolveEnabledProviderAsync(provider);
+        var p = await ResolveEnabledProviderAsync(provider, cancellationToken);
         var url = await StartAuthorizeAsync(p, mode: "login", userId: null, cancellationToken);
         return Redirect(url);
     }
@@ -118,7 +118,7 @@ public class ExternalAuthController(
             }
 
             // 登录:先 Exchange 一次(授权码单次),再按已解析身份登录/开户;未绑定 reject → pending-link 而非死 40016。
-            var p = await ResolveEnabledProviderAsync(provider);
+            var p = await ResolveEnabledProviderAsync(provider, cancellationToken);
             var identity = await p.ExchangeAsync(
                 new ExternalExchangeRequest(code!, st.CodeVerifier, st.Nonce, st.RedirectUri), cancellationToken);
             try
@@ -210,7 +210,7 @@ public class ExternalAuthController(
         Response.Cookies.Delete(PENDING_COOKIE, new CookieOptions { Path = BinderCookiePath });
 
         // 运营可能在窗口内关掉该 provider:与 bind 回调一致,fail-closed
-        await ResolveEnabledProviderAsync(payload.Provider);
+        await ResolveEnabledProviderAsync(payload.Provider, cancellationToken);
 
         var identity = new ExternalIdentity(
             payload.Provider,
@@ -243,7 +243,7 @@ public class ExternalAuthController(
     [OperationLog("发起外部账号绑定")]
     public async Task<Result<ExternalBindStartOutput>> BindStart(string provider, CancellationToken cancellationToken)
     {
-        var p = await ResolveEnabledProviderAsync(provider);
+        var p = await ResolveEnabledProviderAsync(provider, cancellationToken);
         var url = await StartAuthorizeAsync(p, mode: "bind", userId: CurrentUserId, cancellationToken);
         return Result<ExternalBindStartOutput>.Ok(new ExternalBindStartOutput { AuthorizeUrl = url });
     }
@@ -260,10 +260,10 @@ public class ExternalAuthController(
 
     // ── 内部 ─────────────────────────────────────────────────────────────
 
-    /// <summary>按 code 选出已启用的 provider(不存在 / 被运营关掉抛 40013)。</summary>
-    protected virtual async Task<IExternalAuthProvider> ResolveEnabledProviderAsync(string provider)
+    /// <summary>按 code 从注册表选出已启用的 provider(不存在 / 配置不完整 / 被运营关掉抛 40013)。</summary>
+    protected virtual async Task<IExternalAuthProvider> ResolveEnabledProviderAsync(string provider, CancellationToken cancellationToken = default)
     {
-        var p = externalProviders.FirstOrDefault(x => x.Code == provider);
+        var p = await providerRegistry.FindAsync(provider, cancellationToken);
         AdminException.ThrowIf(p is null || !await externalBindings.IsEnabledAsync(provider), ErrorCode.OAuthProviderDisabled);
         return p!;
     }
@@ -316,37 +316,20 @@ public class ExternalAuthController(
     protected virtual async Task HandleBindCallbackAsync(ExternalOAuthState st, string code, CancellationToken cancellationToken)
     {
         // 复用登录同款"存在+启用"校验(provider 在 5min 授权窗口内被运营 kill-switch 关掉则拒,与登录路一致)
-        var provider = await ResolveEnabledProviderAsync(st.ProviderCode);
+        var provider = await ResolveEnabledProviderAsync(st.ProviderCode, cancellationToken);
         var identity = await provider.ExchangeAsync(
             new ExternalExchangeRequest(code, st.CodeVerifier, st.Nonce, st.RedirectUri), cancellationToken);
         await externalBindings.BindAsync(st.UserId!.Value, identity);
     }
 
-    /// <summary>回调地址:配了 <c>CallbackBaseUrl</c> 用之(生产必配),否则仅开发环境回退到请求主机。</summary>
-    protected virtual string CallbackUri(string provider)
-    {
-        if (string.IsNullOrWhiteSpace(options.CallbackBaseUrl))
-        {
-            // 生产必须显式配 CallbackBaseUrl:靠请求 Host 头推 redirect_uri 可被伪造带偏(OAuth mix-up 面)。
-            // 开发环境放行回退到请求主机,免本地配置负担(同 JWT 开发密钥:dev 宽松、prod fail-fast)。
-            if (!env.IsDevelopment())
-                throw new InvalidOperationException(
-                    "外部登录已启用,但生产环境未配置 SmartAdmin:ExternalAuth:CallbackBaseUrl。" +
-                    "回调基址(redirect_uri 来源)必须是稳定的后端公网地址,不能从请求 Host 头推断(可伪造)。");
-            return $"{Request.Scheme}://{Request.Host}{ExternalPathBase()}{ROUTE_PATH}/{provider}/callback";
-        }
-        return $"{options.CallbackBaseUrl!.TrimEnd('/')}{ROUTE_PATH}/{provider}/callback";
-    }
+    /// <summary>回调地址:与管理页显示的同一份算法,见 <see cref="ExternalAuthCallback.BuildUri"/>。</summary>
+    protected virtual string CallbackUri(string provider) => ExternalAuthCallback.BuildUri(options, env, Request, provider);
 
     /// <summary>
-    /// 浏览器眼中本应用的路径前缀:配了 <c>CallbackBaseUrl</c> 取它的路径部分(网关子路径部署,
-    /// 如 https://gw.example.com/admin → /admin),没配时(仅开发环境)取 <c>Request.PathBase</c>(UsePathBase、IIS 子应用)。
+    /// 浏览器眼中本应用的路径前缀,见 <see cref="ExternalAuthCallback.PathBase"/>。
     /// 回调地址与两个 binder cookie 的 Path 都由它拼出,三者始终一致。
     /// </summary>
-    protected virtual string ExternalPathBase() =>
-        Uri.TryCreate(options.CallbackBaseUrl, UriKind.Absolute, out var baseUri)
-            ? baseUri.AbsolutePath.TrimEnd('/')
-            : Request.PathBase.ToUriComponent();
+    protected virtual string ExternalPathBase() => ExternalAuthCallback.PathBase(options, Request);
 
     /// <summary>
     /// 两个 binder cookie 的 Path:对外前缀 + 本控制器路由,限定只随外部登录的请求发出。浏览器按 RFC 6265 做路径前缀匹配,

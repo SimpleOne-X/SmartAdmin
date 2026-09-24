@@ -114,6 +114,9 @@ public static class CacheKeys
     /// <summary>启用状态的 AI 厂商(含模型)列表,AiChatClient 解析路径读它;厂商增删改/启停时整体失效</summary>
     public static string AiProviders() => "ai:providers";
 
+    /// <summary>库里配置的外部登录 provider 整表(含加密信封,不含明文);<c>ExternalAuthProviderService</c> 写路径整体失效,注册表读穿透</summary>
+    public static string ExternalAuthProviders() => "extauth:providers";
+
     /// <summary>
     /// 会话活动回写节流标记:存在则跳过 DB 回写,TTL = 节流窗口。
     /// 值可为最近回写时刻;与 <see cref="Session"/> 热路径缓存分离,避免污染活跃校验结构。

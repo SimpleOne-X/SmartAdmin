@@ -134,6 +134,12 @@ public static class ServicesSetup
         // 外部登录 / SSO 绑定:sys_user_external 增删查 + 运营配置读取(启用/未绑定策略/开户默认角色·机构)
         services.TryAddScoped<ISysUserExternalService, SysUserExternalService>();
 
+        // 外部登录 provider 的连接配置:管理服务(机密加密入库)+ 注册表(代码注册的 ∪ 库里按类型现建的);
+        // 实例持有器是单例,让 access_token / 发现文档这类实例内缓存跨请求存活
+        services.TryAddScoped<IExternalAuthProviderService, ExternalAuthProviderService>();
+        services.TryAddScoped<IExternalAuthProviderRegistry, ExternalAuthProviderRegistry>();
+        services.TryAddSingleton<ExternalAuthProviderInstances>();
+
         // 组织模块:用户 / 机构(树)/ 职位 —— Scoped,与仓储一致
         services.TryAddScoped<IUserService, UserService>();
         services.TryAddScoped<IOrgService, OrgService>();

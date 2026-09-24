@@ -6,7 +6,7 @@ namespace SmartAdmin.Services;
 /// <summary><see cref="ISysUserExternalService"/> 默认实现:绑定表 CRUD + 运营配置读取(读穿透缓存,走 <see cref="IConfigService"/>)。</summary>
 public class SysUserExternalService(IRepository<SysUserExternal> repo, IConfigService config) : ISysUserExternalService
 {
-    // 运营配置键:连接走 appsettings,这些开关走 sys_config({code} = provider 码)
+    // 运营配置键:连接与密钥在 sys_external_auth_provider,这些开关走 sys_config({code} = provider 码)
     private static string EnabledKey(string code) => $"sys.externalauth.{code}.enabled";
     private static string ProvisioningKey(string code) => $"sys.externalauth.{code}.provisioning";
     private static string LinkByAccountKey(string code) => $"sys.externalauth.{code}.linkByAccount";

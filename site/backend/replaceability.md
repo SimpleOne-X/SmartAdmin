@@ -85,6 +85,8 @@ builder.Services.AddSmartAdmin(builder.Configuration, options =>
 | `ReplaceRealtimePublisher_ShouldUseUserImplementation` | Consumer `Replace`s `IRealtimePublisher`; the container resolves the consumer's implementation |
 | `OverrideAuthStep_ShouldAffectLoginFlow` | Overriding one `virtual` step of `AuthService` changes the login flow's result |
 | `ExternalAuthProvider_ShouldBePluggable` | A consumer's pre-registered external-login provider shows up in the resolved provider set (additive, doesn't displace the built-in ones) |
+| `ExternalAuthProviderType_ShouldBePluggable` | A consumer's pre-registered external-login provider type shows up in the resolved type set (additive, the built-in OIDC type stays) |
+| `PreRegisteredExtensionPoint_ShouldWinOverBuiltIn` (including the `IExternalAuthProviderService` and `IExternalAuthProviderRegistry` entries) | A consumer's pre-registered management service or registry is what the container resolves; the built-in one is skipped |
 | `DisabledModule_ShouldRemoveBuiltInController` | A disabled module's built-in controller is removed (404); non-disabled ones remain |
 | `CustomController_ShouldOwnSameRouteAfterModuleDisabled` | After disabling a built-in module, a consumer controller takes over the same route |
 | `CustomSeedData_ShouldRunOnceAndBeIdempotent` | Consumer seed data inserts once on first startup and is idempotent on subsequent startups |

@@ -1,35 +1,30 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartAdmin.Core;
+using SmartAdmin.Services;
 
 namespace SmartAdmin.AspNetCore;
 
-/// <summary>外部登录 provider 的内置装配。内核只装内置 OIDC provider;企业微信/钉钉等由可选包各自前置注册。</summary>
+/// <summary>
+/// 外部登录的内置装配:固定注册标准 OIDC 类型描述,以及走 SSRF 围栏的出站命名客户端。
+/// 企业微信、钉钉、GitHub、微信等厂商类型由可选包各自注册类型描述;连接与密钥由管理员在「登录方式」页填写、加密入库,
+/// 运行时由 <see cref="IExternalAuthProviderRegistry"/> 按类型装配成 <see cref="IExternalAuthProvider"/>。
+/// </summary>
 public static class ExternalAuthSetup
 {
     /// <summary>
-    /// 按 appsettings 的 <c>SmartAdmin:ExternalAuth:Oidc</c> 列表,每个条目注册一个 <see cref="OidcExternalAuthProvider"/> 实例。
-    /// <para>用 plain <c>AddSingleton</c>(<b>非</b> <c>TryAddEnumerable</c>):多条 OIDC 都是同一 impl 类型、仅配置不同,
-    /// 须保留 N 个实例(TryAddEnumerable 按 impl 类型去重会塌成 1)。消费者接自有 IdP:在 <c>AddSmartAdmin()</c> 前
-    /// 自行注册 <see cref="IExternalAuthProvider"/>(用不同 Code),与内置并存,由 AuthService 按 Code 选型。</para>
+    /// 校验 <c>CallbackBaseUrl</c>,注册内置 OIDC 类型描述与围栏出站客户端。
+    /// <para>类型描述用 <c>TryAddEnumerable</c>(与可选包的类型并存,按实现类型去重)。消费者接自有 IdP:在 <c>AddSmartAdmin()</c> 前
+    /// 自行注册 <see cref="IExternalAuthProvider"/>(用不同 Code),与库里配置的并存;同 Code 时代码注册的优先。</para>
+    /// <para>围栏处理器与 AI 网关、定时任务共用同一套 <see cref="HttpFence"/>,配置读 <c>AdminAiOptions.Http</c>。</para>
     /// </summary>
     public static IServiceCollection AddExternalAuthProviders(this IServiceCollection services, AdminExternalAuthOptions options)
     {
         ValidateCallbackBaseUrl(options);
 
-        if (options.Oidc.Count == 0)
-            return services;
-
-        services.AddHttpClient();   // 幂等(内部 TryAdd):确保 IHttpClientFactory 可用,token 端点交换用
-
-        foreach (var oidc in options.Oidc)
-            services.AddSingleton<IExternalAuthProvider>(sp => new OidcExternalAuthProvider(
-                oidc,
-                sp.GetRequiredService<IHttpClientFactory>(),
-                sp.GetRequiredService<ILogger<OidcExternalAuthProvider>>(),
-                // 仅开发环境放行 http 元数据;生产强制 https(fail-closed,见 OidcExternalAuthProvider 构造)
-                allowHttpMetadata: sp.GetRequiredService<IHostEnvironment>().IsDevelopment()));
+        services.AddHttpClient(ExternalAuthHttpClient.Name)
+            .ConfigurePrimaryHttpMessageHandler(sp => HttpFence.CreateHandler(sp.GetRequiredService<AdminAiOptions>().Http));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IExternalAuthProviderType, OidcExternalAuthProviderType>());
 
         return services;
     }

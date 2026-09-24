@@ -149,6 +149,34 @@ public enum ErrorCode
     [MsgKey("error.auth.apiKeyInvalid")]
     ApiKeyInvalid = 40027,
 
+    /// <summary>外部登录配置:类型码未知,或对应可选包未安装(管理页只能配已装的类型)</summary>
+    [MsgKey("error.auth.externalAuthTypeNotFound")]
+    ExternalAuthTypeNotFound = 40030,
+
+    /// <summary>外部登录配置:Code 已被占用(含代码注册的 provider)</summary>
+    [MsgKey("error.auth.externalAuthCodeExists")]
+    ExternalAuthCodeExists = 40031,
+
+    /// <summary>外部登录配置:Code 格式不合法,或与官方类型保留码冲突</summary>
+    [MsgKey("error.auth.externalAuthCodeInvalid")]
+    ExternalAuthCodeInvalid = 40032,
+
+    /// <summary>外部登录配置:必填字段缺失;机密字段首次保存必填;改了决定请求去向的字段(如 OIDC Authority)须重新输入机密。args 带 <c>field</c></summary>
+    [MsgKey("error.auth.externalAuthFieldMissing")]
+    ExternalAuthFieldMissing = 40033,
+
+    /// <summary>当前数据保护密钥是进程内临时密钥(重启即失效),拒绝保存会随重启解不开的第三方密钥</summary>
+    [MsgKey("error.auth.externalAuthDataProtectionKeyMissing")]
+    ExternalAuthDataProtectionKeyMissing = 40034,
+
+    /// <summary>外部登录配置不存在(清除配置时按 Code 找不到)</summary>
+    [MsgKey("error.auth.externalAuthProviderNotFound")]
+    ExternalAuthProviderNotFound = 40035,
+
+    /// <summary>OIDC Authority 被 SSRF 围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单);保存与测试都先过围栏</summary>
+    [MsgKey("error.auth.externalAuthEndpointBlocked")]
+    ExternalAuthEndpointBlocked = 40036,
+
     // ── 41xxx 权限与数据范围 ─────────────────────────────────────────
 
     /// <summary>无接口访问权限(权限码不在当前用户 PermissionCodeList 内)</summary>

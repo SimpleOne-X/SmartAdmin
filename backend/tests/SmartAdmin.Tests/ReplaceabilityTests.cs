@@ -391,6 +391,19 @@ public class ReplaceabilityTests
     }
 
     [Fact]
+    public void ExternalAuthProviderType_ShouldBePluggable()
+    {
+        using var f = new AdminAppFactory
+        {
+            Overrides = s => s.AddSingleton<IExternalAuthProviderType>(new AcmeAuthProviderType()),
+        };
+        // 类型描述同样是加法式:消费者或可选包注册的类型并入集合,内置 OIDC 类型仍在
+        var types = f.Services.GetServices<IExternalAuthProviderType>().Select(t => t.Type).ToList();
+        Assert.Contains("acme", types);
+        Assert.Contains("oidc", types);
+    }
+
+    [Fact]
     public async Task DisabledModule_ShouldRemoveBuiltInController()
     {
         using var f = new AdminAppFactory { DisabledModules = ["Dict", "Upload"] };

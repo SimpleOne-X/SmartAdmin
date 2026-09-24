@@ -19,6 +19,7 @@ public static class ReplaceabilityContract
     public static readonly Type[] MultiImplementation =
     [
         typeof(ISeedData), typeof(IAdminJob), typeof(ICaptchaProvider), typeof(IExternalAuthProvider),
+        typeof(IExternalAuthProviderType),
         typeof(IDatabaseReadyHook), typeof(IAiProtocolAdapter),
     ];
 
@@ -56,6 +57,8 @@ public static class ReplaceabilityContract
         (typeof(IReauthService), ServiceLifetime.Scoped),
         (typeof(IHighSensitivityPermissionService), ServiceLifetime.Scoped),
         (typeof(ISysUserExternalService), ServiceLifetime.Scoped),
+        (typeof(IExternalAuthProviderService), ServiceLifetime.Scoped),
+        (typeof(IExternalAuthProviderRegistry), ServiceLifetime.Scoped),
         (typeof(IApiKeyValidator), ServiceLifetime.Singleton),
 
         // RBAC 与数据范围

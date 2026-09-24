@@ -61,6 +61,10 @@ public static class HighSensitivityPermissions
         "POST:/api/v1/sys/ai/provider/add",
         "PUT:/api/v1/sys/ai/provider/{id}",
 
+        // 第三方登录方式的连接配置:能改这里就能决定谁能登录系统,保存与清除都要求再认证
+        "PUT:/api/v1/sys/external-auth/providers/{code}",
+        "DELETE:/api/v1/sys/external-auth/providers/{code}",
+
         MfaClear,
         HighSensAdd,
         HighSensDelete,

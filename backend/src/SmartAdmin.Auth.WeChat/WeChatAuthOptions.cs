@@ -1,6 +1,6 @@
 namespace SmartAdmin.Auth.WeChat;
 
-/// <summary>微信开放平台网站应用配置(<c>SmartAdmin:ExternalAuth:WeChat</c>)。Code 固定 <c>wechat</c>。</summary>
+/// <summary>微信开放平台网站应用配置。连接配置由管理页填写并加密保存到数据库;Code 固定 <c>wechat</c>。</summary>
 public class WeChatAuthOptions
 {
     /// <summary>微信开放平台网站应用 AppId。</summary>

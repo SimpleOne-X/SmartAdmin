@@ -1,12 +1,12 @@
 namespace SmartAdmin.Core;
 
 /// <summary>
-/// 外部登录 / SSO 配置(对应 <c>SmartAdmin:ExternalAuth</c> 节)。
-/// <para><b>配置形态取"折中"</b>:连接与密钥(此处的 <see cref="Oidc"/> 条目、可选包的 corpSecret/appSecret)走 appsettings /
-/// 密钥管理器,<b>不进库</b>;而运营项(启用开关、未绑定策略、开户默认角色/机构)走 <c>sys_config</c>
+/// 外部登录 / SSO 配置(对应 <c>SmartAdmin:ExternalAuth</c> 节):只有回调基址与前端结果页两项部署级参数。
+/// <para>各登录方式的连接与密钥由管理员在「系统配置 → 登录方式」填写,加密入库(<c>sys_external_auth_provider</c>),
+/// 运行时由 <see cref="IExternalAuthProviderType"/>(类型描述)与 <see cref="IExternalAuthProviderRegistry"/>(注册表)装配;
+/// 启用开关、未绑定策略、开户默认角色/机构等运营项走 <c>sys_config</c>
 /// 键 <c>sys.externalauth.{code}.{enabled|provisioning|linkByAccount|defaultRoleIds|defaultOrgId}</c>(运行时可改、无需重启)。</para>
-/// <para>企业微信 / 钉钉等厂商 provider 由可选包各自读取自有配置节(如 <c>SmartAdmin:ExternalAuth:WeCom</c>),
-/// 不在本类,以免核心 Options 沾厂商专有字段。</para>
+/// <para><see cref="CallbackBaseUrl"/> 留在配置里:它不是机密,而且启动时的格式校验能在部署阶段就拦下填错的值。</para>
 /// </summary>
 public class AdminExternalAuthOptions
 {
@@ -21,15 +21,9 @@ public class AdminExternalAuthOptions
     /// 默认 <c>/oauth/callback</c>。令牌<b>不进</b>重定向 URL,只带票据(见 <see cref="CacheKeys.OAuthTicket"/>)。
     /// </summary>
     public string FrontendResultPath { get; set; } = "/oauth/callback";
-
-    /// <summary>
-    /// 内置 OIDC provider 配置项:每项一个可登录的标准 OIDC IdP(Keycloak/Entra/Authing/Auth0…)。
-    /// 为空则不注册任何内置 OIDC provider(登录页也就不显 SSO 按钮)。
-    /// </summary>
-    public List<OidcProviderOptions> Oidc { get; set; } = new();
 }
 
-/// <summary>单个内置 OIDC provider 的连接配置(密钥随部署,不进库)。</summary>
+/// <summary>单个 OIDC provider 的运行时连接配置,由 <c>OidcExternalAuthProviderType</c> 用库里解密后的字段装配。</summary>
 public class OidcProviderOptions
 {
     /// <summary>provider 唯一码(登录按钮 / 回调路由 / 运营配置键都用它;多 IdP 时须互不相同,如 <c>keycloak</c>、<c>entra</c>)</summary>

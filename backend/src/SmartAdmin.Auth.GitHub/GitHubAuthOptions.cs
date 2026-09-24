@@ -1,6 +1,6 @@
 namespace SmartAdmin.Auth.GitHub;
 
-/// <summary>GitHub OAuth App 配置(对应 <c>SmartAdmin:ExternalAuth:GitHub</c>)。Code 固定为 <c>github</c>,不暴露可改字段。</summary>
+/// <summary>GitHub OAuth App 配置。连接配置由管理页填写并加密保存到数据库;Code 固定为 <c>github</c>,不暴露可改字段。</summary>
 public class GitHubAuthOptions
 {
     /// <summary>OAuth App Client ID。</summary>

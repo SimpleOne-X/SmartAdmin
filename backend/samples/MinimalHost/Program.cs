@@ -15,12 +15,13 @@ var builder = WebApplication.CreateBuilder(args);
 // 而会话缓存的 TTL 是刷新令牌寿命(天级)——强制下线会在半数请求上失效好几天。
 builder.Services.AddSmartAdminRedisCache(builder.Configuration);
 
-// 可选包:外部登录 / SSO。同 Redis,必须在 AddSmartAdmin **之前**调用;不配对应配置节时是**空操作**(不点亮按钮)。
-// 内置 OIDC provider 由 AddSmartAdmin 按 SmartAdmin:ExternalAuth:Oidc 自动装配,无需在此显式调用。
-builder.Services.AddSmartAdminWeComAuth(builder.Configuration);
-builder.Services.AddSmartAdminDingTalkAuth(builder.Configuration);
-builder.Services.AddSmartAdminGitHubAuth(builder.Configuration);
-builder.Services.AddSmartAdminWeChatAuth(builder.Configuration);
+// 可选包:外部登录 / SSO。同 Redis,必须在 AddSmartAdmin **之前**调用;无参注册即可,连接与密钥在
+// 系统配置 → 登录方式 页里填;不配置时登录页不出现对应按钮。
+// 内置 OIDC 的类型描述由 AddSmartAdmin 注册,无需在此显式调用。
+builder.Services.AddSmartAdminWeComAuth();
+builder.Services.AddSmartAdminDingTalkAuth();
+builder.Services.AddSmartAdminGitHubAuth();
+builder.Services.AddSmartAdminWeChatAuth();
 
 // 可选包:xlsx 导入导出。必须在 AddSmartAdmin **之前**调用才赢 TryAdd;
 // 不调则 codec 走 MissingExcelProvider,任意导入/导出端点抛 46001。

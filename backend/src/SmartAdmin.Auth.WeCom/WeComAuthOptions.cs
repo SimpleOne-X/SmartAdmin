@@ -1,9 +1,12 @@
 namespace SmartAdmin.Auth.WeCom;
 
-/// <summary>企业微信登录配置(对应 <c>SmartAdmin:ExternalAuth:WeCom</c> 节)。密钥随部署配置,不进库。</summary>
+/// <summary>
+/// 企业微信 provider 的运行时参数。连接配置由管理员在「系统配置 → 登录方式」填写,<see cref="CorpSecret"/> 加密保存到数据库,
+/// 由 <see cref="WeComAuthProviderType"/> 组装成本类;也可在代码里显式构造,经 <c>AddSmartAdminWeComAuth(options)</c> 注册。
+/// </summary>
 public class WeComAuthOptions
 {
-    /// <summary>provider 唯一码(登录按钮 / 回调路由 / 运营配置键都用它)</summary>
+    /// <summary>provider 唯一码(登录按钮 / 回调路由 / 运营配置键都用它);库里配置的企业微信固定为 <c>wecom</c></summary>
     public string Code { get; set; } = "wecom";
 
     /// <summary>展示名(登录页按钮文案兜底)</summary>

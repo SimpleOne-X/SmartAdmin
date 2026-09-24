@@ -240,8 +240,12 @@ public static class SmartAdminSetup
         });
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, ScalarAccessAuthorizationHandler>());
 
-        // ── 外部登录 / SSO:按 appsettings 装内置 OIDC provider(零新包);未配则整段跳过 ──
+        // ── 外部登录 / SSO:固定注册内置 OIDC 类型描述 + 围栏出站客户端(零新包);连接与密钥在库里,由注册表按类型装配 ──
         services.AddExternalAuthProviders(options.ExternalAuth);
+        var unusedExternalAuthSections = UnusedExternalAuthConfigWarning.Find(section.GetSection("ExternalAuth"));
+        if (unusedExternalAuthSections.Count > 0)
+            services.AddHostedService(sp => new UnusedExternalAuthConfigWarning(
+                unusedExternalAuthSections, sp.GetRequiredService<ILogger<UnusedExternalAuthConfigWarning>>()));
 
         // ── MVC 控制器:本程序集作为 ApplicationPart 挂入宿主 ──
         //   全局过滤器:业务异常 → 统一信封;操作日志(默认记一切写操作,读操作/匿名端点除外);
