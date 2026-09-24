@@ -9,14 +9,22 @@ import { useAppStore } from '#/stores/app'
 import { useSite } from '#/composables/useSite'
 import { runtime } from '#/lib/runtime'
 
-const props = withDefaults(defineProps<{ size?: number }>(), { size: 28 })
+const props = withDefaults(
+  defineProps<{
+    size?: number
+    /** 覆盖 sys.site.logo(配置中心预览未保存的草稿用);空串 = 按"没配 Logo"回退 */
+    src?: string
+  }>(),
+  { size: 28, src: undefined },
+)
 const app = useAppStore()
 const { site } = useSite()
 
 const brandLogo = runtime.brand.logo
-const imgSrc = computed(() => site.logo || (typeof brandLogo === 'string' ? brandLogo : ''))
+const configured = computed(() => props.src ?? site.logo)
+const imgSrc = computed(() => configured.value || (typeof brandLogo === 'string' ? brandLogo : ''))
 const brandComponent = computed(() =>
-  !site.logo && brandLogo && typeof brandLogo !== 'string' ? brandLogo : null,
+  !configured.value && brandLogo && typeof brandLogo !== 'string' ? brandLogo : null,
 )
 
 // 浅色:靛蓝渐变底 + 白色图形 + 浅青核心;深色:近黑底(带青色微光)+ 靛蓝→青渐变图形 + 青色核心

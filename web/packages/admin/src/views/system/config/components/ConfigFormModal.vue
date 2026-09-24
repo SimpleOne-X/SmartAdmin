@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// 配置行新增/编辑弹窗(「其他配置」与各 Tab 的「本组其它配置」共用)。
+// 配置行新增/编辑弹窗(「高级」页用)。
 // FormContainer 接管 loading/关闭时机:校验失败 reject / API 失败 return false → 弹层不关。
 import { computed, reactive, ref, watch } from 'vue'
 import {
+  NAlert,
   NInput,
   NInputNumber,
   NForm,
@@ -16,7 +17,8 @@ import FormContainer from '#/components/FormContainer/index.vue'
 import { configApi } from '#/api'
 import { translateError } from '#/utils/error'
 import type { ConfigInput, SysConfig } from '#/types/api'
-import { STRUCTURED_GROUP_TABS, bumpConfigRevision } from '../groups'
+import { bumpConfigRevision, tabOfKey } from '../groups'
+import { useConfigDraft } from '../draft'
 
 const show = defineModel<boolean>('show', { default: false })
 /** 要编辑的行;null = 新增。 */
@@ -68,10 +70,13 @@ watch(show, v => {
   )
 })
 
-// 分组归某个结构化 Tab 时,保存后这一行显示在那个 Tab 的「本组其它配置」里,先告诉用户去哪找
-const groupHint = computed(() => {
-  const tab = STRUCTURED_GROUP_TABS[(form.groupCode ?? '').trim()]
-  return tab ? t('config.groupManagedBy', { tab: t(`config.tab.${tab}`) }) : undefined
+// 键已被某个结构化表单认领时,保存后它显示在那个分类的表单里、不在「高级」表里,先告诉用户去哪找
+const draft = useConfigDraft()
+const keyHint = computed(() => {
+  const key = form.configKey.trim()
+  return draft.claimedKeys.value.includes(key)
+    ? t('config.keyManagedBy', { tab: t(`config.tab.${tabOfKey(key)}`) })
+    : undefined
 })
 
 async function save() {
@@ -98,6 +103,9 @@ async function save() {
     :confirm-text="t('common.save')"
   >
     <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" :label-width="90">
+      <n-alert v-if="keyHint" type="warning" :bordered="false" class="key-hint">
+        {{ keyHint }}
+      </n-alert>
       <n-form-item :label="t('config.key')" path="configKey">
         <n-input
           v-model:value="form.configKey"
@@ -115,11 +123,7 @@ async function save() {
           :autosize="{ minRows: 2 }"
         />
       </n-form-item>
-      <n-form-item
-        :label="t('config.group')"
-        :feedback="groupHint"
-        :validation-status="groupHint ? 'warning' : undefined"
-      >
+      <n-form-item :label="t('config.group')">
         <n-input v-model:value="form.groupCode as string" :placeholder="t('config.group')" />
       </n-form-item>
       <n-form-item :label="t('config.sort')">
@@ -131,3 +135,9 @@ async function save() {
     </n-form>
   </FormContainer>
 </template>
+
+<style scoped>
+.key-hint {
+  margin-bottom: 12px;
+}
+</style>

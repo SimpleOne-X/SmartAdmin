@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
+import { apiAdminToken, apiClearExternalProvider, apiConfigureWeCom } from './api'
 
 /**
  * 企业微信客户端里打开登录页:前端直接发起企业微信登录,后端按 UA 给网页授权地址(扫码页在客户端里用不了)。
- * e2e 宿主在 playwright.config.ts 里配了一套假的企业微信应用。
+ * 用例开头通过管理接口在库里配一套假的企业微信应用,结束后清掉。
+ * 只有 UA 带 wxwork 时登录页才会自动跳,其余用例用的是默认 UA,不受影响。
  */
 
 // 企业微信客户端的 UA 带 wxwork,也带微信的 MicroMessenger
@@ -11,6 +13,24 @@ const WECOM_UA =
   'Mobile/15E148 wxwork/4.1.20 MicroMessenger/7.0.1 Language/zh'
 
 test.use({ userAgent: WECOM_UA })
+
+test.beforeAll(async ({ playwright }) => {
+  const request = await playwright.request.newContext()
+  try {
+    await apiConfigureWeCom(request, await apiAdminToken(request))
+  } finally {
+    await request.dispose()
+  }
+})
+
+test.afterAll(async ({ playwright }) => {
+  const request = await playwright.request.newContext()
+  try {
+    await apiClearExternalProvider(request, await apiAdminToken(request), 'wecom')
+  } finally {
+    await request.dispose()
+  }
+})
 
 test('企业微信客户端里打开登录页 → 直接走网页授权;同一会话回到登录页不再自动跳', async ({ page }) => {
   // 真打到后端拿它的 302,但不让浏览器跟去企业微信:page.route 只拦重定向链的第一跳,

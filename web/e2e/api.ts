@@ -127,3 +127,37 @@ export async function apiReauthWithPassword(
     throw new Error(`reauth failed: code=${env.code} msg=${env.msg}`)
   }
 }
+
+/**
+ * 在库里配一个企业微信登录方式(一套假应用),给需要「企业微信已配置」的用例用。
+ * 连接信息只在库里,不在 appsettings;用完用 `apiClearExternalProvider` 清掉。
+ */
+export async function apiConfigureWeCom(request: APIRequestContext, token: string): Promise<void> {
+  const res = await request.put(`${apiBase()}/api/v1/sys/external-auth/providers/wecom`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      type: 'wecom',
+      values: { corpId: 'ww-e2e-corp', agentId: '1000002' },
+      secrets: { corpSecret: 'e2e-secret-0001' },
+    },
+  })
+  const env = await readEnvelope(res)
+  if (env.code !== 0) {
+    throw new Error(`configure wecom failed: code=${env.code} msg=${env.msg}`)
+  }
+}
+
+/** 清除某个登录方式的配置;本来就没配(40035)不算错,清理路径上可以放心重复调。 */
+export async function apiClearExternalProvider(
+  request: APIRequestContext,
+  token: string,
+  code: string,
+): Promise<void> {
+  const res = await request.delete(`${apiBase()}/api/v1/sys/external-auth/providers/${code}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const env = await readEnvelope(res)
+  if (env.code !== 0 && env.code !== 40035) {
+    throw new Error(`clear ${code} failed: code=${env.code} msg=${env.msg}`)
+  }
+}

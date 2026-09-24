@@ -1,4 +1,4 @@
-// 浏览器标题与文档语言。App.vue 调一次即可。
+// 浏览器标题、标签页图标与文档语言。App.vue 调一次即可。
 //
 // 不这样动态维护的话,document.title 只会在启动时被站点名设一次,收藏夹/多窗口/历史记录里所有页面会长得一模一样;
 // <html lang> 也会硬编成 zh-CN,读屏器与浏览器翻译在英文界面下判错语言。
@@ -8,6 +8,8 @@ import { useAppStore } from '#/stores/app'
 import { useTabsStore } from '#/stores/tabs'
 import { useSite } from '#/composables/useSite'
 import { translateMenuTitle } from '#/locales/menuTitle'
+import { applyFavicon } from '#/lib/favicon'
+import { runtime } from '#/lib/runtime'
 
 export function usePageTitle(): void {
   const route = useRoute()
@@ -27,4 +29,7 @@ export function usePageTitle(): void {
   watchEffect(() => {
     document.documentElement.lang = app.locale
   })
+
+  // 标签页图标跟随站点 Logo(配置中心换 Logo 保存后 loadSite(true) 即时换掉);消费方可经 brand.faviconFromLogo 关掉
+  if (runtime.brand.faviconFromLogo !== false) watchEffect(() => applyFavicon(document, site.logo))
 }

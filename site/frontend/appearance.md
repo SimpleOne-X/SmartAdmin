@@ -40,6 +40,10 @@ The above is enough to change the accent, add a dark palette, and figure out whi
 
 The logo in the sidebar, the header, the login page and the app chooser is always rendered by `SmartLogo`, which picks its source in order: an image URL in the admin config `sys.site.logo`; otherwise the component or image URL passed as `createSmartAdmin({ brand: { logo } })`; and only when neither is set, the built-in vector mark. `brand` is the default for an empty config, and it's also what the first frame shows before the site info arrives.
 
+Changing the logo doesn't mean uploading a file and pasting its URL. Under "System config → Branding & login", click the logo tile, pick a PNG, JPG or WEBP image and crop it to a square. The preview shows the result right away, and nothing is saved until you click Save. The image goes through a dedicated endpoint, `POST /api/v1/sys/config/logo`, which accepts bitmaps up to 1 MB and ignores the global whitelist in "Uploads". `sys.site.logo` stores a signed link; it keeps working even with `SignedUrlTtlMinutes` set, because the site info re-signs it on every response.
+
+The browser tab icon follows the logo by default: set a logo and the tab shows it, clear it and the template's own favicon comes back. To opt out, pass `createSmartAdmin({ brand: { faviconFromLogo: false } })`.
+
 ## Offline icon registration
 
 Icons are rendered **offline**: a handful of Iconify collections plus your own local SVGs, registered once at startup, then used in any component through the thin `AppIcon` wrapper, and pickable interactively in menu administration via `IconPicker`.

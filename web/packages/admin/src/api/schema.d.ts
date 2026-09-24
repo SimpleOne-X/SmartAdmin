@@ -487,6 +487,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/config/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 上传站点 Logo(只收 PNG/JPG/WEBP、1 MB 以内,不受全局上传白名单约束),返回带签名直链的文件信息;
+         *         前端拿 `viewUrl` 写进 `sys.site.logo` 后随批量保存生效。
+         */
+        post: operations["Config_UploadLogo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/config": {
         parameters: {
             query?: never;
@@ -705,7 +725,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 管理端:全部已注册 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
+         * 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
          *     供系统配置「第三方登录」Tab 的卡片开关。权限码 = 本路由;种子挂在系统配置菜单下。
          */
         get: operations["ExternalAuth_ProvidersAll"];
@@ -834,6 +854,61 @@ export interface paths {
         post?: never;
         /** 【个人中心】解绑某 provider 的外部账号。 */
         delete: operations["ExternalAuth_Unbind"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/external-auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 目录:已装的类型、全部 provider(配置状态、非机密字段值、机密字段的 hasValue 与尾四位、要填到厂商后台的回调地址),
+         *     以及 `dataProtectionEphemeral`(主密钥是临时的,保存会被拒)与 `callbackBaseUrlMissing`(生产环境没配回调基址)两个页面级告警。
+         */
+        get: operations["ExternalAuthProvider_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/external-auth/providers/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 新增或更新一条配置(body 带 `type`)。机密字段留空 = 不修改,首次保存必填;改了 OIDC 的 Authority 要重输机密。 */
+        put: operations["ExternalAuthProvider_Save"];
+        post?: never;
+        /** 清除配置(软删)。不会删除用户已绑定的外部账号。 */
+        delete: operations["ExternalAuthProvider_Delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/external-auth/providers/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 连接测试:用表单里的值测,机密留空则用已保存的;不落库。结果逐项列出,失败原因在返回体里,不抛异常。 */
+        post: operations["ExternalAuthProvider_Test"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3058,6 +3133,118 @@ export interface components {
             /** @description 来源枚举类型名(内核的是 `ErrorCode`,消费者的是自己那个) */
             source?: string;
         };
+        /** @description 「登录方式」目录出参:在服务层目录之上加上页面级的回调基址告警。 */
+        ExternalAuthCatalogOutput: {
+            /** @description 数据保护主密钥是进程内临时密钥,此时保存会被拒(40034) */
+            dataProtectionEphemeral: boolean;
+            /** @description 生产环境没配 `CallbackBaseUrl`,登录时控制器会抛异常 */
+            callbackBaseUrlMissing: boolean;
+            /** @description 已安装的类型 */
+            types: components["schemas"]["ExternalAuthTypeView"][];
+            /** @description 全部 provider;每项带回调地址 */
+            providers: components["schemas"]["ExternalAuthProviderView"][];
+            /** @description 回调地址模板,标识处为 `{code}`;没配回调基址时为空串 */
+            callbackUriTemplate: string;
+        };
+        /** @description 连接测试的一项检查(出参)。string ExternalAuthCheckView.Status 为 `ok` / `failed` / `skipped`。 */
+        ExternalAuthCheckView: {
+            key: string;
+            status: string;
+            detail: null | string;
+        };
+        /** @description 类型描述里的一个字段(出参)。字段含义见 ExternalAuthField。 */
+        ExternalAuthFieldView: {
+            name: string;
+            secret: boolean;
+            required: boolean;
+            default: null | string;
+            definesEndpoint: boolean;
+        };
+        /**
+         * @description 保存入参。IReadOnlyDictionary&lt;string, string?&gt;? ExternalAuthProviderSaveInput.Secrets 的属性名必须叫 `Secrets`:操作日志的脱敏器按名字子串匹配 `secret`,
+         *     命中即整包打码,机密不会落进日志。
+         */
+        ExternalAuthProviderSaveInput: {
+            /** @description 类型码;新增时决定类型,更新时必须与已存类型一致 */
+            type: string;
+            /** @description 展示名;空 = 用类型默认 */
+            displayName: null | string;
+            /** @description 图标;空 = 用类型默认 */
+            icon: null | string;
+            /** @description 非机密字段值(字段名 → 值) */
+            values: null | {
+                [key: string]: string;
+            };
+            /** @description 机密字段值(字段名 → 明文);留空 = 不修改,首次保存必填 */
+            secrets: null | {
+                [key: string]: string;
+            };
+        };
+        /** @description 连接测试入参:用表单里的值测,不落库。IReadOnlyDictionary&lt;string, string?&gt;? ExternalAuthProviderTestInput.Secrets 留空的机密字段取 string? ExternalAuthProviderTestInput.Code 对应的已保存值。 */
+        ExternalAuthProviderTestInput: {
+            /** @description 已保存 provider 的码;新增未保存时可空,此时机密必须全部在 IReadOnlyDictionary&lt;string, string?&gt;? ExternalAuthProviderTestInput.Secrets 里给出 */
+            code: null | string;
+            /** @description 类型码 */
+            type: string;
+            /** @description 非机密字段值 */
+            values: null | {
+                [key: string]: string;
+            };
+            /** @description 机密字段值 */
+            secrets: null | {
+                [key: string]: string;
+            };
+        };
+        /** @description 一个 provider 的配置视图(出参)。<b>不含机密明文</b>:IReadOnlyDictionary&lt;string, ExternalAuthSecretState&gt; ExternalAuthProviderView.Secrets 只有状态。 */
+        ExternalAuthProviderView: {
+            /** @description provider 码 */
+            code: string;
+            /** @description 类型码;代码注册的 provider 无类型,为空串 */
+            type: string;
+            /** @description 展示名(已回退到类型默认) */
+            displayName: string;
+            /** @description 图标(已回退到类型默认) */
+            icon: null | string;
+            /** @description ExternalAuthProviderSource */
+            source: string;
+            /** @description 对应类型已安装;库里的行对应的可选包被卸载后为 `false`,此时不出实例 */
+            installed: boolean;
+            /** @description 必填项与必填机密都齐全,登录可用 */
+            configured: boolean;
+            /** @description 非机密字段值 */
+            values: {
+                [key: string]: string;
+            };
+            /** @description 机密字段状态,键为字段名 */
+            secrets: {
+                [key: string]: components["schemas"]["ExternalAuthSecretState"];
+            };
+            /**
+             * @description 要填到厂商后台的回调地址;由端点层按当前请求与 `CallbackBaseUrl` 算出
+             * @default
+             */
+            callbackUri: string;
+        };
+        /** @description 一个机密字段的状态:只回「是否已配置」与尾四位提示,永远没有明文。 */
+        ExternalAuthSecretState: {
+            /** @description 已配置 */
+            hasValue: boolean;
+            /** @description 尾四位;机密不足 8 位或未配置时为 `null` */
+            hint: null | string;
+        };
+        /** @description 连接测试结果(出参):逐项列出;任何一项 `failed` 则 bool ExternalAuthTestView.Ok 为 `false`。 */
+        ExternalAuthTestView: {
+            ok: boolean;
+            checks: components["schemas"]["ExternalAuthCheckView"][];
+        };
+        /** @description 已安装的 provider 类型(出参):管理页据此渲染「添加」入口与设置面板的字段。 */
+        ExternalAuthTypeView: {
+            type: string;
+            defaultDisplayName: string;
+            defaultIcon: null | string;
+            allowMultiple: boolean;
+            fields: components["schemas"]["ExternalAuthFieldView"][];
+        };
         /** @description 个人中心"账号绑定"列表项(只回展示所需,不回 Subject 等原始标识)。 */
         ExternalBindingItem: {
             /** @description provider 码(如 `github`/`wechat`)。 */
@@ -3081,7 +3268,7 @@ export interface components {
         };
         /** @description 管理端:全部已注册 provider + 当前运营启用状态(含已禁用,供配置中心开关)。 */
         ExternalProviderAdminItem: {
-            /** @description provider 码(如 `github`/`wechat`),对应 appsettings 里的条目名。 */
+            /** @description provider 码(如 `github`/`wechat`),即登录方式配置里的 Code。 */
             code: string;
             displayName: string;
             icon?: null | string;
@@ -3092,7 +3279,7 @@ export interface components {
         };
         /** @description 登录页可用的外部登录方式(仅非密钥字段;点亮 SSO 按钮用)。 */
         ExternalProviderItem: {
-            /** @description provider 码(如 `github`/`wechat`),对应 appsettings 里的条目名。 */
+            /** @description provider 码(如 `github`/`wechat`),即登录方式配置里的 Code。 */
             code: string;
             displayName: string;
             icon?: null | string;
@@ -3418,6 +3605,15 @@ export interface components {
             time?: string;
             ip?: null | string;
             userAgent?: null | string;
+        };
+        /** @description 登录页 Hero 的可选覆盖值;空值代表使用前端内置文案。 */
+        LoginHeroOutput: {
+            /** @description 主标题全文 */
+            headline?: null | string;
+            /** @description 主标题中需要强调色的原文片段 */
+            highlight?: null | string;
+            /** @description 卖点清单 */
+            features?: string[];
         };
         /** @description 登录入参。验证码字段在 `Security:Captcha:Enabled` 关闭时可不传(默认关)。 */
         LoginInput: {
@@ -4462,6 +4658,48 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["DashboardSummaryOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfExternalAuthCatalogOutput: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["ExternalAuthCatalogOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfExternalAuthTestView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["ExternalAuthTestView"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5902,6 +6140,12 @@ export interface components {
             copyrightUrl?: null | string;
             /** @description 站点 Logo 图片地址(登录页、侧栏、顶栏、应用选择页统一显示;留空则前端回退内置矢量 logo) */
             logo?: null | string;
+            /** @description 登录页 Hero 文案(按 locale 分组;缺失字段由前端回退内置 i18n) */
+            loginHero?: {
+                [key: string]: components["schemas"]["LoginHeroOutput"];
+            };
+            /** @description 是否显示登录页 Hero 卖点 */
+            showFeatures?: boolean;
             /** @description 是否启用登录验证码(运行时配置驱动;前端据此决定登录页是否展示验证码)。 */
             captchaEnabled?: boolean;
             /** @description 是否启用短信验证码免密登录(运行时配置驱动;前端据此决定登录页是否展示短信登录入口)。 */
@@ -7664,6 +7908,8 @@ export interface operations {
                 GroupCode?: string;
                 /** @description 排除的分组编码(可选;用于只列自定义配置等视图)。 */
                 ExcludedGroupCodes?: string[];
+                /** @description 排除的配置键(可选;配置中心「高级」页用它去掉结构化表单已认领的键)。 */
+                ExcludedKeys?: string[];
                 Current?: number | string;
                 Size?: number | string;
                 SortField?: string;
@@ -7858,6 +8104,34 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfboolean"];
                     "application/json": components["schemas"]["ResultOfboolean"];
                     "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    Config_UploadLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    file?: components["schemas"]["IFormFile"];
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFileUploadOutput"];
+                    "application/json": components["schemas"]["ResultOfFileUploadOutput"];
+                    "text/json": components["schemas"]["ResultOfFileUploadOutput"];
                 };
             };
         };
@@ -8450,6 +8724,110 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfboolean"];
                     "application/json": components["schemas"]["ResultOfboolean"];
                     "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    ExternalAuthProvider_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfExternalAuthCatalogOutput"];
+                    "application/json": components["schemas"]["ResultOfExternalAuthCatalogOutput"];
+                    "text/json": components["schemas"]["ResultOfExternalAuthCatalogOutput"];
+                };
+            };
+        };
+    };
+    ExternalAuthProvider_Save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalAuthProviderSaveInput"];
+                "text/json": components["schemas"]["ExternalAuthProviderSaveInput"];
+                "application/*+json": components["schemas"]["ExternalAuthProviderSaveInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    ExternalAuthProvider_Delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    ExternalAuthProvider_Test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalAuthProviderTestInput"];
+                "text/json": components["schemas"]["ExternalAuthProviderTestInput"];
+                "application/*+json": components["schemas"]["ExternalAuthProviderTestInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfExternalAuthTestView"];
+                    "application/json": components["schemas"]["ResultOfExternalAuthTestView"];
+                    "text/json": components["schemas"]["ResultOfExternalAuthTestView"];
                 };
             };
         };
