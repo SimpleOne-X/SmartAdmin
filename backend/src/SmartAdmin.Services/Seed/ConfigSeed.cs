@@ -19,6 +19,22 @@ public class ConfigSeed : ISeedData<SysConfig>
     internal const string SITE_COPYRIGHT_URL_KEY = "sys.site.copyrightUrl";
     /// <summary>站点 Logo 图片地址配置键(登录页、侧栏、顶栏、应用选择页的品牌 logo,前端 SmartLogo 统一渲染;留空则回退前端内置矢量 logo)</summary>
     internal const string SITE_LOGO_KEY = "sys.site.logo";
+    /// <summary>登录页 Hero 文案分组:仅登录前展示,匿名站点信息接口下发。</summary>
+    internal const string LOGIN_HERO_GROUP = "login";
+    /// <summary>登录页 Hero 卖点开关配置键</summary>
+    internal const string LOGIN_HERO_SHOW_FEATURES_KEY = "sys.login.hero.showFeatures";
+    /// <summary>登录页 Hero 中文主标题配置键(留空回退内置文案)</summary>
+    internal const string LOGIN_HERO_HEADLINE_ZH_KEY = "sys.login.hero.headline.zh-CN";
+    /// <summary>登录页 Hero 中文强调词配置键(留空回退内置强调词)</summary>
+    internal const string LOGIN_HERO_HIGHLIGHT_ZH_KEY = "sys.login.hero.highlight.zh-CN";
+    /// <summary>登录页 Hero 中文卖点配置键(一行一条;留空回退内置卖点)</summary>
+    internal const string LOGIN_HERO_FEATURES_ZH_KEY = "sys.login.hero.features.zh-CN";
+    /// <summary>登录页 Hero 英文主标题配置键(留空回退内置文案)</summary>
+    internal const string LOGIN_HERO_HEADLINE_EN_KEY = "sys.login.hero.headline.en-US";
+    /// <summary>登录页 Hero 英文强调词配置键(留空回退内置强调词)</summary>
+    internal const string LOGIN_HERO_HIGHLIGHT_EN_KEY = "sys.login.hero.highlight.en-US";
+    /// <summary>登录页 Hero 英文卖点配置键(一行一条;留空回退内置卖点)</summary>
+    internal const string LOGIN_HERO_FEATURES_EN_KEY = "sys.login.hero.features.en-US";
 
     /// <summary>
     /// 升级时只刷四列元信息(展示名/分组/排序/备注),<b>永不碰 <c>ConfigValue</c></b>——
@@ -41,6 +57,16 @@ public class ConfigSeed : ISeedData<SysConfig>
         new SysConfig { Id = 19, ConfigKey = SITE_COPYRIGHT_KEY, ConfigValue = "SmartAdmin", Name = "版权信息", GroupCode = "sys", Sort = 3, Remark = "登录页页脚版权名;留空则回退站点标题" },
         new SysConfig { Id = 20, ConfigKey = SITE_COPYRIGHT_URL_KEY, ConfigValue = "", Name = "版权链接", GroupCode = "sys", Sort = 4, Remark = "版权名的超链接(http/https);留空则纯文本" },
         new SysConfig { Id = 26, ConfigKey = SITE_LOGO_KEY, ConfigValue = "", Name = "站点 Logo", GroupCode = "sys", Sort = 5, Remark = "品牌 logo 图片地址(URL):登录页、侧栏、顶栏、应用选择页统一显示;留空则回退前端内置矢量 logo" },
+
+        // 登录页 Hero(GroupCode=login):仅登录前展示,经匿名白名单 GetSiteInfoAsync 下发。
+        // 空值代表沿用前端内置文案;卖点一行一条,前端最多渲染 5 条。
+        new SysConfig { Id = 40, ConfigKey = LOGIN_HERO_SHOW_FEATURES_KEY, ConfigValue = "true", Name = "显示登录页卖点", GroupCode = LOGIN_HERO_GROUP, Sort = 1, Remark = "关闭后登录页 Hero 不显示卖点清单" },
+        new SysConfig { Id = 41, ConfigKey = LOGIN_HERO_HEADLINE_ZH_KEY, ConfigValue = "", Name = "登录页主标题(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 10, Remark = "留空则使用内置中文主标题" },
+        new SysConfig { Id = 42, ConfigKey = LOGIN_HERO_HIGHLIGHT_ZH_KEY, ConfigValue = "", Name = "登录页主标题强调词(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 11, Remark = "需包含在主标题中;留空则使用内置强调词" },
+        new SysConfig { Id = 43, ConfigKey = LOGIN_HERO_FEATURES_ZH_KEY, ConfigValue = "", Name = "登录页卖点(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 12, Remark = "一行一条,最多 5 条;留空则使用内置中文卖点" },
+        new SysConfig { Id = 44, ConfigKey = LOGIN_HERO_HEADLINE_EN_KEY, ConfigValue = "", Name = "登录页主标题(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 20, Remark = "留空则使用内置英文主标题" },
+        new SysConfig { Id = 45, ConfigKey = LOGIN_HERO_HIGHLIGHT_EN_KEY, ConfigValue = "", Name = "登录页主标题强调词(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 21, Remark = "需包含在主标题中;留空则使用内置强调词" },
+        new SysConfig { Id = 46, ConfigKey = LOGIN_HERO_FEATURES_EN_KEY, ConfigValue = "", Name = "登录页卖点(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 22, Remark = "一行一条,最多 5 条;留空则使用内置英文卖点" },
 
         // 安全策略(GroupCode=security):后端强制执行时经 ISecurityPolicyProvider 读取,改值即时生效。
         // 默认值须与 SecurityPolicyProvider 兜底一致(= 现 Options 默认)。

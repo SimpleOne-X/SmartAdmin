@@ -117,6 +117,8 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 316, ParentId = 310, Type = MenuType.Button, Title = "高敏权限-新增", Permission = "POST:/api/v1/sys/mfa/high-sensitivity", Sort = 6, Enabled = true },
         new SysMenu { Id = 317, ParentId = 310, Type = MenuType.Button, Title = "高敏权限-删除", Permission = "DELETE:/api/v1/sys/mfa/high-sensitivity/{id:long}", Sort = 7, Enabled = true },
         new SysMenu { Id = 318, ParentId = 310, Type = MenuType.Button, Title = "MFA-清除用户二因子", Permission = "POST:/api/v1/sys/mfa/clear", Sort = 8, Enabled = true },
+        // 配置中心「站点品牌」换 Logo:专用上传端点,只收位图、不受全局上传白名单约束。
+        new SysMenu { Id = 319, ParentId = 310, Type = MenuType.Button, Title = "配置-上传Logo", Permission = "POST:/api/v1/sys/config/logo", Sort = 9, Enabled = true },
 
         // 字典管理页(DictController 主从 CRUD)。items/{typeCode} 走 [ActiveSession](任何登录用户可读),不占权限码。
         new SysMenu { Id = 320, ParentId = 300, Type = MenuType.Menu, Title = "字典管理", Permission = "", Path = "/system/dict", Component = "system/dict/index", Icon = "ph:book-open-text-duotone", Sort = 2, Enabled = true, Visible = true },

@@ -34,6 +34,10 @@ public class ConfigCenterTests
         Assert.Equal("", data.GetProperty("subtitle").GetString());
         Assert.Equal("", data.GetProperty("copyrightUrl").GetString());
         Assert.Equal("", data.GetProperty("logo").GetString()); // logo 默认空串 → 前端回退内置矢量 logo
+        var loginHero = data.GetProperty("loginHero");
+        Assert.Equal("", loginHero.GetProperty("zh-CN").GetProperty("headline").GetString());
+        Assert.Empty(loginHero.GetProperty("zh-CN").GetProperty("features").EnumerateArray());
+        Assert.True(data.GetProperty("showFeatures").GetBoolean());
     }
 
     [Fact]
@@ -52,6 +56,33 @@ public class ConfigCenterTests
 
         var site = await (await anon.GetAsync("/api/v1/sys/config/site")).ReadEnvelope();
         Assert.Equal("https://cdn.example.com/brand.svg", site.GetProperty("data").GetProperty("logo").GetString());
+    }
+
+    [Fact]
+    public async Task Site_info_exposes_configured_login_hero()
+    {
+        using var f = new AdminAppFactory();
+        var c = await SuperAdminClient(f);
+        var anon = f.CreateClient();
+
+        var batch = await c.PutJson("/api/v1/sys/config/batch", new object[]
+        {
+            new { configKey = "sys.login.hero.headline.zh-CN", configValue = "企业级权限控制台" },
+            new { configKey = "sys.login.hero.highlight.zh-CN", configValue = "权限" },
+            new { configKey = "sys.login.hero.features.zh-CN", configValue = "角色授权\n 数据范围 \n多应用门户\n第四条\n第五条\n第六条" },
+            new { configKey = "sys.login.hero.showFeatures", configValue = "false" },
+        });
+        Assert.Equal(0, (await batch.ReadEnvelope()).GetProperty("code").GetInt32());
+
+        var site = await (await anon.GetAsync("/api/v1/sys/config/site")).ReadEnvelope();
+        var data = site.GetProperty("data");
+        var hero = data.GetProperty("loginHero").GetProperty("zh-CN");
+        Assert.Equal("企业级权限控制台", hero.GetProperty("headline").GetString());
+        Assert.Equal("权限", hero.GetProperty("highlight").GetString());
+        Assert.Equal(
+            ["角色授权", "数据范围", "多应用门户", "第四条", "第五条"],
+            hero.GetProperty("features").EnumerateArray().Select(x => x.GetString()).ToArray());
+        Assert.False(data.GetProperty("showFeatures").GetBoolean());
     }
 
     [Fact]

@@ -146,6 +146,7 @@ public static class ServicesSetup
         // 字典与配置模块:读穿透缓存 + 变更即失效并广播事件
         services.TryAddScoped<IDictService, DictService>();
         services.TryAddScoped<IConfigService, ConfigService>();
+        services.TryAddScoped<ISiteLogoService, SiteLogoService>();
 
         // 消息通知模块(消息中心):管理员广播发布 + 用户端我的通知/未读数/标记已读(轮询模型)
         services.TryAddScoped<INoticeService, NoticeService>();
