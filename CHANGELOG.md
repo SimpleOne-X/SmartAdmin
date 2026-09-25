@@ -14,14 +14,24 @@
 
 ## Unreleased
 
+## 10.15.0 - 2026-09-24
+
+**本版含破坏性变更：** 四个第三方登录可选包的 `AddSmartAdminXxxAuth(IConfiguration)` 重载已删除，`appsettings` 里的厂商与 OIDC 连接节点不再读取，升级前先读 *Changed*。另外「建号首登强制改密」的缺省行为由开变关，见 *Changed*。
+
 ### Added
 
+- **第三方登录的连接配置改在界面填写，加密存进数据库。** 企业微信、钉钉、GitHub、微信与标准 OIDC 的连接信息和密钥，统一在「系统配置 → 登录方式」填写，写入新表 `sys_external_auth_provider`。可选包各自注册一个 `IExternalAuthProviderType`（字段清单、造 provider、测连接），注册表把代码注册的 provider 与库里按类型现建的合并，同 `Code` 时代码注册的优先。机密字段整体经 `ISecretProtector` 加密，接口与日志只显示「已配置 + 尾四位」；主密钥是临时密钥时拒绝保存；改了决定请求去向的字段（OIDC Authority）必须重输机密；保存与清除要求再次验证身份。OIDC 的发现文档、JWKS 与令牌请求走出站围栏，拦回环与链路本地地址。新端点 `api/v1/sys/external-auth/providers`：目录、保存、清除、逐项列出通过 / 失败 / 未验证的连接测试；新增错误码 40030–40036。取舍见 [ADR 0011](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/adr/0011-external-auth-provider-config-in-db.md)。
+- **配置中心新增「首次登录须改密码」开关。** 在安全策略的密码分组里，配置键 `sys.security.password.forceChangeOnFirstLogin`，缺省关闭。关闭时管理员建的账号首登不必改密码；管理员重置密码与密码过期仍然强制改。自定义的 `ISecurityPolicyProvider` 不用改，新增的 `GetForceChangeOnFirstLoginAsync` 是接口默认方法，缺省返回 `false`。
+- **登录页 Hero 文案可在配置里改。** 匿名的站点信息下发登录页标题、高亮词与卖点，配置键 `sys.login.hero.*`（中英各一份），留空回退前端内置文案。
 - **配置中心的 Logo 改成上传。** 「站点品牌」里点 Logo 的「编辑」，选图、裁成正方形，预览里看过再保存，不用再去文件管理上传后复制地址。图片走新端点 `POST /api/v1/sys/config/logo`（新按钮权限「配置-上传Logo」，Id 319）：只收按文件头识别的 PNG / JPG / WEBP，上限 1 MB，不受全局上传白名单影响；服务是可替换的 `ISiteLogoService`。
 - **浏览器标签页图标跟随站点 Logo。** 配了 Logo 就换，清空即还原模板自带图标；`createSmartAdmin({ brand: { faviconFromLogo: false } })` 可关。
 - **配置分页可排除指定键。** `GET /api/v1/sys/config/page` 新增 `ExcludedKeys`，在库里过滤，分页总数准确。
 
 ### Changed
 
+- **（破坏性）第三方登录不再读 `appsettings` 里的连接配置。** 删除四个可选包（WeCom、DingTalk、GitHub、WeChat）里带 `IConfiguration` 的 `AddSmartAdminXxxAuth` 重载与 `AdminExternalAuthOptions.Oidc`，这些包也去掉了对 `Configuration.Abstractions` / `Binder` 的引用。`SmartAdmin:ExternalAuth` 下的厂商与 OIDC 连接节点不会被读取，启动时给出一条警告；`CallbackBaseUrl` 与 `FrontendResultPath` 仍在 `appsettings`。已有部署升级后要在「登录方式」页重新填一遍连接信息。
+- **建号首登不再默认强制改密码。** 此前管理员新建的账号首次登录一律要改密码；现在由「首次登录须改密码」开关决定，缺省关闭，升级时补入的种子行也是关闭。要保留旧行为，在配置中心安全策略里打开它。
+- **仓库迁到 `SimpleOne-X/SmartAdmin`。** 文档、模板 `degit` 命令、包元数据里的仓库地址与文档站域名一并改成新地址，旧地址由 GitHub 重定向。
 - **配置中心改版，风格参照 macOS「系统设置」。** 顶部图标页签共七项：品牌与登录页、安全策略、登录方式、敏感操作 | 文件上传、定时任务、高级。设置是圆角分组列表，改过的行前有橙点，右侧预览即时变化并闪一下受影响的位置（高级页是键值表，没有预览）；全页一个保存入口（底部浮出的保存条），页签橙点标出改过的分类，离开页面前会确认。每个页签一屏放下，表格在自己内部滚动。
   - 「第三方登录」改名「登录方式」，「短信验证码登录」从安全策略移到这里，预览就是登录框；每个第三方一行，标明未安装、未配置或已配置。
   - 安全策略页底部的「高敏感权限」拆成独立的「敏感操作」页，预览是用户执行该接口时看到的再次验证框；增删仍即时生效，不走保存条。安全策略新增密码试填。
