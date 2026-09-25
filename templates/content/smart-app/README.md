@@ -9,7 +9,7 @@ dotnet run
 ```
 
 - 零配置默认用 SQLite(相对路径落在 ContentRoot),自动建表 + 种子。
-- `Properties/launchSettings.json` 把 `ASPNETCORE_ENVIRONMENT` 钉成 `Development` —— **别删**:落到 `Production` 时 CodeFirst 自动建表默认关闭(生产不该自动改表),首启会因为「种子要写的表不存在」直接启动失败。生产建表走 `SmartAdmin:Database:EnableCodeFirstInProduction` 或由 DBA 预建,见[部署指南](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/)。
+- `Properties/launchSettings.json` 把 `ASPNETCORE_ENVIRONMENT` 钉成 `Development` —— **别删**:落到 `Production` 时 CodeFirst 自动建表默认关闭(生产不该自动改表),首启会因为「种子要写的表不存在」直接启动失败。生产建表走 `SmartAdmin:Database:EnableCodeFirstInProduction` 或由 DBA 预建,见[部署指南](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
 - **首次启动控制台会打印随机超管密码**,用它登录。
 - 换数据库:改 `appsettings.json` 的 `SmartAdmin:Database` 节(DbType + 连接串),支持 SQLite / MySQL / SqlServer / PostgreSQL。
 - 健康检查 `/health`、`/health/ready`;开发期 OpenAPI 契约 `/openapi/v1.json`。
@@ -17,7 +17,7 @@ dotnet run
 
 ## 上线
 
-`npm run dev` 的 `/api` 代理只在开发期存在;部署要么让本 host 用 `UseStaticFiles()` 顺带托管前端产物(此时**必须**把 `SmartAdmin:Upload:RootPath` 挪出 `wwwroot`),要么交给 nginx 反代。生产还必须显式配 `SmartAdmin:Jwt:SecretKey`。完整步骤见[部署指南](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/)。
+`npm run dev` 的 `/api` 代理只在开发期存在;部署要么让本 host 用 `UseStaticFiles()` 顺带托管前端产物(此时**必须**把 `SmartAdmin:Upload:RootPath` 挪出 `wwwroot`),要么交给 nginx 反代。生产还必须显式配 `SmartAdmin:Jwt:SecretKey`。完整步骤见[部署指南](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
 
 ### Docker
 
@@ -28,13 +28,13 @@ dotnet run
 后台界面是 npm 包 `smart-admin-web`(Vue 3 + Naive UI),与本工程引用的 `SmartAdmin` NuGet 包同号。拉一份薄壳模板到本工程的 `web/` 下即可(degit 只取文件、不带 git 历史,拉下来就是你自己的):
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web && npm install && npm run dev
 ```
 
 dev server 起在 `5173`,`/api`、`/openapi`、`/hub` 反代到本 host 的 `5100`(改目标用环境变量 `SMART_API_TARGET`)。接口类型是从跑着的后端生成的:`npm run gen:api` 抓 `/openapi/v1.json` 写出 `src/api/schema.d.ts`,再把 `src/api/client.ts` 里的 `KernelPaths` 换成生成出来的 `paths`。自己的页面放 `src/views/`,文案放 `src/locales/ext/`,组件与 API 原语从 `smart-admin-web` 导入。
 
-升级时把 `SmartApp.csproj`、`Tests/Tests.csproj` 里的 `SmartAdmin*` 包和 `web/package.json` 里的 `smart-admin-web` 改成同一个版本号,见[升级到新版本](https://smartcode-x.github.io/SmartAdmin/zh/guide/upgrade)。
+升级时把 `SmartApp.csproj`、`Tests/Tests.csproj` 里的 `SmartAdmin*` 包和 `web/package.json` 里的 `smart-admin-web` 改成同一个版本号,见[升级到新版本](https://simpleone-x.github.io/SmartAdmin/zh/guide/upgrade)。
 
 ## 测试
 

@@ -1,28 +1,28 @@
-English | [简体中文](https://github.com/SmartCode-X/SmartAdmin/blob/main/README.md)
+English | [简体中文](https://github.com/SimpleOne-X/SmartAdmin/blob/main/README.md)
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/site/public/icon-512.png" width="100" alt="SmartAdmin">
+<img src="https://raw.githubusercontent.com/SimpleOne-X/SmartAdmin/main/site/public/icon-512.png" width="100" alt="SmartAdmin">
 
 # SmartAdmin
 
 *AI+ enterprise admin kernel for .NET. Built-in AI gateway, AI-assisted development. Install and go, upgrade by bumping a version.*
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
-[![Stars](https://img.shields.io/github/stars/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/stargazers)
-[![Forks](https://img.shields.io/github/forks/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/forks)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE)
+[![Stars](https://img.shields.io/github/stars/SimpleOne-X/SmartAdmin?style=social)](https://github.com/SimpleOne-X/SmartAdmin/stargazers)
+[![Forks](https://img.shields.io/github/forks/SimpleOne-X/SmartAdmin?style=social)](https://github.com/SimpleOne-X/SmartAdmin/forks)
 [![NuGet](https://img.shields.io/nuget/v/SmartAdmin)](https://www.nuget.org/packages/SmartAdmin)
 [![npm](https://img.shields.io/npm/v/smart-admin-web)](https://www.npmjs.com/package/smart-admin-web)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/)
-[![Build](https://img.shields.io/github/actions/workflow/status/SmartCode-X/SmartAdmin/ci.yml?branch=main&event=push&label=build)](https://github.com/SmartCode-X/SmartAdmin/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![Build](https://img.shields.io/github/actions/workflow/status/SimpleOne-X/SmartAdmin/ci.yml?branch=main&event=push&label=build)](https://github.com/SimpleOne-X/SmartAdmin/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
 
-**[📖 Docs](https://smartcode-x.github.io/SmartAdmin/) · [🚀 Quick Start](https://smartcode-x.github.io/SmartAdmin/guide/getting-started) · [📋 Changelog](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)**
+**[📖 Docs](https://simpleone-x.github.io/SmartAdmin/) · [🚀 Quick Start](https://simpleone-x.github.io/SmartAdmin/guide/getting-started) · [📋 Changelog](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)**
 
 </div>
 
 ---
 
-![SmartAdmin runtime architecture](https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/docs/architecture/smart-runtime.en.svg)
+![SmartAdmin runtime architecture](https://raw.githubusercontent.com/SimpleOne-X/SmartAdmin/main/docs/architecture/smart-runtime.en.svg)
 
 ## What is it
 
@@ -53,7 +53,7 @@ The backend listens on `http://localhost:5100` and uses SQLite by default, creat
 In a second terminal, still in `MyApp`:
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev
@@ -75,22 +75,22 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-Pull the frontend as in step 2. Production requires a JWT signing key, `SmartAdmin:Jwt:SecretKey`; the rest is in [Deployment](https://smartcode-x.github.io/SmartAdmin/guide/deployment/).
+Pull the frontend as in step 2. Production requires a JWT signing key, `SmartAdmin:Jwt:SecretKey`; the rest is in [Deployment](https://simpleone-x.github.io/SmartAdmin/guide/deployment/).
 
 ## Next steps
 
 | I want to | Read |
 |---|---|
-| Add a business module (table, API, permissions) | [Add a Business Module](https://smartcode-x.github.io/SmartAdmin/guide/business-module) |
-| Build its admin page | [Add a Frontend Page](https://smartcode-x.github.io/SmartAdmin/guide/frontend-page) |
-| Switch to MySQL / SQL Server / PostgreSQL | [Swap out the default database](https://smartcode-x.github.io/SmartAdmin/guide/getting-started#swap-out-the-default-database) |
-| Change built-in behavior (login flow, password hashing, caching…) | [Replace Built-in Services](https://smartcode-x.github.io/SmartAdmin/guide/replace-service) |
-| Add scheduled jobs, wire import/export | [Scheduled Jobs](https://smartcode-x.github.io/SmartAdmin/guide/scheduled-jobs) · [Import/Export](https://smartcode-x.github.io/SmartAdmin/guide/import-export) |
-| Call a large language model (AI approval workflows and the like) | [AI Models](https://smartcode-x.github.io/SmartAdmin/guide/ai-models) |
-| Browse the API and fire a request on the spot | [API Docs](https://smartcode-x.github.io/SmartAdmin/backend/api-docs) |
-| Deploy, upgrade | [Deployment](https://smartcode-x.github.io/SmartAdmin/guide/deployment/) · [Upgrading](https://smartcode-x.github.io/SmartAdmin/guide/upgrade) |
-| Understand the design | [Core Concepts](https://smartcode-x.github.io/SmartAdmin/guide/concepts) · [Runtime architecture diagram](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.en.svg) |
-| Let an AI assistant write code by the rules | [Agent Skills](https://smartcode-x.github.io/SmartAdmin/community/agent-skills) |
+| Add a business module (table, API, permissions) | [Add a Business Module](https://simpleone-x.github.io/SmartAdmin/guide/business-module) |
+| Build its admin page | [Add a Frontend Page](https://simpleone-x.github.io/SmartAdmin/guide/frontend-page) |
+| Switch to MySQL / SQL Server / PostgreSQL | [Swap out the default database](https://simpleone-x.github.io/SmartAdmin/guide/getting-started#swap-out-the-default-database) |
+| Change built-in behavior (login flow, password hashing, caching…) | [Replace Built-in Services](https://simpleone-x.github.io/SmartAdmin/guide/replace-service) |
+| Add scheduled jobs, wire import/export | [Scheduled Jobs](https://simpleone-x.github.io/SmartAdmin/guide/scheduled-jobs) · [Import/Export](https://simpleone-x.github.io/SmartAdmin/guide/import-export) |
+| Call a large language model (AI approval workflows and the like) | [AI Models](https://simpleone-x.github.io/SmartAdmin/guide/ai-models) |
+| Browse the API and fire a request on the spot | [API Docs](https://simpleone-x.github.io/SmartAdmin/backend/api-docs) |
+| Deploy, upgrade | [Deployment](https://simpleone-x.github.io/SmartAdmin/guide/deployment/) · [Upgrading](https://simpleone-x.github.io/SmartAdmin/guide/upgrade) |
+| Understand the design | [Core Concepts](https://simpleone-x.github.io/SmartAdmin/guide/concepts) · [Runtime architecture diagram](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.en.svg) |
+| Let an AI assistant write code by the rules | [Agent Skills](https://simpleone-x.github.io/SmartAdmin/community/agent-skills) |
 
 ## Built-in features
 
@@ -120,6 +120,6 @@ All packages share one version number, and frontend and backend use the same num
 
 ## Contributing and license
 
-Issues and PRs are welcome. Local development and running the tests are covered in the [Contributing Guide](https://smartcode-x.github.io/SmartAdmin/community/contributing); report security issues as described in [SECURITY.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/SECURITY.md).
+Issues and PRs are welcome. Local development and running the tests are covered in the [Contributing Guide](https://simpleone-x.github.io/SmartAdmin/community/contributing); report security issues as described in [SECURITY.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/SECURITY.md).
 
-[Apache License 2.0](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
+[Apache License 2.0](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE)

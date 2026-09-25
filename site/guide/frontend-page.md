@@ -64,7 +64,7 @@ The `sample/doc` `List` endpoint isn't paged — it returns an array directly, s
 
 ## Write the list page
 
-Start with [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md) in the repository — the index of the frontend's shared components, a must-read before writing a page: the `FormContainer` (a combined modal/drawer form container) and `useConfirm` (confirmation + result toast) this page uses are both documented there, with conventions and pointers to example pages. Components, composables and stores are all imported from `smart-admin-web`.
+Start with [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md) in the repository — the index of the frontend's shared components, a must-read before writing a page: the `FormContainer` (a combined modal/drawer form container) and `useConfirm` (confirmation + result toast) this page uses are both documented there, with conventions and pointers to example pages. Components, composables and stores are all imported from `smart-admin-web`.
 
 `sample/doc` is an unpaged flat list, so it doesn't need `SmartTable` — a bare `NDataTable` is enough, following the dictionary-item panel on the right side of the built-in dictionary page (`web/packages/admin/src/views/system/dict/index.vue`, also a bare `n-data-table` plus create/edit/delete). Create `web/src/views/sample/doc/index.vue`:
 

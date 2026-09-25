@@ -8,7 +8,7 @@
 ## SmartTable(smart-naive-table)
 
 列驱动表格:`columns` 数组同时驱动搜索表单、字典渲染与列设置;`fetcher` 是唯一后端契约。
-完整文档:https://github.com/SmartCode-X/smart-naive-table/blob/main/README.md
+完整文档:https://github.com/SimpleOne-X/smart-naive-table/blob/main/README.md
 
 SmartAdmin 内接入约定:
 

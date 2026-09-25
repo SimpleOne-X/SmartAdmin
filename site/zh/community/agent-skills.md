@@ -9,7 +9,7 @@
 
 ## Issue / PRD：走 GitHub Issues
 
-仓库的 issue 和 PRD 都是 [GitHub issue](https://github.com/SmartCode-X/SmartAdmin/issues)，约定详见 [`docs/agents/issue-tracker.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/issue-tracker.md)。agent 读写 issue 走 `gh` CLI，不用脱离浏览器另找接口。
+仓库的 issue 和 PRD 都是 [GitHub issue](https://github.com/SimpleOne-X/SmartAdmin/issues)，约定详见 [`docs/agents/issue-tracker.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/issue-tracker.md)。agent 读写 issue 走 `gh` CLI，不用脱离浏览器另找接口。
 
 ::: details PR 目前不当作请求入口
 `issue-tracker.md` 里这条开关当前是「否」：外部 PR 不会走和 issue 一样的标签流程。如果哪天改成「是」，PR 会套用同一组标签和状态，在 GitHub 的 PR 页面上打。
@@ -17,7 +17,7 @@
 
 ## Triage 标签
 
-Issue 分诊用五个规范化标签，标签串就是角色名本身，取值和用法在 [`docs/agents/triage-labels.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/triage-labels.md) 定死：
+Issue 分诊用五个规范化标签，标签串就是角色名本身，取值和用法在 [`docs/agents/triage-labels.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/triage-labels.md) 定死：
 
 | 标签 | 含义 |
 |---|---|
@@ -31,7 +31,7 @@ Issue 分诊用五个规范化标签，标签串就是角色名本身，取值�
 
 ## 领域文档：CONTEXT.md + docs/adr
 
-[`docs/agents/domain.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/domain.md) 要求 agent 动代码之前先看两样：
+[`docs/agents/domain.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/domain.md) 要求 agent 动代码之前先看两样：
 
 - 仓库根目录的 `CONTEXT.md`。多上下文场景下换成 `CONTEXT-MAP.md`，它指向各上下文各自的 `CONTEXT.md`。
 - `docs/adr/` 下和当前改动区域相关的 ADR。
@@ -44,7 +44,7 @@ Issue 分诊用五个规范化标签，标签串就是角色名本身，取值�
 
 ## 业务开发 Skills(`skills/`)
 
-这组文档面向「在 SmartAdmin 上面接着写业务」的场景。内核维护者加系统模块，消费方在自己项目里二开，走的是同一套模式。索引在 [`skills/README.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/skills/README.md)：
+这组文档面向「在 SmartAdmin 上面接着写业务」的场景。内核维护者加系统模块，消费方在自己项目里二开，走的是同一套模式。索引在 [`skills/README.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/skills/README.md)：
 
 | Skill | 用途 | 适用场景 |
 |---|---|---|
@@ -69,6 +69,6 @@ Issue 分诊用五个规范化标签，标签串就是角色名本身，取值�
 
 ## 参考
 
-- 根目录 [`CLAUDE.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/CLAUDE.md) 的「Agent skills」一节是这些约定的索引入口。
+- 根目录 [`CLAUDE.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CLAUDE.md) 的「Agent skills」一节是这些约定的索引入口。
 - 想自己手动走一遍替换/扩展内置服务的流程（而不是让 agent 按 `replace-service` skill 生成），见 [替换内置服务](/zh/guide/replace-service)。
 - 想了解怎么跑测试、怎么提 PR，见 [贡献指南](./contributing)。

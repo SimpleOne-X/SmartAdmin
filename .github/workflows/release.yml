@@ -1,7 +1,7 @@
 # 发版：推 v* tag 触发。verify 全绿才进 publish；publish 用 Trusted Publishing 发 nuget.org 与 npm（都是 GitHub OIDC
 # 换发布权限），仓库里不放任何 NuGet API key 或 npm token。两边都要先建好信任关系，都指向本文件：
-#   nuget.org 策略：Repository Owner=SmartCode-X、Repository=SmartAdmin、Workflow File=release.yml（只填文件名）。
-#   npmjs.com 包 smart-admin-web 的 Trusted Publisher：GitHub Actions、SmartCode-X / SmartAdmin / release.yml，
+#   nuget.org 策略：Repository Owner=SimpleOne-X、Repository=SmartAdmin、Workflow File=release.yml（只填文件名）。
+#   npmjs.com 包 smart-admin-web 的 Trusted Publisher：GitHub Actions、SimpleOne-X / SmartAdmin / release.yml，
 #   Allowed actions 要勾上直接 npm publish（不只 stage publish）。
 # 所有 action 钉 commit SHA，尾注标版本：publish 持 id-token: write，一个被改写的浮动 tag 就能直发 nuget.org 与 npm。
 # 升级交给 Dependabot（.github/dependabot.yml），它会连尾注一起改。

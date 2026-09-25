@@ -14,7 +14,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: GitHub
-      link: https://github.com/SmartCode-X/SmartAdmin
+      link: https://github.com/SimpleOne-X/SmartAdmin
 
 features:
   - icon: 🧩

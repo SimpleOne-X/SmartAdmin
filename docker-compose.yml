@@ -53,7 +53,7 @@ services:
       # 时区：容器默认 UTC、宿主机常是 +8。定时任务全模块用**服务器本地时间**，参与调度的所有进程
       # 必须同一时区,否则任务会在错误的时刻执行(领取 CAS 仍保证不双发,但时刻是错的)。
       TZ: ${SMART_TZ:-Asia/Shanghai}
-      # 所有配置通过双下划线环境变量传入（https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/）；镜像中不烘焙任何密钥
+      # 所有配置通过双下划线环境变量传入（https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/）；镜像中不烘焙任何密钥
       SmartAdmin__Jwt__SecretKey: ${SMART_JWT_SECRET:?请先按 .env.example 建一份 .env,或在环境里给出 SMART_JWT_SECRET(≥32 字节随机串)}
       SmartAdmin__Database__DbType: MySql
       SmartAdmin__Database__ConnectionString: Server=db;Port=3306;Database=smart;User ID=root;Password=${SMART_DB_PASSWORD:?请先按 .env.example 建一份 .env,或在环境里给出 SMART_DB_PASSWORD};AllowPublicKeyRetrieval=true;SSL Mode=None;

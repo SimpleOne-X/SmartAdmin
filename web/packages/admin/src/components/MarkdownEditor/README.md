@@ -12,7 +12,7 @@
 
 图片上传走 `fileApi.upload`,插进正文的是后端签发的 **`viewUrl`**(签名直链)。
 
-> **不要用 `storagePath` 当 URL。** 它是存储层的相对路径,而后端**默认不静态托管上传目录**——真去 `UseStaticFiles()` 托管它就是鉴权绕过(整个上传目录任人匿名下载,见文档站[路线 A:单体部署](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/route-a))。`viewUrl` 指向 `GET /api/v1/sys/file/{id}/view?sig=…`:匿名可取(`<img>` 带不了 Authorization 头),但签名是文件 Id 的 HMAC,伪造不了。
+> **不要用 `storagePath` 当 URL。** 它是存储层的相对路径,而后端**默认不静态托管上传目录**——真去 `UseStaticFiles()` 托管它就是鉴权绕过(整个上传目录任人匿名下载,见文档站[路线 A:单体部署](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/route-a))。`viewUrl` 指向 `GET /api/v1/sys/file/{id}/view?sig=…`:匿名可取(`<img>` 带不了 Authorization 头),但签名是文件 Id 的 HMAC,伪造不了。
 >
 > 它是**永久**能力链接(拿得到链接就拿得到图):正文是持久内容,带过期时间的 URL 等于"发布半小时后图片全坏"。撤销手段是删文件或轮换 JWT 密钥。
 

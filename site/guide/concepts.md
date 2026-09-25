@@ -53,4 +53,4 @@ An authenticated request flows through, in order:
 
 ---
 
-> For a more complete picture of the architecture and design rationale, see the repo's [Architecture & Design Document](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/rebuild-design.md).
+> For a more complete picture of the architecture and design rationale, see the repo's [Architecture & Design Document](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/rebuild-design.md).

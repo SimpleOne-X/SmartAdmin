@@ -9,13 +9,13 @@
     "vue3",
     "naive-ui"
   ],
-  "homepage": "https://smartcode-x.github.io/SmartAdmin/",
+  "homepage": "https://simpleone-x.github.io/SmartAdmin/",
   "bugs": {
-    "url": "https://github.com/SmartCode-X/SmartAdmin/issues"
+    "url": "https://github.com/SimpleOne-X/SmartAdmin/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SmartCode-X/SmartAdmin.git",
+    "url": "git+https://github.com/SimpleOne-X/SmartAdmin.git",
     "directory": "web/packages/admin"
   },
   "license": "Apache-2.0",

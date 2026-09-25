@@ -9,7 +9,7 @@ SmartAdmin 的前端内核：布局壳、动态菜单路由、登录与鉴权、
 从前端模板起步最省事，它就是一个装好这个包的薄壳应用：
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev
@@ -66,13 +66,13 @@ import { SmartTable } from 'smart-naive-table'
 
 ## 版本
 
-版本号与 NuGet 包 `SmartAdmin` 一致：主版本 = 内核所用的 .NET 主版本，次版本加功能，修订号修 bug。内置页照同一版后端的接口写，所以 `package.json` 里精确钉住版本、不带 `^`；升级时后端的 `SmartAdmin` 包与前端的 `smart-admin-web` 填同一个数字，改动见 [CHANGELOG](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)。
+版本号与 NuGet 包 `SmartAdmin` 一致：主版本 = 内核所用的 .NET 主版本，次版本加功能，修订号修 bug。内置页照同一版后端的接口写，所以 `package.json` 里精确钉住版本、不带 `^`；升级时后端的 `SmartAdmin` 包与前端的 `smart-admin-web` 填同一个数字，改动见 [CHANGELOG](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)。
 
 ## 文档
 
-- 文档站：<https://smartcode-x.github.io/SmartAdmin/zh/>
-- 共享组件目录：[web/COMPONENTS.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md)
-- 源码与 issue：<https://github.com/SmartCode-X/SmartAdmin>
+- 文档站：<https://simpleone-x.github.io/SmartAdmin/zh/>
+- 共享组件目录：[web/COMPONENTS.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md)
+- 源码与 issue：<https://github.com/SimpleOne-X/SmartAdmin>
 
 ## 许可证
 

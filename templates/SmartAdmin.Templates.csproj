@@ -15,8 +15,8 @@
     <Product>SmartAdmin</Product>
     <Copyright>Copyright © SmartCodeX</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/SmartCode-X/SmartAdmin</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/SmartCode-X/SmartAdmin</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/SimpleOne-X/SmartAdmin</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SimpleOne-X/SmartAdmin</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>smartadmin;admin;scaffold;template;dotnet-new;templates</PackageTags>
     <!-- 与 6 个核心包对齐图标 + 说明页(此包不继承 backend/Directory.Build.props,故显式补)。

@@ -18,7 +18,7 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
    - `web/packages/admin/package.json`(npm 包本身)、`web/package.json`(workspace 根)、`web/template/package.json` 的 `version`
    - `web/template/package.json` 的 `dependencies["smart-admin-web"]` 改成 `X.Y.Z`(精确版本,不带 `^`)
    - `web/package-lock.json`:改完上面几处,在 `web/` 下跑 `npm install --package-lock-only` 同步(会改 5 处:顶层 `version`、`packages[""]`、`packages["packages/admin"]`、`packages["template"]` 的 `version` 与模板的依赖版本;diff 里不该出现别的变化)
-   - **`site/.vitepress/config.ts`**:英文 nav 与中文(`zh`)nav **各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' }`(文档站顶栏显示的版本号;`release.yml` 的 verify 会数这两处,不是 `X.Y.Z` 直接拦)。agent 流程见 `skills/smart-release.md`(`/smart-release`)。
+   - **`site/.vitepress/config.ts`**:英文 nav 与中文(`zh`)nav **各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' }`(文档站顶栏显示的版本号;`release.yml` 的 verify 会数这两处,不是 `X.Y.Z` 直接拦)。agent 流程见 `skills/smart-release.md`(`/smart-release`)。
    - 核对无残留(PowerShell):`Select-String -Path web/package.json,web/packages/admin/package.json,web/template/package.json -Pattern 'X\.Y\.<旧>'` 与 `Select-String -Path site/.vitepress/config.ts -Pattern "'X.Y.<旧>'"` 都应为空;`Select-String -Path site/.vitepress/config.ts -Pattern "text: 'X.Y.Z'"` 应正好 2 处。
 
 3. **本地验绿**(可选但推荐):`ci` workflow 会在 push 上跑同样的检查,本地先过一遍能少等一轮。本机内存紧,**别并发**跑 vue-tsc 和 dotnet test,一次一个:
@@ -82,14 +82,14 @@ git push origin vX.Y.Z
 ## 三、发布后
 
 - **核对 nuget.org**:`SmartAdmin`、`SmartAdmin.Templates` 等的 `X.Y.Z` 可见(索引有几分钟延迟);空目录里 `dotnet new install SmartAdmin.Templates::X.Y.Z` 后 `dotnet new smart-app` 能还原。
-- **核对 npm**:`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`;npmjs.com 包页的版本旁有 provenance 标记(证明是从本仓库 `release.yml` 构建发布的)。空目录里 `npx degit SmartCode-X/SmartAdmin/web/template web; cd web; npm install` 能装上新版。
+- **核对 npm**:`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`;npmjs.com 包页的版本旁有 provenance 标记(证明是从本仓库 `release.yml` 构建发布的)。空目录里 `npx degit SimpleOne-X/SmartAdmin/web/template web; cd web; npm install` 能装上新版。
 - **GitHub Release**:workflow 自动建,说明取自 CHANGELOG 对应版本段落,附 13 个 nupkg、前端 tgz 与 `openapi.json`,不用手工建。「发了什么」的真源始终是 tag + CHANGELOG.md。
 - **文档站**:`docs` workflow 在 `main` 上构建并自动部署到 GitHub Pages(仓库设置里 Pages 的 Source 选 GitHub Actions)。部署步骤按运行时的仓库可见性门控,仓库若转私有会退回只构建不部署,那时需要把 `site/.vitepress/dist` 发到自己的静态托管。核对站顶导航徽章已是 `X.Y.Z`。
 - 发布成功后,前端 `package.json` 与文档站导航徽章已是新版本,`dev` 继续开发,下一版从新的 `## Unreleased` 攒起。
 
 ## 四、一次性准备(换账号 / 换仓库时才需要)
 
-- **nuget.org Trusted Publishing 策略**:登录 nuget.org → 用户名 → Trusted Publishing → Create。Package owner `Andy_Zhong`,Repository Owner `SmartCode-X`,Repository `SmartAdmin`,Workflow File `release.yml`(只填文件名,不带路径),Environment 留空,Scopes 允许发布新包,glob `SmartAdmin*`(不带点,否则匹配不到元包 `SmartAdmin` 本身)。注意:**在仓库还是私有时建的策略只临时生效 7 天**,窗口内必须完成一次成功发布才会永久激活;过期了在页面上重新激活即可。仓库已公开时建的策略没有这个窗口。
+- **nuget.org Trusted Publishing 策略**:登录 nuget.org → 用户名 → Trusted Publishing → Create。Package owner `Andy_Zhong`,Repository Owner `SimpleOne-X`,Repository `SmartAdmin`,Workflow File `release.yml`(只填文件名,不带路径),Environment 留空,Scopes 允许发布新包,glob `SmartAdmin*`(不带点,否则匹配不到元包 `SmartAdmin` 本身)。注意:**在仓库还是私有时建的策略只临时生效 7 天**,窗口内必须完成一次成功发布才会永久激活;过期了在页面上重新激活即可。仓库已公开时建的策略没有这个窗口。
 - **⚠ 删掉 GitHub 仓库重建(哪怕同名)会废掉现有策略,必须删了重建。** 策略成功发过一次包之后,nuget.org 会把 GitHub 的 **repository id 与 owner id 永久锁进策略**——这是防"resurrection attack"的设计:否则谁都能删掉一个仓库、用同名重建,再冒充它发包。重建后的仓库是**新的 id**,策略页面照旧显示 `Active`,但锁的是那个已经不存在的旧 id,发版会在 `NuGet/login` 那步被拒。**没有改绑入口,只能 Delete 再 Create。** 危险之处在于它不会提前报错:等你发现时 tag 已经推出去了,而 tag 不可逆,只能弃号补发下一版。
   - **怎么自查**(30 秒,换仓库后务必做一次):策略卡片上 `Repository: SmartAdmin #<数字>` 里的数字,要和 `gh api repos/<owner>/<repo> --jq .id` 的输出一致;`Repository Owner` 后面的数字对应 `--jq .owner.id`。
 - nuget.org 用户名默认写在 `release.yml` 里(`Andy_Zhong`);换账号时改仓库变量 `NUGET_USER`,不用改 workflow。
@@ -101,8 +101,8 @@ git push origin vX.Y.Z
   Push-Location web/packages/admin; npm publish; Pop-Location   # prepack 自动构建;发之前 npm pack --dry-run 可先看文件清单
   ```
 
-  发完到 npmjs.com → `smart-admin-web` → Settings → Trusted Publisher,选 GitHub Actions:Organization or user `SmartCode-X`,Repository `SmartAdmin`,Workflow filename `release.yml`(只填文件名),Environment 留空,**Allowed actions 勾上直接 `npm publish`**(新建的配置默认只允许 `npm stage publish`,不勾的话 `release.yml` 的发布会被拒)。字段区分大小写,npm 保存时不校验,填错要到发版那一步才报错;建好的配置不能改,只能删了重建。再到 Settings → Publishing access 选 "Require two-factor authentication and disallow tokens":之后任何 token 都发不了版,能发的只有 `release.yml`(OIDC)和维护者本人过 2FA 的交互式 `npm publish`。
-  - 信任关系还核对 `web/packages/admin/package.json` 的 `repository.url`(`git+https://github.com/SmartCode-X/SmartAdmin.git`,区分大小写),仓库搬家或改名时两边一起改。
+  发完到 npmjs.com → `smart-admin-web` → Settings → Trusted Publisher,选 GitHub Actions:Organization or user `SimpleOne-X`,Repository `SmartAdmin`,Workflow filename `release.yml`(只填文件名),Environment 留空,**Allowed actions 勾上直接 `npm publish`**(新建的配置默认只允许 `npm stage publish`,不勾的话 `release.yml` 的发布会被拒)。字段区分大小写,npm 保存时不校验,填错要到发版那一步才报错;建好的配置不能改,只能删了重建。再到 Settings → Publishing access 选 "Require two-factor authentication and disallow tokens":之后任何 token 都发不了版,能发的只有 `release.yml`(OIDC)和维护者本人过 2FA 的交互式 `npm publish`。
+  - 信任关系还核对 `web/packages/admin/package.json` 的 `repository.url`(`git+https://github.com/SimpleOne-X/SmartAdmin.git`,区分大小写),仓库搬家或改名时两边一起改。
   - Trusted Publishing 只支持 GitHub 托管的 runner,npm CLI 要 11.5.1 以上;`release.yml` 的 npm 那步用 Node 24 并在发布前断言 npm 版本。
 - 仓库公开,GitHub Actions 不计分钟数,`ci` 的 SqlServer 全量定时腿每晚照跑。若哪天转回私有,每月只有 2000 分钟免费额度,那条定时腿会按可见性自动停。
 

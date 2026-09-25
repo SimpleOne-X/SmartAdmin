@@ -22,7 +22,7 @@ The typed client is generated from the backend's `/openapi/v1.json`; `npm run ge
 To run it straight from the repo, see [Getting Started](/guide/getting-started). To use it as your own project's frontend, pull the template without any git history:
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev

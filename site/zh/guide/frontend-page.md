@@ -64,7 +64,7 @@ export const sampleDocApi = {
 
 ## 写列表页
 
-先看仓库里的 [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md)。它是前端共享组件的索引，写页面前必读：页面用到的 `FormContainer`（弹窗/抽屉二合一表单容器）、`useConfirm`（二次确认 + 结果 toast）在这里都有约定和范例页指路。组件、composables、stores 都从 `smart-admin-web` 导入。
+先看仓库里的 [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md)。它是前端共享组件的索引，写页面前必读：页面用到的 `FormContainer`（弹窗/抽屉二合一表单容器）、`useConfirm`（二次确认 + 结果 toast）在这里都有约定和范例页指路。组件、composables、stores 都从 `smart-admin-web` 导入。
 
 `sample/doc` 是不分页的平铺列表，不需要 `SmartTable`，用裸 `NDataTable` 就够。照内置字典页右侧字典项面板的写法来（`web/packages/admin/src/views/system/dict/index.vue`，那也是一张裸 `n-data-table` + 增删改）。新建 `web/src/views/sample/doc/index.vue`：
 

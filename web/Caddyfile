@@ -1,4 +1,4 @@
-# 前端静态托管 + /api 反代(文档站路线 B 的默认代理,见 https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/route-b)。
+# 前端静态托管 + /api 反代(文档站路线 B 的默认代理,见 https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/route-b)。
 # 浏览器只看到一个源,因此**不需要 CORS**(后端默认 deny-all,不必为此开口子)。
 #
 # 为什么默认是 Caddy 而不是 nginx:真上域名时把下面的 `:8080` 换成 `admin.example.com`,

@@ -22,7 +22,7 @@
 想在仓库里直接跑一遍看看，去[快速开始](/zh/guide/getting-started)。想把它当成自己项目的前端，拉一份不带 git 历史的模板：
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev

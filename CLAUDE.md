@@ -8,7 +8,7 @@ SmartAdmin is a **distributable admin-system kernel**, not an application. It sh
 
 The repo holds the kernel's two halves, released together under one version number:
 - `backend/` — the .NET 10 kernel (the product) + sample host + tests.
-- `web/` — the Vue 3 + Naive UI frontend kernel as an npm workspace: `packages/admin` is the npm package `smart-admin-web` (layouts, routing, stores, shared components, every built-in page), and `template` is the thin app shell a consumer degits as its starting point (`npx degit SmartCode-X/SmartAdmin/web/template web`) and upgrades by bumping `smart-admin-web`.
+- `web/` — the Vue 3 + Naive UI frontend kernel as an npm workspace: `packages/admin` is the npm package `smart-admin-web` (layouts, routing, stores, shared components, every built-in page), and `template` is the thin app shell a consumer degits as its starting point (`npx degit SimpleOne-X/SmartAdmin/web/template web`) and upgrades by bumping `smart-admin-web`.
 
 Codebase comments and docs are in Chinese. The design rationale lives in `docs/rebuild-design.md`; code comments don't cite its section numbers, they state the reasoning directly. **Git commit messages are written in Chinese** in conventional-commit format (`type(scope): 主题`) — see `skills/write-commit.md` (`/write-commit`); `type` and `scope` stay lowercase English.
 
@@ -60,7 +60,7 @@ Full detail — package layout, public API surface, extension options, view regi
 
 ## CI
 
-GitHub Actions on `SmartCode-X/SmartAdmin` (`.github/workflows/`):
+GitHub Actions on `SimpleOne-X/SmartAdmin` (`.github/workflows/`):
 
 - `ci.yml` — push/PR to `main`/`dev` (docs-only changes are skipped). A `changes` job diffs the push/PR base and gates the halves: `backend` + `template-smoke` only when `backend/**`, `templates/**` or the workflow changed, `web` only when `web/**` changed, `web-e2e` when either half changed (no usable base, `schedule`, `workflow_dispatch` → run everything). `backend` is a `[sqlite, mysql, sqlserver, postgres]` matrix with `fail-fast: false` (the SqlServer leg stays on every `dev` push — it is the dialect most consumers run in production, so a dialect regression must surface before `main`); each leg starts **only its own** DB via `docker run` in the background while `dotnet build` runs (sqlite starts none), Redis is a service on every leg with `SMART_TEST_REDIS` set so the Redis contract tests really run (they fail under `GITHUB_ACTIONS` when it is missing — a silent skip is a false green), and tests run with `-- --max-threads 8` (2-vCPU runner, DB-round-trip-bound tests; local runs keep the CPU-count default). `template-smoke` runs `templates/smoke-test.ps1` (pack → local feed → `dotnet new smart-app` → build); `web` runs lint + `format:check` + vitest + build; `web-e2e` runs Playwright against MinimalHost + Vite on ports injected via `SMART_E2E_API_PORT`/`SMART_E2E_WEB_PORT` (locally: `ci.bat -Stage web-e2e`). `codeql` and `dependency-review` run only while the repo is public (they need GitHub Advanced Security); `deps-audit` (NuGet + npm advisories) runs unconditionally as the fallback when those two are gated off.
 - `docker-smoke.yml` — `single` (image boots, creates tables, seeds, issues a token, then a Trivy scan reports HIGH/CRITICAL and gates on CRITICAL for both images) and `multi` (two replicas behind Caddy via `docker-compose.scale.yml` + `scripts/smoke-multi-replica.sh`: cross-replica force-logout, lockout threshold, cluster-wide rate limit, distinct `WorkerId`, real client IP, single scheduler leader with failover to the standby on leader kill). Keep `multi` separate — those guarantees only surface with two replicas.
@@ -107,7 +107,7 @@ Shipping a SmartAdmin version (changelog, frontend + site badge bumps, merge to 
 
 ### Issue tracker
 
-Issues/PRDs live as GitHub issues in `SmartCode-X/SmartAdmin` (`gh` CLI). See `docs/agents/issue-tracker.md`.
+Issues/PRDs live as GitHub issues in `SimpleOne-X/SmartAdmin` (`gh` CLI). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

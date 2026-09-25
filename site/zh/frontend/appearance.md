@@ -33,7 +33,7 @@ SmartAdmin 的外观由 CSS 自定义属性驱动，不是组件 props。变量�
 这些都落地在 `composables/useTheme.ts` 的 `useTheme()` 里，盯着 `app.isDark`、`accent`、`density`、`grayscale` 四样，任意一个变就动手。往 `<html>` 打 `data-theme`、`data-density` 和灰阶用的 `data-gray`，把派生出的 `--color-primary*` 写进 `document.documentElement`，让消费 token 的手写 CSS 立即换色，再重建 Naive 的 `themeOverrides`。`App.vue` 把结果接到 `<n-config-provider :theme-overrides>`，包住整个应用。
 
 ::: tip 完整 token 表
-上面够你换主色、加暗色、判断该改哪一层。完整的令牌清单、语义徽章派生、`token → Naive` 全映射表，见 [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md)。
+上面够你换主色、加暗色、判断该改哪一层。完整的令牌清单、语义徽章派生、`token → Naive` 全映射表，见 [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md)。
 :::
 
 ## Logo：一处配置，全站生效

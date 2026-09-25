@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 // 站点常量。写死的年份和 URL 会在下一年、下一次换域名时静默过期,集中在这里改一处。
-const SITE_URL = 'https://smartcode-x.github.io/SmartAdmin'
+const SITE_URL = 'https://simpleone-x.github.io/SmartAdmin'
 // 项目页部署在子路径下。head 里手写的绝对路径 VitePress 不会替你补 base
 // (themeConfig.logo 之类走 withBase 的才会),所以要用它拼。换自定义域时改成 '/'。
 const BASE = '/SmartAdmin/'
@@ -70,7 +70,7 @@ const enThemeConfig = {
     { text: 'Components', link: '/components/' },
     { text: 'Standards', link: '/standard/backend' },
     { text: 'Community', link: '/community/contributing' },
-    { text: '10.14.0', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.14.0', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/guide/': enGuideSidebar,
@@ -180,7 +180,7 @@ const enThemeConfig = {
     ],
   },
   editLink: {
-    pattern: 'https://github.com/SmartCode-X/SmartAdmin/edit/main/site/:path',
+    pattern: 'https://github.com/SimpleOne-X/SmartAdmin/edit/main/site/:path',
     text: 'Edit this page on GitHub',
   },
   footer: {
@@ -244,7 +244,7 @@ const zhThemeConfig = {
     { text: '组件', link: '/zh/components/' },
     { text: '规范', link: '/zh/standard/backend' },
     { text: '参与', link: '/zh/community/contributing' },
-    { text: '10.14.0', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.14.0', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/zh/guide/': zhGuideSidebar,
@@ -354,7 +354,7 @@ const zhThemeConfig = {
     ],
   },
   editLink: {
-    pattern: 'https://github.com/SmartCode-X/SmartAdmin/edit/main/site/:path',
+    pattern: 'https://github.com/SimpleOne-X/SmartAdmin/edit/main/site/:path',
     text: '在 GitHub 上编辑本页',
   },
   footer: {
@@ -409,7 +409,7 @@ export default defineConfig({
   themeConfig: {
     logo: '/icon-128.png',
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/SmartCode-X/SmartAdmin' },
+      { icon: 'github', link: 'https://github.com/SimpleOne-X/SmartAdmin' },
     ],
     search: {
       provider: 'local',

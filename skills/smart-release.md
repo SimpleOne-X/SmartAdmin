@@ -39,7 +39,7 @@ or your spending limit needs to be increased
 
 **另外**:如果 GitHub 仓库**删除重建过**(哪怕同名),先让用户核对 nuget.org 的 Trusted Publishing 策略——它把仓库 id 永久锁死,重建后的新 id 对不上,策略页面却仍显示 `Active`,发版会在 `NuGet/login` 被拒而 tag 已推出去。自查与修法见 [`docs/releasing.md`](../docs/releasing.md) 第四节。仓库没动过就跳过这条。
 
-**npm 侧同样先核对**:`npm view smart-admin-web version` 能查到包,且用户确认 npmjs.com 上 `smart-admin-web` 的 Trusted Publisher 已指向 `SmartCode-X` / `SmartAdmin` / `release.yml`、Allowed actions 含直接 `npm publish`。包还不存在或没配信任关系时,`release.yml` 的 npm 那步必然失败,而此时 NuGet 已经推出去了。首版手动发布与配置步骤见 [`docs/releasing.md`](../docs/releasing.md) 第四节,由用户本人操作,agent 不代发。
+**npm 侧同样先核对**:`npm view smart-admin-web version` 能查到包,且用户确认 npmjs.com 上 `smart-admin-web` 的 Trusted Publisher 已指向 `SimpleOne-X` / `SmartAdmin` / `release.yml`、Allowed actions 含直接 `npm publish`。包还不存在或没配信任关系时,`release.yml` 的 npm 那步必然失败,而此时 NuGet 已经推出去了。首版手动发布与配置步骤见 [`docs/releasing.md`](../docs/releasing.md) 第四节,由用户本人操作,agent 不代发。
 
 **完成标准**:最近一次 workflow 能正常调度(不是秒级 failure),或用户明确知情并坚持继续。**调不起来就不要推 tag**——推 tag 等于发包,而 tag 是不可逆的:workflow 起不来,包发不出去,tag 却已经在远端了,只能补推一个新版本号收拾。
 
@@ -94,7 +94,7 @@ git log "v<上一版>..$source" --oneline
 | `web/package.json` | `version`（workspace 根） |
 | `web/template/package.json` | `version`（模板登录页页脚显示它）+ `dependencies["smart-admin-web"]` 改成 `X.Y.Z`（精确版本，不带 `^`：前端页面调的端点跟着后端版本走） |
 | `web/package-lock.json` | 不手改：上面三处改完，在 `web/` 下跑 `npm install --package-lock-only`；diff 应只有这几个包的 `version` 与模板的依赖版本 |
-| **`site/.vitepress/config.ts`** | **英文 nav + 中文（`zh`）nav 各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md' }`。搜 `text: 'P.Q.R'` 应正好两处，都改成新版 |
+| **`site/.vitepress/config.ts`** | **英文 nav + 中文（`zh`）nav 各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' }`。搜 `text: 'P.Q.R'` 应正好两处，都改成新版 |
 
 不要改文档正文里第三方包的版本号（如 `smart-naive-table` 的依赖范围），那些不是发布徽章。
 
@@ -227,7 +227,7 @@ verify 红了不会发包，删 tag 重打即可；publish 跑完包就在 nuget
 ## 3. 发布后
 
 1. **核对 nuget.org**：`SmartAdmin`、`SmartAdmin.Templates` 等的 `X.Y.Z` 可见；空目录里 `dotnet new install SmartAdmin.Templates::X.Y.Z` 后 `dotnet new smart-app` 能还原。
-2. **核对 npm**：`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`；空目录里 `npx degit SmartCode-X/SmartAdmin/web/template web`、`cd web`、`npm install` 能装上新版。
+2. **核对 npm**：`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`；空目录里 `npx degit SimpleOne-X/SmartAdmin/web/template web`、`cd web`、`npm install` 能装上新版。
 3. **GitHub Release**：workflow 已自动建好，说明取自 CHANGELOG 对应段落，附 nupkg、前端 tgz 与 openapi.json；核对一眼即可，不用手工建。
 4. **文档站**：`docs` workflow 在 `main` 上构建并自动部署到 GitHub Pages；部署按仓库可见性门控，仓库若转私有会退回只构建不部署，那时需要把 `site/.vitepress/dist` 发到静态托管。核对站顶导航徽章已是 `X.Y.Z`。
 5. 切回 `$source` 继续开发；下一版从新的 `## Unreleased` 攒。

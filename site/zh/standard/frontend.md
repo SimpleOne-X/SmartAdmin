@@ -1,6 +1,6 @@
 # 前端规范（Vue 3 + Naive UI）
 
-写页面、调接口前对着这份清单核一遍。栈是 `<script setup>` + Naive UI + Pinia（持久化）+ vue-router + vue-i18n + VueUse。应用里路径别名 `@` → `src`，内核的组件、composables、stores、API 原语一律 `import { … } from 'smart-admin-web'`；内核包内部用 `#/` → `src`。整体架构翻 [核心概念](/zh/guide/concepts)；组件怎么用、设计系统长什么样，去仓库的 [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md) 和 [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md) 找。
+写页面、调接口前对着这份清单核一遍。栈是 `<script setup>` + Naive UI + Pinia（持久化）+ vue-router + vue-i18n + VueUse。应用里路径别名 `@` → `src`，内核的组件、composables、stores、API 原语一律 `import { … } from 'smart-admin-web'`；内核包内部用 `#/` → `src`。整体架构翻 [核心概念](/zh/guide/concepts)；组件怎么用、设计系统长什么样，去仓库的 [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md) 和 [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md) 找。
 
 ## 目录落点
 
@@ -53,7 +53,7 @@
 
 ## 共享组件
 
-- 后台不设组件演示菜单，组件用法统一沉在 [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md)；写页面前先看一遍避免重复造轮子，加了新的通用组件也同步更新它。
+- 后台不设组件演示菜单，组件用法统一沉在 [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md)；写页面前先看一遍避免重复造轮子，加了新的通用组件也同步更新它。
 - 已有 SmartTable / FormContainer / `useConfirm` / StatusSwitch / 字典组件（DictSelect、DictTag）/ OrgTreeSelect / FileUpload（`chunked` 走分片续传）/ ApiSelect（派生 UserSelect）/ UserPicker / PasswordStrength / Chart / CodeBlock / MarkdownEditor / DetailPage（详情页外壳，配 `useTabTitle`）/ IconPicker 等，完整清单以 `web/COMPONENTS.md` 为准，每个组件的详细 API 见内核包 `components/<组件>/README.md`。SmartTable 从 `smart-naive-table` 导入，其余从 `smart-admin-web` 导入。
 
 ## i18n
@@ -65,7 +65,7 @@
 
 - 业务代码只消费角色令牌层（如 `--color-text-primary`），不直接引原语层（如 `--color-gray-500`）；tokens 单源是内核包的 `styles/tokens.css`，随 `smart-admin-web/style.css` 发给应用。
 - 组件样式用 `scoped` + CSS 变量（`var(--gap-card)` 等），不写死颜色 / 间距。
-- 明暗切换靠 `<html data-theme="dark">`，不打即亮色；角色令牌 / 主色 / 语义色 / 阴影在其下整体翻转。完整规范在 [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md) 与 [主题与图标](/zh/frontend/appearance)。
+- 明暗切换靠 `<html data-theme="dark">`，不打即亮色；角色令牌 / 主色 / 语义色 / 阴影在其下整体翻转。完整规范在 [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md) 与 [主题与图标](/zh/frontend/appearance)。
 
 ## 提交前
 

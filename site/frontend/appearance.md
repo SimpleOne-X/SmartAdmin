@@ -33,7 +33,7 @@ The accent is the one value that isn't read directly but computed. There's no wa
 It all comes together in `useTheme()` (`composables/useTheme.ts`): it watches `app.isDark` / `accent` / `density` / `grayscale`, and on any change stamps `data-theme` / `data-density` (plus `data-gray` for grayscale) onto `<html>`, writes the derived `--color-primary*` into `document.documentElement` (so token-consuming hand-written CSS reskins instantly), and rebuilds Naive's `themeOverrides`. `App.vue` wires the result into `<n-config-provider :theme-overrides>`, wrapping the whole app.
 
 ::: tip The full token tables
-The above is enough to change the accent, add a dark palette, and figure out which layer to touch. For the complete token listing, the semantic-badge derivations, and the full `token → Naive` mapping table, see [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md).
+The above is enough to change the accent, add a dark palette, and figure out which layer to touch. For the complete token listing, the semantic-badge derivations, and the full `token → Naive` mapping table, see [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md).
 :::
 
 ## Logo: one setting, everywhere

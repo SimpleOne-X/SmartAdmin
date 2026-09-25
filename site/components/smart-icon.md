@@ -100,4 +100,4 @@ It's a standalone package, so it also installs into any other Vue 3 + Naive UI p
 npm i smart-naive-icon
 ```
 
-For `SmartIconPicker`'s full props list (`collections` / `localIcons` / `cap` / `clearable`, etc.), the `SmartIcon` API, and SSR/Nuxt notes, see the [package README](https://github.com/SmartCode-X/smart-naive-icon/blob/main/README.en.md).
+For `SmartIconPicker`'s full props list (`collections` / `localIcons` / `cap` / `clearable`, etc.), the `SmartIcon` API, and SSR/Nuxt notes, see the [package README](https://github.com/SimpleOne-X/smart-naive-icon/blob/main/README.en.md).

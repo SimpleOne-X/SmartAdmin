@@ -28,7 +28,7 @@ npm install --save-exact smart-admin-web@X.Y.Z
 
 ## 装完之后
 
-1. 读[更新日志](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)里这个版本的段落。含破坏性变更的版本，段落顶部有一句加粗提示。
+1. 读[更新日志](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)里这个版本的段落。含破坏性变更的版本，段落顶部有一句加粗提示。
 2. 把后端跑起来，在 `web/` 下跑 `npm run gen:api`，重新生成你自己的 `src/api/schema.d.ts`。契约变了的地方，下一步的类型检查会指出来。
 3. 跑 `npm run typecheck`，再在浏览器里把自己的页面点一遍。
 4. 复制到自己 `views/` 里、用同名 key 覆盖内置页的那几页，升级不会替你更新。对照新版内置页的源码（仓库里 `web/packages/admin/src/views/` 下的同名文件）自己改。
@@ -39,7 +39,7 @@ npm install --save-exact smart-admin-web@X.Y.Z
 
 ## 跟踪版本
 
-- [更新日志](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)：Keep a Changelog 格式，每个版本一段，前后端都在里面。破坏性变更尽量攒到换 .NET 大版本时一起发。
+- [更新日志](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)：Keep a Changelog 格式，每个版本一段，前后端都在里面。破坏性变更尽量攒到换 .NET 大版本时一起发。
 - 包只从 `main` 上的 `v*` tag 发布：NuGet 包到 nuget.org，`smart-admin-web` 到 npmjs.com，号码相同。`dev` 分支上的改动在发版之前不会出现在任何一个包里。
 
 反过来，想把自己的修复贡献回 SmartAdmin，看[贡献指南](/zh/community/contributing)。

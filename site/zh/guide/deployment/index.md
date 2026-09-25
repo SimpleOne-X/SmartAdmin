@@ -124,4 +124,4 @@ curl -i https://<你的域名>/api/v1/ping # 401:API 路由通了(该端点需�
 
 回滚没有专门脚本，就是把上一个版本重新部署一遍。消费方把 NuGet 包引用和 `smart-admin-web` 一起退回上一个版本号，两边照旧同号；Docker 部署把镜像 tag 换回上一个，`docker compose up -d` 即可。数据库不用跟着退：CodeFirst 只加列，从不删列或改窄，旧代码不认识的新列留在原地，不影响它照常跑。
 
-真正回不去的是发布这一步本身。`release` workflow 一跑完，包就在 nuget.org 和 npmjs.com 上了：nuget.org 只能 unlist，不能删除；npm 上发过的版本号也不能再用。完整节奏写在[更新日志](/zh/changelog)和[发布流程](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/releasing.md)里。回滚退的是你自己部署的那个实例，退不掉已经发出去的包。
+真正回不去的是发布这一步本身。`release` workflow 一跑完，包就在 nuget.org 和 npmjs.com 上了：nuget.org 只能 unlist，不能删除；npm 上发过的版本号也不能再用。完整节奏写在[更新日志](/zh/changelog)和[发布流程](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)里。回滚退的是你自己部署的那个实例，退不掉已经发出去的包。

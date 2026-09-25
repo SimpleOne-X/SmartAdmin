@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues: https://github.com/SmartCode-X/SmartAdmin/issues. The default surface is the `gh` CLI (already authenticated on the maintainer's machine); the web UI works the same.
+Issues and PRDs for this repo live as GitHub issues: https://github.com/SimpleOne-X/SmartAdmin/issues. The default surface is the `gh` CLI (already authenticated on the maintainer's machine); the web UI works the same.
 
 ## Conventions
 
@@ -13,7 +13,7 @@ Issues and PRDs for this repo live as GitHub issues: https://github.com/SmartCod
 - **Apply / remove labels**: `gh issue edit 123 --add-label <label> --remove-label <label>`.
 - **Close**: `gh issue close 123 --comment "..."` after leaving a closing comment; `gh issue reopen 123` to reopen.
 
-The owner/repo is `SmartCode-X/SmartAdmin`; confirm against `git remote -v` when working in a fork (`gh` picks the repo from the current remote).
+The owner/repo is `SimpleOne-X/SmartAdmin`; confirm against `git remote -v` when working in a fork (`gh` picks the repo from the current remote).
 
 ## Pull requests as a triage surface
 

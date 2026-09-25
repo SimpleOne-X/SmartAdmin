@@ -1,6 +1,6 @@
 # Frontend Standards (Vue 3 + Naive UI)
 
-Check your work against this list before writing a page or wiring up an API. The stack is `<script setup>` + Naive UI + Pinia (persisted) + vue-router + vue-i18n + VueUse. In an app the path alias is `@` → `src`, and the kernel's components, composables, stores and API primitives all come through `import { … } from 'smart-admin-web'`; inside the kernel package the alias is `#/` → `src`. See [Core Concepts](/guide/concepts) for the overall architecture, [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md) for component usage, and [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md) for the design system.
+Check your work against this list before writing a page or wiring up an API. The stack is `<script setup>` + Naive UI + Pinia (persisted) + vue-router + vue-i18n + VueUse. In an app the path alias is `@` → `src`, and the kernel's components, composables, stores and API primitives all come through `import { … } from 'smart-admin-web'`; inside the kernel package the alias is `#/` → `src`. See [Core Concepts](/guide/concepts) for the overall architecture, [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md) for component usage, and [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md) for the design system.
 
 ## Where things go
 
@@ -53,7 +53,7 @@ Persisting them skips the refresh-rebuild flow and sends you straight to a 404 a
 
 ## Shared components
 
-- The admin backend has **no component-demo menu**; component usage is consolidated in [`web/COMPONENTS.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/COMPONENTS.md) — read it before writing a page to avoid reinventing the wheel, and update it when you add a new general-purpose component.
+- The admin backend has **no component-demo menu**; component usage is consolidated in [`web/COMPONENTS.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/COMPONENTS.md) — read it before writing a page to avoid reinventing the wheel, and update it when you add a new general-purpose component.
 - Existing ones include SmartTable / FormContainer / `useConfirm` / StatusSwitch / the dict components (DictSelect, DictTag) / OrgTreeSelect / FileUpload (`chunked` for resumable upload) / ApiSelect (from which UserSelect derives) / UserPicker / PasswordStrength / Chart / CodeBlock / MarkdownEditor / DetailPage (the detail-page shell, paired with `useTabTitle`) / IconPicker, and more — treat `web/COMPONENTS.md` as the authoritative full list, and see the kernel package's `components/<component>/README.md` for each one's detailed API. SmartTable is imported from `smart-naive-table`, everything else from `smart-admin-web`.
 
 ## i18n
@@ -65,7 +65,7 @@ Persisting them skips the refresh-rebuild flow and sends you straight to a 404 a
 
 - Business code consumes only the role-token layer (e.g. `--color-text-primary`), never the primitive layer directly (e.g. `--color-gray-500`); the single source of tokens is the kernel package's `styles/tokens.css`, shipped to the app inside `smart-admin-web/style.css`.
 - Component styles use `scoped` + CSS variables (`var(--gap-card)`, etc.), never hardcoded colors/spacing.
-- Light/dark switches on `<html data-theme="dark">`, defaulting to light when unset; role tokens / primary color / semantic colors / shadows all flip as a group under it. See [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md) and [Theme & Icons](/frontend/appearance) for the full spec.
+- Light/dark switches on `<html data-theme="dark">`, defaulting to light when unset; role tokens / primary color / semantic colors / shadows all flip as a group under it. See [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md) and [Theme & Icons](/frontend/appearance) for the full spec.
 
 ## Before committing
 

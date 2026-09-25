@@ -15,7 +15,7 @@
 # **为什么用两个显式 app 服务而不是 `--scale app=2`**：compose 无法为通过 `--scale` 启动的
 # 副本分配各自独立的环境变量，而 WorkerId 必须每个副本不同——相同的值意味着主键冲突。
 # 在 k8s 侧通过 StatefulSet 的 Pod 序号注入实现（app-0 / app-1），
-# 详见 https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/docker 的「多副本与 WorkerId」。
+# 详见 https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/docker 的「多副本与 WorkerId」。
 
 services:
   # 第二个副本。仅覆盖两个必须不同的配置：WorkerId，以及不对外映射端口

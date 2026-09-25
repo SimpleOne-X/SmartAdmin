@@ -1,31 +1,31 @@
 <!-- 顶部居中排版只用顶格独占一行的 <div>、</div>、<img>：本文件也是 NuGet 包说明页，nuget.org 不渲染 HTML，
      打包时这三种行会被删掉（backend/PackageReadme.targets），换成别的标签会在包页上原样露出来。 -->
 
-[English](https://github.com/SmartCode-X/SmartAdmin/blob/main/README.en.md) | 简体中文
+[English](https://github.com/SimpleOne-X/SmartAdmin/blob/main/README.en.md) | 简体中文
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/site/public/icon-512.png" width="100" alt="SmartAdmin">
+<img src="https://raw.githubusercontent.com/SimpleOne-X/SmartAdmin/main/site/public/icon-512.png" width="100" alt="SmartAdmin">
 
 # SmartAdmin
 
 *AI+企业后台管理内核：内置 AI 网关，AI 辅助开发；开箱即用，升级只改版本号。*
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
-[![Stars](https://img.shields.io/github/stars/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/stargazers)
-[![Forks](https://img.shields.io/github/forks/SmartCode-X/SmartAdmin?style=social)](https://github.com/SmartCode-X/SmartAdmin/forks)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE)
+[![Stars](https://img.shields.io/github/stars/SimpleOne-X/SmartAdmin?style=social)](https://github.com/SimpleOne-X/SmartAdmin/stargazers)
+[![Forks](https://img.shields.io/github/forks/SimpleOne-X/SmartAdmin?style=social)](https://github.com/SimpleOne-X/SmartAdmin/forks)
 [![NuGet](https://img.shields.io/nuget/v/SmartAdmin)](https://www.nuget.org/packages/SmartAdmin)
 [![npm](https://img.shields.io/npm/v/smart-admin-web)](https://www.npmjs.com/package/smart-admin-web)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/)
-[![Build](https://img.shields.io/github/actions/workflow/status/SmartCode-X/SmartAdmin/ci.yml?branch=main&event=push&label=build)](https://github.com/SmartCode-X/SmartAdmin/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![Build](https://img.shields.io/github/actions/workflow/status/SimpleOne-X/SmartAdmin/ci.yml?branch=main&event=push&label=build)](https://github.com/SimpleOne-X/SmartAdmin/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
 
-**[📖 文档](https://smartcode-x.github.io/SmartAdmin/zh/) · [🚀 快速开始](https://smartcode-x.github.io/SmartAdmin/zh/guide/getting-started) · [📋 更新日志](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)**
+**[📖 文档](https://simpleone-x.github.io/SmartAdmin/zh/) · [🚀 快速开始](https://simpleone-x.github.io/SmartAdmin/zh/guide/getting-started) · [📋 更新日志](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)**
 
 </div>
 
 ---
 
-![SmartAdmin 运行时架构图](https://raw.githubusercontent.com/SmartCode-X/SmartAdmin/main/docs/architecture/smart-runtime.zh-CN.svg)
+![SmartAdmin 运行时架构图](https://raw.githubusercontent.com/SimpleOne-X/SmartAdmin/main/docs/architecture/smart-runtime.zh-CN.svg)
 
 ## 这是什么
 
@@ -56,7 +56,7 @@ dotnet run
 另开一个终端，仍在 `MyApp` 目录下：
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev
@@ -78,22 +78,22 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-前端照第二步拉取。上生产前必须配置 JWT 签名密钥 `SmartAdmin:Jwt:SecretKey`，其余见[部署](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/)。
+前端照第二步拉取。上生产前必须配置 JWT 签名密钥 `SmartAdmin:Jwt:SecretKey`，其余见[部署](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
 
 ## 下一步
 
 | 想做的事 | 看这篇 |
 |---|---|
-| 加一个业务模块（表、接口、权限） | [加一个业务模块](https://smartcode-x.github.io/SmartAdmin/zh/guide/business-module) |
-| 给它做管理页面 | [前端加一个页面](https://smartcode-x.github.io/SmartAdmin/zh/guide/frontend-page) |
-| 换成 MySQL / SQL Server / PostgreSQL | [换掉默认数据库](https://smartcode-x.github.io/SmartAdmin/zh/guide/getting-started#换掉默认数据库) |
-| 改掉内置行为（登录流程、密码哈希、缓存等） | [替换内置服务](https://smartcode-x.github.io/SmartAdmin/zh/guide/replace-service) |
-| 加定时任务、接导入导出 | [定时任务](https://smartcode-x.github.io/SmartAdmin/zh/guide/scheduled-jobs) · [导入导出](https://smartcode-x.github.io/SmartAdmin/zh/guide/import-export) |
-| 接大模型（AI 审批之类的场景） | [AI 模型](https://smartcode-x.github.io/SmartAdmin/zh/guide/ai-models) |
-| 在线查接口、就地试一次请求 | [接口文档](https://smartcode-x.github.io/SmartAdmin/zh/backend/api-docs) |
-| 部署上线、升级版本 | [部署](https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/) · [升级到新版本](https://smartcode-x.github.io/SmartAdmin/zh/guide/upgrade) |
-| 了解整体设计 | [核心概念](https://smartcode-x.github.io/SmartAdmin/zh/guide/concepts) · [运行时架构图](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.zh-CN.svg) |
-| 让 AI 助手按规范写代码 | [Agent Skills](https://smartcode-x.github.io/SmartAdmin/zh/community/agent-skills) |
+| 加一个业务模块（表、接口、权限） | [加一个业务模块](https://simpleone-x.github.io/SmartAdmin/zh/guide/business-module) |
+| 给它做管理页面 | [前端加一个页面](https://simpleone-x.github.io/SmartAdmin/zh/guide/frontend-page) |
+| 换成 MySQL / SQL Server / PostgreSQL | [换掉默认数据库](https://simpleone-x.github.io/SmartAdmin/zh/guide/getting-started#换掉默认数据库) |
+| 改掉内置行为（登录流程、密码哈希、缓存等） | [替换内置服务](https://simpleone-x.github.io/SmartAdmin/zh/guide/replace-service) |
+| 加定时任务、接导入导出 | [定时任务](https://simpleone-x.github.io/SmartAdmin/zh/guide/scheduled-jobs) · [导入导出](https://simpleone-x.github.io/SmartAdmin/zh/guide/import-export) |
+| 接大模型（AI 审批之类的场景） | [AI 模型](https://simpleone-x.github.io/SmartAdmin/zh/guide/ai-models) |
+| 在线查接口、就地试一次请求 | [接口文档](https://simpleone-x.github.io/SmartAdmin/zh/backend/api-docs) |
+| 部署上线、升级版本 | [部署](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/) · [升级到新版本](https://simpleone-x.github.io/SmartAdmin/zh/guide/upgrade) |
+| 了解整体设计 | [核心概念](https://simpleone-x.github.io/SmartAdmin/zh/guide/concepts) · [运行时架构图](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/architecture/smart-runtime.zh-CN.svg) |
+| 让 AI 助手按规范写代码 | [Agent Skills](https://simpleone-x.github.io/SmartAdmin/zh/community/agent-skills) |
 
 ## 内置功能
 
@@ -123,6 +123,6 @@ app.Run();
 
 ## 参与与许可
 
-欢迎 issue 和 PR。本地开发、跑测试的方法见[贡献指南](https://smartcode-x.github.io/SmartAdmin/zh/community/contributing)，安全问题按 [SECURITY.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/SECURITY.md) 报告。
+欢迎 issue 和 PR。本地开发、跑测试的方法见[贡献指南](https://simpleone-x.github.io/SmartAdmin/zh/community/contributing)，安全问题按 [SECURITY.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/SECURITY.md) 报告。
 
-[Apache License 2.0](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE)
+[Apache License 2.0](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE)

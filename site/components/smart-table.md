@@ -138,4 +138,4 @@ Column-width dragging, virtual scroll, summary rows, cell merging and the like a
 
 `smart-admin-web` declares it as a peer dependency (`^2.0.0`); the app installs that one copy in its own `package.json`, which is what lets tables on the app's pages read the defaults the kernel injects. After you change the backend's sort or paging contract, remember to run `npm run gen:api` to regenerate the schema (the backend must be running).
 
-The package's full prop, event, and escape-hatch slot reference is authoritative in the [README](https://github.com/SmartCode-X/smart-naive-table/blob/main/README.en.md); this page covers only how it's wired into SmartAdmin.
+The package's full prop, event, and escape-hatch slot reference is authoritative in the [README](https://github.com/SimpleOne-X/smart-naive-table/blob/main/README.en.md); this page covers only how it's wired into SmartAdmin.
