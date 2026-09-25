@@ -112,6 +112,9 @@ export function securityRules(v: Values, f: RuleFormatters): RuleLine[] {
           params: { n: history },
         }
       : { icon: 'ph:clock-counter-clockwise', on: false, key: 'config.preview.historyOff' },
+    on(v, k('password.forceChangeOnFirstLogin'))
+      ? { icon: 'ph:user-switch', on: true, key: 'config.preview.firstChange' }
+      : { icon: 'ph:user-switch', on: false, key: 'config.preview.firstChangeOff' },
     {
       icon: 'ph:timer',
       on: true,

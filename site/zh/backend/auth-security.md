@@ -259,6 +259,8 @@ public virtual async Task RevokeAsync(string sessionId)
 
 **密码会不会过期？** 复杂度要求之外，还有一条运行时可配的过期策略，默认是关的：`sys.security.password.expireDays`。种子默认 `0`，代表永不过期，大于 0 才启用。登录第 4 步会拿 `SysUser.LastPasswordChangeTime` 加上这个有效天数，和当前时间比一下，这段逻辑在 `AuthService.CheckPasswordExpiryAsync` 里。**但过期不拦登录**，只是把这个用户的 `MustChangePassword` 标记为真、落库，再随登录出参一起回传给前端，由前端强制跳到改密页。这和管理员主动重置密码，用的是同一个信号。自助改密成功之后，`LastPasswordChangeTime` 会刷新，标志会清掉，过期窗口从头重新计。
 
+**管理员建号后，首次登录要不要改密码？** 由配置中心「安全策略」里的「首次登录须改密码」决定，键是 `sys.security.password.forceChangeOnFirstLogin`，种子默认 `false`，即不强制。开启后，管理员建号和导入的新账号首登会带上 `MustChangePassword`。这个开关只在建号那一刻读一次，改了不影响已有账号。管理员重置密码和密码过期不看它，照常强制改密。
+
 这里有个坑得注意：`LastPasswordChangeTime` 可能是 null，比如直接写进库里、没经过内核建号或改密的账号。真正判过期之前，系统会先给 null 锚点回填成当前时间，过期窗口从这次登录才开始算。不这么处理会怎样？开启策略的当天，一大批没有锚点的账号会被一起判定过期，集体卡在改密页上。自己实现 `ISecurityPolicyProvider` 的二开代码不受影响：`GetPasswordExpireDaysAsync` 带默认接口实现，返回 0，不实现这个成员也能编译通过，效果等同于关闭这条策略。
 
 **改密码的时候，允许改成上一个用过的密码吗？** 默认允许，想禁掉就在配置中心「安全策略」里把 `sys.security.password.historyCount` 调成 N，系统会记住最近 N 个用过的口令。种子默认是 `0`，即不记。改密时拿新口令挨个比一下，撞上了就拒，抛 `ErrorCode.PasswordReused`（42025）。「当前口令」要单独判一次，为什么？历史表刚打开的时候是空的，光靠历史记录挡不住「改成当前正在用的这个」这种打擦边球的操作。`IPasswordHistoryService` 只存哈希，复用的是 `SysUser.Password` 那一套 `IPasswordHasher`。校验时逐条 `Verify(明文,哈希)`。每次写入之后，立刻把这个用户的历史记录裁到最新 N 条，多余的硬删掉，表不会随时间无限膨胀。

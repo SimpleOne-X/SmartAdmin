@@ -60,6 +60,8 @@ const reqs = REQS.map(r => ({
 }))
 const expireDays = numField('password.expireDays', 'days')
 const history = numField('password.historyCount', 'times')
+const FIRST_CHANGE_KEY = s('password.forceChangeOnFirstLogin')
+const firstChange = bool(FIRST_CHANGE_KEY)
 
 const rateOn = bool(s('rateLimit.enabled'))
 const rate = [
@@ -259,6 +261,16 @@ const passes = computed(() => checks.value.every(c => c.ok))
               :input-props="{ 'aria-label': f.label }"
             />
             <span class="unit">{{ f.unit }}</span>
+          </CfgRow>
+          <CfgRow
+            :label="t('config.security.password.forceChangeOnFirstLogin')"
+            :hint="t('config.security.password.forceChangeOnFirstLoginHint')"
+            :keys="[FIRST_CHANGE_KEY]"
+          >
+            <n-switch
+              v-model:value="firstChange"
+              :aria-label="t('config.security.password.forceChangeOnFirstLogin')"
+            />
           </CfgRow>
         </CfgGroup>
 

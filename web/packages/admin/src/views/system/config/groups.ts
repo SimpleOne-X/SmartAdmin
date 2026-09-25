@@ -75,6 +75,7 @@ export const SECURITY_SWITCHES = [
   'sys.security.password.requireLower',
   'sys.security.password.requireDigit',
   'sys.security.password.requireSpecial',
+  'sys.security.password.forceChangeOnFirstLogin',
   'sys.security.captcha.enabled',
   'sys.security.totp.enabled',
   'sys.security.totp.requireForSuperAdmin',

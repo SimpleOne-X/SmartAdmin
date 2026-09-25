@@ -613,6 +613,8 @@ export default {
       noExpire: 'Passwords never expire',
       history: 'A new password cannot repeat the last {n}',
       historyOff: 'A new password may repeat an old one',
+      firstChange: 'Admin-created accounts must change their password at first sign-in',
+      firstChangeOff: 'New accounts keep their initial password at first sign-in',
       session: 'Access tokens renew every {access}; sign-in lasts up to {refresh}',
       rateLimit: 'At most {permit} requests per {seconds} s from one source',
     },
@@ -782,6 +784,8 @@ export default {
         requireSpecial: 'Require special char',
         expireDays: 'Max age',
         historyCount: 'No reuse of last',
+        forceChangeOnFirstLogin: 'Change at first sign-in',
+        forceChangeOnFirstLoginHint: 'New accounts only; resets still require a change',
       },
       session: {
         accessMinutes: 'Access token lifetime',

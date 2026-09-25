@@ -70,7 +70,7 @@ public class SysUser : BaseEntity
     public long? DefaultModuleId { get; set; }
 
     /// <summary>
-    /// 是否需在下次登录后强制修改密码。管理员建号/重置密码时置 true,
+    /// 是否需在下次登录后强制修改密码。管理员建号(受配置 sys.security.password.forceChangeOnFirstLogin 控制)/重置密码时置 true,
     /// 用户自助改密成功后清 false。不拦登录,仅经登录出参透传给前端做强制跳转。
     /// </summary>
     [SugarColumn(ColumnDescription = "是否需强制改密")]

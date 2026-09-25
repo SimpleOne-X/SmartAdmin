@@ -236,7 +236,8 @@ public class UserService(
             Enabled = input.Enabled,
             ForceTotp = input.ForceTotp,
             IsSuperAdmin = false,       // 接口永不建超管(防提权);超管只能种子/手工建
-            MustChangePassword = true,  // 管理员建号:初始口令由管理员/系统设定,强制用户首登改密
+            // 管理员建号:是否强制首登改密由配置中心「首次登录须改密码」决定(默认关)
+            MustChangePassword = await policy.GetForceChangeOnFirstLoginAsync(),
             LastPasswordChangeTime = Now,   // 密码过期窗口从建号起算
         };
         // 用户 + 角色成对写入包事务:任一步失败整体回滚,不留"已提交但无角色"的幽灵用户

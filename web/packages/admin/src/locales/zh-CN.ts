@@ -597,6 +597,8 @@ export default {
       noExpire: '密码永不过期',
       history: '新密码不能和最近 {n} 次用过的相同',
       historyOff: '新密码可以和旧密码相同',
+      firstChange: '管理员新建的账号首次登录必须修改密码',
+      firstChangeOff: '新建账号首次登录不用修改密码',
       session: '访问令牌 {access} 后自动续期,最长 {refresh} 不用重新登录',
       rateLimit: '同一来源每 {seconds} 秒最多 {permit} 次请求',
     },
@@ -763,6 +765,8 @@ export default {
         requireSpecial: '须含特殊字符',
         expireDays: '有效期',
         historyCount: '不能与最近几次重复',
+        forceChangeOnFirstLogin: '首次登录须改密码',
+        forceChangeOnFirstLoginHint: '只影响之后新建的账号;重置密码仍须改',
       },
       session: {
         accessMinutes: '访问令牌有效期',

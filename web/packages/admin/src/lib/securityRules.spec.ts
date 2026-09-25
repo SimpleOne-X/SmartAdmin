@@ -64,6 +64,14 @@ describe('securityRules', () => {
     ).toBe(true)
   })
 
+  it('首登改密缺省为关并灰显,显式开启才点亮', () => {
+    const off = byKey({})
+    expect(off['config.preview.firstChangeOff'].on).toBe(false)
+    expect(off['config.preview.firstChange']).toBeUndefined()
+    const on = byKey({ 'sys.security.password.forceChangeOnFirstLogin': 'true' })
+    expect(on['config.preview.firstChange'].on).toBe(true)
+  })
+
   it('会话时长换算成可读单位', () => {
     const r = byKey({
       'sys.security.session.accessMinutes': '30',
