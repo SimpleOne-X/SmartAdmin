@@ -66,13 +66,6 @@ export default defineConfig({
          */
         SmartAdmin__Security__RateLimit__Enabled: 'false',
         /**
-         * 一套假的企业微信应用,给 wecom-login 验「企业微信客户端里直接走网页授权」。
-         * 只有 UA 带 wxwork 时登录页才会自动跳,其余用例用的是默认 UA,只是登录页多一颗企业微信按钮。
-         */
-        SmartAdmin__ExternalAuth__WeCom__CorpId: 'ww-e2e-corp',
-        SmartAdmin__ExternalAuth__WeCom__AgentId: '1000002',
-        SmartAdmin__ExternalAuth__WeCom__CorpSecret: 'e2e-secret',
-        /**
          * 这里**不要**打开 TOTP。部署级的 `Security:Totp:Enabled` 是「硬开地板」——运行时关不掉,
          * 而 TOTP 一开,`[RequireReauth]` 就在建用户、角色授权、配置写、菜单写、强退这些端点上全部生效,
          * 整套管理端用例会成片拿到 40024。真正需要它的只有 mfa-bind 一条,那条自己用运行时开关

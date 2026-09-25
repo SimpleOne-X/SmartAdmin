@@ -9,7 +9,7 @@ Neither set is a code generator. Both are rules plus reference templates: the ag
 
 ## Issues / PRDs: via GitHub Issues
 
-The repo's issues and PRDs are all [GitHub issues](https://github.com/SmartCode-X/SmartAdmin/issues) (see [`docs/agents/issue-tracker.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/issue-tracker.md) for conventions). Agents read and write them through the `gh` CLI, so no separate API path is needed.
+The repo's issues and PRDs are all [GitHub issues](https://github.com/SimpleOne-X/SmartAdmin/issues) (see [`docs/agents/issue-tracker.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/issue-tracker.md) for conventions). Agents read and write them through the `gh` CLI, so no separate API path is needed.
 
 ::: details PRs are not currently treated as a request entry point
 The `issue-tracker.md` switch for this is currently "no": external PRs don't go through the same labeling flow as issues. If it's ever flipped to "yes," pull requests get the same labels and states, applied on the GitHub PR page.
@@ -17,7 +17,7 @@ The `issue-tracker.md` switch for this is currently "no": external PRs don't go 
 
 ## Triage labels
 
-Issue triage uses five normalized labels, where the label string is the role name itself (see [`docs/agents/triage-labels.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/triage-labels.md) for details):
+Issue triage uses five normalized labels, where the label string is the role name itself (see [`docs/agents/triage-labels.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/triage-labels.md) for details):
 
 | Label | Meaning |
 |---|---|
@@ -31,7 +31,7 @@ For tasks that can be automated, issues labeled `ready-for-agent` are the easies
 
 ## Domain docs: CONTEXT.md + docs/adr
 
-Before exploring the code, an agent should first read (see [`docs/agents/domain.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/agents/domain.md) for details):
+Before exploring the code, an agent should first read (see [`docs/agents/domain.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/agents/domain.md) for details):
 
 - `CONTEXT.md` at the repo root (or `CONTEXT-MAP.md` in multi-context scenarios, pointing to each context's own `CONTEXT.md`);
 - ADRs under `docs/adr/` relevant to the area being changed.
@@ -44,7 +44,7 @@ If your output uses domain terminology (issue titles, refactor proposals, test n
 
 ## Business-development skills (`skills/`)
 
-This set of docs targets "building business features on top of SmartAdmin" — whether you're a kernel maintainer adding a system module or a consumer building on top of it in your own project, both follow the same pattern (see [`skills/README.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/skills/README.md) for details):
+This set of docs targets "building business features on top of SmartAdmin" — whether you're a kernel maintainer adding a system module or a consumer building on top of it in your own project, both follow the same pattern (see [`skills/README.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/skills/README.md) for details):
 
 | Skill | Purpose | Applicable scenario |
 |---|---|---|
@@ -69,6 +69,6 @@ Those three steps and `new-module` all distinguish between **system module** (ke
 
 ## Reference
 
-- The "Agent skills" section of the root [`CLAUDE.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/CLAUDE.md) is the index entry point for these conventions.
+- The "Agent skills" section of the root [`CLAUDE.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CLAUDE.md) is the index entry point for these conventions.
 - To walk through replacing/extending a built-in service by hand (rather than having an agent generate it via the `replace-service` skill), see [Replacing Built-in Services](/guide/replace-service).
 - For how to run tests and submit PRs, see the [Contributing Guide](./contributing).

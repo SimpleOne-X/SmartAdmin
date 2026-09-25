@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Icon } from '@iconify/vue'
 import { useI18n } from 'vue-i18n'
+import { useLoginHero } from '#/composables/useLoginHero'
 import { useAppStore } from '#/stores/app'
 import { useSite } from '#/composables/useSite'
 import { mix, rgba } from '#/theme/mix'
-import SmartLogo from '#/components/SmartLogo.vue'
 import LoginForm from '../LoginForm.vue'
+import LoginHeroPanel from '../components/LoginHeroPanel.vue'
 
 const { t } = useI18n()
 const app = useAppStore()
 const { site, appVersion } = useSite()
+const hero = useLoginHero()
 const year = new Date().getFullYear()
-
-// 卖点随语言切换(t 在 computed 内对 locale 响应)。
-const points = computed(() => [t('login.featRbac'), t('login.featScope'), t('login.featPortal')])
 
 const vars = computed(() => ({
   '--a1': rgba(app.accent, 0.5),
@@ -28,25 +26,12 @@ const vars = computed(() => ({
     <div class="panel">
       <div class="panel-aurora" />
       <div class="panel-inner">
-        <div class="logo">
-          <!-- 站点 logo 的取值顺序(配置 → brand 选项 → 内置矢量标)统一在 SmartLogo 里 -->
-          <SmartLogo :size="34" />
-          <span>{{ site.title }}</span>
-        </div>
-        <div class="bar" :style="{ background: app.accent }" />
-        <!-- 标题拆 pre/accent/post 三段以支持 i18n,中间词染 accent 色(整句硬编码中文切不了英文) -->
-        <h1 class="headline">
-          {{ t('login.headlinePre') }}
-          <span :style="{ color: app.accent }">{{ t('login.headlineAccent') }}</span>
-          {{ t('login.headlinePost') }}
-        </h1>
-        <p class="sub">{{ site.subtitle || t('login.subtitle') }}</p>
-        <ul class="points">
-          <li v-for="p in points" :key="p">
-            <Icon icon="ph:check-circle-duotone" :width="18" :style="{ color: app.accent }" />
-            {{ p }}
-          </li>
-        </ul>
+        <LoginHeroPanel
+          :headline="hero.headline"
+          :highlight="hero.highlight"
+          :subtitle="site.subtitle || t('login.subtitle')"
+          :features="hero.features"
+        />
       </div>
     </div>
 
@@ -125,47 +110,6 @@ const vars = computed(() => ({
   height: 100%;
   justify-content: center;
 }
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #2a3c82;
-}
-/* 后台配置的品牌 logo:限高与内置矢量 logo(size=40)齐平,宽度自适应不变形 */
-.bar {
-  width: 40px;
-  height: 3px;
-  border-radius: 2px;
-  margin: 28px 0 20px;
-}
-.headline {
-  font-size: 42px;
-  line-height: 1.2;
-  font-weight: 800;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-.sub {
-  color: var(--color-text-secondary);
-  margin: 16px 0 28px;
-}
-.points {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.points li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--color-text-secondary);
-}
-
 /* 右栏 = 全高工作区:居中表单 + 页脚(主题/语言切换在外壳全局工具) */
 .form-wrap {
   position: relative;

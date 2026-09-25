@@ -4,7 +4,7 @@
 > **代码与本文冲突时以代码为准**,并顺手把本文改对。过期的权威文档比没有权威文档更害人:
 > 它照样被人当依据引用,只是引用的是三个版本以前的事实。凡本文给出的清单(错误码分段、Options、表清单)
 > 都在正文里指明了真正的单源在哪一个代码文件。
-> 设计取向:零第三方依赖、模块可拆换。代码托管在 GitHub(`SmartCode-X/SmartAdmin`),NuGet 包前缀 `SmartAdmin.*`。
+> 设计取向:零第三方依赖、模块可拆换。代码托管在 GitHub(`SimpleOne-X/SmartAdmin`),NuGet 包前缀 `SmartAdmin.*`。
 
 ---
 
@@ -28,7 +28,7 @@
 
 | 决策 | 结论 |
 |---|---|
-| 项目名 | SmartAdmin;GitHub `SmartCode-X/SmartAdmin`;NuGet 包前缀 `SmartAdmin.*` |
+| 项目名 | SmartAdmin;GitHub `SimpleOne-X/SmartAdmin`;NuGet 包前缀 `SmartAdmin.*` |
 | .NET 版本 | 单 TFM `net10.0`,跟随当前 .NET LTS 滚动升级 |
 | 包版本 | **主版本号 = 所用 .NET 主版本**(10.x 对应 .NET 10),次版本加功能、修订号修 bug,全部包同号(见 §17) |
 | 前端 | 自研设计系统 + 自建;**只做 Naive UI 一套**(逻辑/视图分离,第二套皮肤留作可选) |
@@ -52,7 +52,7 @@
 
 | 仓库 | 内容 | 发布物 |
 |---|---|---|
-| `SmartCode-X/SmartAdmin`(**单仓 monorepo**) | `backend/`(各包源码 + 样例宿主 + 测试)+ `web/`(前端 npm workspace)+ `templates/` + `site/` + `docs/` + `docker-compose.yml` | NuGet 包(nuget.org,含 `dotnet new` 模板包 `SmartAdmin.Templates`)+ npm 包 `smart-admin-web`(npmjs.com)+ 前端应用薄壳(同仓 `web/template`,`degit` 取用) |
+| `SimpleOne-X/SmartAdmin`(**单仓 monorepo**) | `backend/`(各包源码 + 样例宿主 + 测试)+ `web/`(前端 npm workspace)+ `templates/` + `site/` + `docs/` + `docker-compose.yml` | NuGet 包(nuget.org,含 `dotnet new` 模板包 `SmartAdmin.Templates`)+ npm 包 `smart-admin-web`(npmjs.com)+ 前端应用薄壳(同仓 `web/template`,`degit` 取用) |
 
 选合一仓的理由:一次 clone 跑全栈、`docker compose up` 即起 demo、openapi 契约本地生成不跨仓、前后端同步演进、早期少维护一堆仓。
 

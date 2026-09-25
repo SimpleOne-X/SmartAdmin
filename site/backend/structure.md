@@ -63,7 +63,7 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-`AddSmartAdminRedisCache` is called here, ahead of `AddSmartAdmin()` — but it's a no-op unless `SmartAdmin:Cache:Provider` is set to `Redis` in configuration, so the zero-config experience (SQLite, in-process cache) is unchanged by its presence. The external-login packages and `AddSmartAdminExcel()` in the full file are no-ops the same way, absent their matching configuration; drop all of these optional-package calls and what's left is the truly zero-config minimal host.
+`AddSmartAdminRedisCache` is called here, ahead of `AddSmartAdmin()` — but it's a no-op unless `SmartAdmin:Cache:Provider` is set to `Redis` in configuration, so the zero-config experience (SQLite, in-process cache) is unchanged by its presence. The external-login packages in the full file only register the vendor type descriptors: connections and secrets are entered on the Login methods page, and until they are, no login button appears, so zero-config startup is unaffected. `AddSmartAdminExcel()` just installs the xlsx codec. Drop all of these optional-package calls and what's left is the truly zero-config minimal host.
 
 Its `appsettings.json` keeps file logging off by default (`SmartAdmin:Logging:File:Enabled: false` — diagnostics rely on stdout collection instead) and sets standard ASP.NET Core log levels. `appsettings.Development.json.example` is the template for the gitignored `appsettings.Development.json`; it holds just the seed super-admin account name and an empty password (left blank so the kernel prints a random one on first startup). `Properties/launchSettings.json` pins the dev URL to `http://localhost:5100` with `ASPNETCORE_ENVIRONMENT=Development`.
 
@@ -91,7 +91,7 @@ Everything binds from the `SmartAdmin` section of `appsettings.json` into `Smart
 | `Upload` | `AdminUploadOptions` | storage root, size cap, extension allowlist |
 | `Excel` | `AdminExcelOptions` | row-count and file-size caps for import/export, see [Wire Import/Export on Your Entity](/guide/import-export) |
 | `Email` | `AdminEmailOptions` | email channel: an empty `Host` resolves to the logging implementation, a configured one to `SmtpEmailSender`, see [Authentication & Security](/backend/auth-security) |
-| `ExternalAuth` | `AdminExternalAuthOptions` | external login / SSO callback base URL and the built-in OIDC provider list, see [External Login](/backend/external-login) |
+| `ExternalAuth` | `AdminExternalAuthOptions` | external login / SSO callback base URL and frontend result-page path. A provider's connection details and secrets aren't here; they are entered on the Login methods page, see [External Login](/backend/external-login) |
 | `Api` | `AdminApiOptions` | disabled-module list |
 | `Realtime` | `AdminRealtimeOptions` | realtime push toggle and hub path, off by default, see [Realtime Notifications](/backend/realtime) |
 | `DemoMode` | `bool` | `false` — when `true`, only GET/HEAD/OPTIONS are allowed, all writes rejected with error code `41002` |

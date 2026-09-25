@@ -6,7 +6,7 @@
 
 发布节奏：**开发在 `dev` 上进行，发布在 `main` 上完成**。先把 `dev` 合进 `main`，再**在 `main` 上**打 `v*` tag。tag 一推，`release` workflow 校验 tag 落在 `main` 上，跑构建、测试和模板冒烟（`dotnet new smart-app` 必须能还原并编译通过），全绿才打包，经 Trusted Publishing 推 nuget.org、发 npm，同时建 GitHub Release。
 
-逐步的发版操作清单（改版本号、验证、合 `main`、打 tag）见 [`docs/releasing.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/releasing.md)。
+逐步的发版操作清单（改版本号、验证、合 `main`、打 tag）见 [`docs/releasing.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)。
 
 > 发版时**前后端版本号必须一起改**：后端版本由 tag 经 `-p:Version` 注入；前端版本写在 `web/package.json`、`web/packages/admin/package.json`（发到 npm 的包）与 `web/template/package.json`（**显示在模板登录页页脚**），模板对 `smart-admin-web` 的依赖钉同一个号，文档站导航的两处版本徽章也跟着改。漏改一处，`release` 的 verify 就会拦下，否则 npm 上的包、界面上的版本会和实际安装的 NuGet 包对不上。
 
@@ -14,11 +14,37 @@
 
 ## Unreleased
 
+## 10.15.0 - 2026-09-25
+
+**本版含破坏性变更：** 四个第三方登录可选包的 `AddSmartAdminXxxAuth(IConfiguration)` 重载已删除，`appsettings` 里的厂商与 OIDC 连接节点不再读取，升级前先读 *Changed*。另外「建号首登强制改密」的缺省行为由开变关，见 *Changed*。
+
+### Added
+
+- **第三方登录的连接配置改在界面填写，加密存进数据库。** 企业微信、钉钉、GitHub、微信与标准 OIDC 的连接信息和密钥，统一在「系统配置 → 登录方式」填写，写入新表 `sys_external_auth_provider`。可选包各自注册一个 `IExternalAuthProviderType`（字段清单、造 provider、测连接），注册表把代码注册的 provider 与库里按类型现建的合并，同 `Code` 时代码注册的优先。机密字段整体经 `ISecretProtector` 加密，接口与日志只显示「已配置 + 尾四位」；主密钥是临时密钥时拒绝保存；改了决定请求去向的字段（OIDC Authority）必须重输机密；保存与清除要求再次验证身份。OIDC 的发现文档、JWKS 与令牌请求走出站围栏，拦回环与链路本地地址。新端点 `api/v1/sys/external-auth/providers`：目录、保存、清除、逐项列出通过 / 失败 / 未验证的连接测试；新增错误码 40030–40036。取舍见 [ADR 0011](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/adr/0011-external-auth-provider-config-in-db.md)。
+- **配置中心新增「首次登录须改密码」开关。** 在安全策略的密码分组里，配置键 `sys.security.password.forceChangeOnFirstLogin`，缺省关闭。关闭时管理员建的账号首登不必改密码；管理员重置密码与密码过期仍然强制改。自定义的 `ISecurityPolicyProvider` 不用改，新增的 `GetForceChangeOnFirstLoginAsync` 是接口默认方法，缺省返回 `false`。
+- **登录页 Hero 文案可在配置里改。** 匿名的站点信息下发登录页标题、高亮词与卖点，配置键 `sys.login.hero.*`（中英各一份），留空回退前端内置文案。
+- **配置中心的 Logo 改成上传。** 「站点品牌」里点 Logo 的「编辑」，选图、裁成正方形，预览里看过再保存，不用再去文件管理上传后复制地址。图片走新端点 `POST /api/v1/sys/config/logo`（新按钮权限「配置-上传Logo」，Id 319）：只收按文件头识别的 PNG / JPG / WEBP，上限 1 MB，不受全局上传白名单影响；服务是可替换的 `ISiteLogoService`。
+- **浏览器标签页图标跟随站点 Logo。** 配了 Logo 就换，清空即还原模板自带图标；`createSmartAdmin({ brand: { faviconFromLogo: false } })` 可关。
+- **配置分页可排除指定键。** `GET /api/v1/sys/config/page` 新增 `ExcludedKeys`，在库里过滤，分页总数准确。
+
+### Changed
+
+- **（破坏性）第三方登录不再读 `appsettings` 里的连接配置。** 删除四个可选包（WeCom、DingTalk、GitHub、WeChat）里带 `IConfiguration` 的 `AddSmartAdminXxxAuth` 重载与 `AdminExternalAuthOptions.Oidc`，这些包也去掉了对 `Configuration.Abstractions` / `Binder` 的引用。`SmartAdmin:ExternalAuth` 下的厂商与 OIDC 连接节点不会被读取，启动时给出一条警告；`CallbackBaseUrl` 与 `FrontendResultPath` 仍在 `appsettings`。已有部署升级后要在「登录方式」页重新填一遍连接信息。
+- **建号首登不再默认强制改密码。** 此前管理员新建的账号首次登录一律要改密码；现在由「首次登录须改密码」开关决定，缺省关闭，升级时补入的种子行也是关闭。要保留旧行为，在配置中心安全策略里打开它。
+- **仓库迁到 `SimpleOne-X/SmartAdmin`。** 文档、模板 `degit` 命令、包元数据里的仓库地址与文档站域名一并改成新地址，旧地址由 GitHub 重定向。
+- **配置中心改版，风格参照 macOS「系统设置」。** 顶部图标页签共七项：品牌与登录页、安全策略、登录方式、敏感操作 | 文件上传、定时任务、高级。设置是圆角分组列表，改过的行前有橙点，右侧预览即时变化并闪一下受影响的位置（高级页是键值表，没有预览）；全页一个保存入口（底部浮出的保存条），页签橙点标出改过的分类，离开页面前会确认。每个页签一屏放下，表格在自己内部滚动。
+  - 「第三方登录」改名「登录方式」，「短信验证码登录」从安全策略移到这里，预览就是登录框；每个第三方一行，标明未安装、未配置或已配置。
+  - 安全策略页底部的「高敏感权限」拆成独立的「敏感操作」页，预览是用户执行该接口时看到的再次验证框；增删仍即时生效，不走保存条。安全策略新增密码试填。
+  - 上传页预览用示例文件按新规则判定能否上传；定时任务页预览日志保留时间轴和一封失败告警邮件。
+  - 各分组下的「本组其它配置」与原「其他配置」合并为「高级」页。
+- **默认品牌 Logo 换成拉丝钛金属 X 标。** 没配 `sys.site.logo`、也没传 `brand.logo` 时显示的内置标、模板的 favicon 与 PWA 图标、NuGet 包图标、文档站图标一起换。新标自带渐变圆角底，明暗主题共用一张，模板里的 `public/smart-logo-dark.svg` 随之删除。
+- **站点信息里的本地签名直链改为下发时重新签发。** 配了 `SignedUrlTtlMinutes` 时，存进 `sys.site.logo` 的直链不再过期失效；签名对不上的直链与外部地址原样返回。
+
 ## 10.14.0 - 2026-09-18
 
 ### Added
 
-- **内置 Scalar API 文档 UI。** 装了包就有：开发环境 `/scalar` 零配置可用，渲染的正是前端 `npm run gen:api` 取数的那份 `/openapi/v1.json`。生产环境两个端点默认都不挂载，经 `SmartAdmin:Scalar:EnabledInProduction` 显式开启后，壳页面 `/scalar` 仍匿名（它不含契约数据），契约 JSON 收紧到权限码 `GET:/openapi/{documentname}.json`，在角色管理里把内置菜单「系统运维 → 接口文档」下的「查看契约」按钮授给谁、谁才取得到。后台同步新增「接口文档」入口页：打开文档并复制当前登录态的接口令牌，粘进 Scalar 自带的 Authentication 面板即可调试。`Scalar.AspNetCore` 是核心包「只依赖 SqlSugarCore + Microsoft.\*」这条红线上唯一的具名例外（零传递依赖、只做 UI 渲染），取舍见 [ADR 0010](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/adr/0010-scalar-api-docs-in-core.md)，用法见[文档](https://smartcode-x.github.io/SmartAdmin/zh/backend/api-docs)。
+- **内置 Scalar API 文档 UI。** 装了包就有：开发环境 `/scalar` 零配置可用，渲染的正是前端 `npm run gen:api` 取数的那份 `/openapi/v1.json`。生产环境两个端点默认都不挂载，经 `SmartAdmin:Scalar:EnabledInProduction` 显式开启后，壳页面 `/scalar` 仍匿名（它不含契约数据），契约 JSON 收紧到权限码 `GET:/openapi/{documentname}.json`，在角色管理里把内置菜单「系统运维 → 接口文档」下的「查看契约」按钮授给谁、谁才取得到。后台同步新增「接口文档」入口页：打开文档并复制当前登录态的接口令牌，粘进 Scalar 自带的 Authentication 面板即可调试。`Scalar.AspNetCore` 是核心包「只依赖 SqlSugarCore + Microsoft.\*」这条红线上唯一的具名例外（零传递依赖、只做 UI 渲染），取舍见 [ADR 0010](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/adr/0010-scalar-api-docs-in-core.md)，用法见[文档](https://simpleone-x.github.io/SmartAdmin/zh/backend/api-docs)。
 
 ## 10.13.1 - 2026-09-17
 
@@ -29,49 +55,49 @@
 
 ### Fixed
 
-- **SQL 执行失败/超时时也能按阈值记一条慢 SQL 日志。** SqlSugarCore 的慢 SQL 统计只在语句成功执行时触发，越容易超时的语句反而越拿不到诊断记录；失败分支现在复用同一套耗时/阈值判断，超阈值的失败语句会带上「慢 SQL(执行失败)」标记、耗时与阈值，不再只是一条没有上下文的执行失败日志。（[#14](https://github.com/SmartCode-X/SmartAdmin/issues/14)）
+- **SQL 执行失败/超时时也能按阈值记一条慢 SQL 日志。** SqlSugarCore 的慢 SQL 统计只在语句成功执行时触发，越容易超时的语句反而越拿不到诊断记录；失败分支现在复用同一套耗时/阈值判断，超阈值的失败语句会带上「慢 SQL(执行失败)」标记、耗时与阈值，不再只是一条没有上下文的执行失败日志。（[#14](https://github.com/SimpleOne-X/SmartAdmin/issues/14)）
 - **用户管理机构树侧栏消除进页面的布局跳动。** 展开/收起按钮所在的头部行改为常驻，机构数据到位前给树一个占位，避免搜索框与树顶跟着数据到达时机跳动；展开按钮尺寸与表格工具栏按钮对齐。
 
 ## 10.12.1 - 2026-09-14
 
 ### Fixed
 
-- **AI 网关：厂商不支持 OpenAI `json_schema` 严格结构化输出时不再静默失效。** `OpenAiCompatibleAdapter` 此前对所有 openai 协议厂商一律透传 `response_format.type: "json_schema"`;智谱 GLM 等厂商官方协议只支持 `text` / `json_object`,收到该字段既不报错也不降级,只会忽略约束按自由文本作答(常见还会用 Markdown 代码块包裹结果),`ResponseSchema` 契约悄悄失效。厂商预设新增 `SupportsJsonSchema` 能力位(智谱标记为 `false`),网关在发起上游调用前按此直接拒绝(`49033`),不把一个对方读不懂的字段透传过去。（[#8](https://github.com/SmartCode-X/SmartAdmin/issues/8)）
+- **AI 网关：厂商不支持 OpenAI `json_schema` 严格结构化输出时不再静默失效。** `OpenAiCompatibleAdapter` 此前对所有 openai 协议厂商一律透传 `response_format.type: "json_schema"`;智谱 GLM 等厂商官方协议只支持 `text` / `json_object`,收到该字段既不报错也不降级,只会忽略约束按自由文本作答(常见还会用 Markdown 代码块包裹结果),`ResponseSchema` 契约悄悄失效。厂商预设新增 `SupportsJsonSchema` 能力位(智谱标记为 `false`),网关在发起上游调用前按此直接拒绝(`49033`),不把一个对方读不懂的字段透传过去。（[#8](https://github.com/SimpleOne-X/SmartAdmin/issues/8)）
 
 ## 10.12.0 - 2026-09-14
 
 ### Added
 
-- **AI 网关：`IAiChatClient` 消息支持多模态内容（图片），对话请求支持结构化输出约束（JSON Schema）。** `AiChatMessage.User(parts)` 接收文本与图片混排的内容（`AiChatContentPart.Text` / `.Image`，图片来源支持 base64 或 URL），两个协议适配器分别按 OpenAI 兼容协议的 `image_url` 与 Anthropic 协议的 `image` 内容块序列化，DeepSeek、通义千问、智谱、Kimi、豆包等中国厂商与 OpenAI/DeepSeek 共用同一套 `OpenAiCompatibleAdapter`，无需单独适配。`AiChatRequest.ResponseSchema` 约束模型输出必须匹配给定 JSON Schema，OpenAI 兼容协议映射到 `response_format.json_schema`，Anthropic 映射到 `output_config.format`；`System` 角色消息不支持多段内容，传了直接抛 `49032`；厂商或模型不支持图片或结构化输出时，上游报错按现有 `49020` 系列错误码映射，网关不做静默降级。两条都是追加的可选字段，不传就是原有的纯文本行为，不影响现有调用方。（[#7](https://github.com/SmartCode-X/SmartAdmin/issues/7)）
+- **AI 网关：`IAiChatClient` 消息支持多模态内容（图片），对话请求支持结构化输出约束（JSON Schema）。** `AiChatMessage.User(parts)` 接收文本与图片混排的内容（`AiChatContentPart.Text` / `.Image`，图片来源支持 base64 或 URL），两个协议适配器分别按 OpenAI 兼容协议的 `image_url` 与 Anthropic 协议的 `image` 内容块序列化，DeepSeek、通义千问、智谱、Kimi、豆包等中国厂商与 OpenAI/DeepSeek 共用同一套 `OpenAiCompatibleAdapter`，无需单独适配。`AiChatRequest.ResponseSchema` 约束模型输出必须匹配给定 JSON Schema，OpenAI 兼容协议映射到 `response_format.json_schema`，Anthropic 映射到 `output_config.format`；`System` 角色消息不支持多段内容，传了直接抛 `49032`；厂商或模型不支持图片或结构化输出时，上游报错按现有 `49020` 系列错误码映射，网关不做静默降级。两条都是追加的可选字段，不传就是原有的纯文本行为，不影响现有调用方。（[#7](https://github.com/SimpleOne-X/SmartAdmin/issues/7)）
 
 ## 10.11.0 - 2026-09-14
 
 ### Added
 
-- **AI 管理：统一大模型接入网关。** 新增 `IAiChatClient` 统一入口（`ChatAsync` / `StreamAsync`），按协议适配 OpenAI 兼容与 Anthropic 两套协议，覆盖 OpenAI、Azure OpenAI、Anthropic、DeepSeek、通义千问、智谱 GLM、Kimi、豆包、Gemini、Ollama 十个预置厂商及自定义厂商；不引入任何厂商 SDK，HttpClient 直连并套 SSRF 围栏（与定时任务共用同一套围栏实现）。后台新增「AI 管理」目录（AI 模型、用量统计两页），运维选厂商预设、填 Key 即可，Key 经 `ISecretProtector` 加密落库，接口只回脱敏尾四位；每次调用按厂商 / 模型 / 场景 / 用户记 Token 用量，用量页支持多维度聚合、占比与按天趋势。两个控制器挂 `[Module("Ai")]`，可用 `Api:DisabledModules` 整体下线（`IAiChatClient` 不受影响）；内置 `AiUsageLogCleanupJob` 按保留天数（默认 90 天）定期清理用量记录。用法与消费者调用示例见[文档](https://smartcode-x.github.io/SmartAdmin/zh/guide/ai-models)。
+- **AI 管理：统一大模型接入网关。** 新增 `IAiChatClient` 统一入口（`ChatAsync` / `StreamAsync`），按协议适配 OpenAI 兼容与 Anthropic 两套协议，覆盖 OpenAI、Azure OpenAI、Anthropic、DeepSeek、通义千问、智谱 GLM、Kimi、豆包、Gemini、Ollama 十个预置厂商及自定义厂商；不引入任何厂商 SDK，HttpClient 直连并套 SSRF 围栏（与定时任务共用同一套围栏实现）。后台新增「AI 管理」目录（AI 模型、用量统计两页），运维选厂商预设、填 Key 即可，Key 经 `ISecretProtector` 加密落库，接口只回脱敏尾四位；每次调用按厂商 / 模型 / 场景 / 用户记 Token 用量，用量页支持多维度聚合、占比与按天趋势。两个控制器挂 `[Module("Ai")]`，可用 `Api:DisabledModules` 整体下线（`IAiChatClient` 不受影响）；内置 `AiUsageLogCleanupJob` 按保留天数（默认 90 天）定期清理用量记录。用法与消费者调用示例见[文档](https://simpleone-x.github.io/SmartAdmin/zh/guide/ai-models)。
 
 ### Fixed
 
-- **定时任务执行记录不再在 8192 字符处静默截断、丢掉最有价值的结尾内容。** 上限提到可配置项 `SmartAdmin:Jobs:MaxMessageChars`（单位改为明确的字符数，默认约 26 万，`≤0` 不限），异常信息走同一套规则；超限不再从中间硬切、后续输出直接丢弃，改成保留开头与结尾、只截中间，断点处留一句标注原长度的标记。多步任务里排在前面的大量重复明细不会再把后面的结论性汇总行整段挤没。（[#5](https://github.com/SmartCode-X/SmartAdmin/issues/5)、[#6](https://github.com/SmartCode-X/SmartAdmin/issues/6)）
+- **定时任务执行记录不再在 8192 字符处静默截断、丢掉最有价值的结尾内容。** 上限提到可配置项 `SmartAdmin:Jobs:MaxMessageChars`（单位改为明确的字符数，默认约 26 万，`≤0` 不限），异常信息走同一套规则；超限不再从中间硬切、后续输出直接丢弃，改成保留开头与结尾、只截中间，断点处留一句标注原长度的标记。多步任务里排在前面的大量重复明细不会再把后面的结论性汇总行整段挤没。（[#5](https://github.com/SimpleOne-X/SmartAdmin/issues/5)、[#6](https://github.com/SimpleOne-X/SmartAdmin/issues/6)）
 
 ## 10.10.1 - 2026-09-13
 
 ### Added
 
-- **应用可以生成自己的 `ph` 离线图标子集。** `smart-admin-web` 带上命令 `smart-admin-icons`：扫描应用 `src` 里的 `ph:*` 名字，从 Phosphor 整集裁出这些图标写成 JSON；`--check` 只比对不写盘，产物过期或有拼错的名字时非 0 退出，给 CI 用。`createSmartAdmin` 新增 `iconSets` 选项，启动时把这份子集和内核子集一起同步注册，业务页的 `ph` 图标首帧就能离线渲染，不再懒加载整套 `ph`（约 946 KB gz）。模板已经接好：`npm run gen:icons` 写出 `src/assets/icons/ph-subset.json`，`main.ts` 经 `iconSets` 传入。已有应用照这两处补上即可。应用的子集不剔除内核子集已有的名字，内核升级不会让应用提交的子集过期。（[#3](https://github.com/SmartCode-X/SmartAdmin/issues/3)）
+- **应用可以生成自己的 `ph` 离线图标子集。** `smart-admin-web` 带上命令 `smart-admin-icons`：扫描应用 `src` 里的 `ph:*` 名字，从 Phosphor 整集裁出这些图标写成 JSON；`--check` 只比对不写盘，产物过期或有拼错的名字时非 0 退出，给 CI 用。`createSmartAdmin` 新增 `iconSets` 选项，启动时把这份子集和内核子集一起同步注册，业务页的 `ph` 图标首帧就能离线渲染，不再懒加载整套 `ph`（约 946 KB gz）。模板已经接好：`npm run gen:icons` 写出 `src/assets/icons/ph-subset.json`，`main.ts` 经 `iconSets` 传入。已有应用照这两处补上即可。应用的子集不剔除内核子集已有的名字，内核升级不会让应用提交的子集过期。（[#3](https://github.com/SimpleOne-X/SmartAdmin/issues/3)）
 
 ### Fixed
 
 - **模板装依赖不再提示 esbuild 的安装脚本待批准。** `web/template/package.json` 加上 `"allowScripts": { "esbuild": true }`。degit 出去的模板没有 lockfile，esbuild 的补丁版本会浮动，所以按包名批准、不钉版本；npm 11 对未批准的依赖安装脚本会在 `npm install` 末尾列出警告。
-- **网关子路径部署下，外部登录回调与待绑定认领不再一律 40014。** 两个 binder cookie（`tn_oauth_state`、`tn_oauth_pending`）的 Path 跟随对外路径前缀：配了 `CallbackBaseUrl` 取它的路径部分（`https://gw.example.com/admin` → `/admin/api/v1/auth/external`），没配时（仅开发环境）取 `Request.PathBase`，开发环境回退拼出的回调地址也带上 PathBase。根路径部署不受影响。在网关上改写 cookie Path 的临时绕法（如 nginx `proxy_cookie_path /api/ /admin/api/;`）升级后不再匹配，自然失效，可以删掉。（[#1](https://github.com/SmartCode-X/SmartAdmin/issues/1)）
-- **`smart-admin-web` 的枚举可以当值导入。** 包入口把 `types/api` 整体导出（类型与枚举一起），`DuplicateStrategy`、`DataScopeType`、`NoticeType`、`ReceiverType` 与 `Job*` 系列都能直接用成员值，比如给 `ImportWizard` 传 `:strategies="[DuplicateStrategy.Skip]"`，不必再自己镜像一份数值。（[#2](https://github.com/SmartCode-X/SmartAdmin/issues/2)）
+- **网关子路径部署下，外部登录回调与待绑定认领不再一律 40014。** 两个 binder cookie（`tn_oauth_state`、`tn_oauth_pending`）的 Path 跟随对外路径前缀：配了 `CallbackBaseUrl` 取它的路径部分（`https://gw.example.com/admin` → `/admin/api/v1/auth/external`），没配时（仅开发环境）取 `Request.PathBase`，开发环境回退拼出的回调地址也带上 PathBase。根路径部署不受影响。在网关上改写 cookie Path 的临时绕法（如 nginx `proxy_cookie_path /api/ /admin/api/;`）升级后不再匹配，自然失效，可以删掉。（[#1](https://github.com/SimpleOne-X/SmartAdmin/issues/1)）
+- **`smart-admin-web` 的枚举可以当值导入。** 包入口把 `types/api` 整体导出（类型与枚举一起），`DuplicateStrategy`、`DataScopeType`、`NoticeType`、`ReceiverType` 与 `Job*` 系列都能直接用成员值，比如给 `ImportWizard` 传 `:strategies="[DuplicateStrategy.Skip]"`，不必再自己镜像一份数值。（[#2](https://github.com/SimpleOne-X/SmartAdmin/issues/2)）
 
 ## 10.10.0 - 2026-09-13
 
-后端 13 个 NuGet 包、前端 npm 包 `smart-admin-web` 与项目模板同号发布。能力清单见 [`README.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/README.md) 的「内置功能」，接入与扩展见[文档站](https://smartcode-x.github.io/SmartAdmin/zh/)。
+后端 13 个 NuGet 包、前端 npm 包 `smart-admin-web` 与项目模板同号发布。能力清单见 [`README.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/README.md) 的「内置功能」，接入与扩展见[文档站](https://simpleone-x.github.io/SmartAdmin/zh/)。
 
 ### Added
 
 - **后端内核。** 元包 `SmartAdmin` 引入四个分层包：`SmartAdmin.Core`（契约）、`SmartAdmin.SqlSugar`（数据层）、`SmartAdmin.Services`（领域服务）、`SmartAdmin.AspNetCore`（宿主集成），宿主里 `AddSmartAdmin` / `MapSmartAdmin` 两行接入。覆盖认证与会话、RBAC（权限码即规范化路由）、五种数据范围、多应用门户、组织与用户、字典与配置中心、通知公告、日志、文件、定时任务，以及 SQLite / MySQL / SQL Server / PostgreSQL 四种方言与多副本部署。内置服务一律接口化、`virtual`、经 `TryAdd` 注册，消费方可以整体替换，也可以子类覆写单步。
 - **可选包与工具包。** `SmartAdmin.Excel`（xlsx 导入导出）、`SmartAdmin.Caching.Redis`（Redis 缓存，多副本共享会话）、`SmartAdmin.Auth.WeCom` / `.DingTalk` / `.GitHub` / `.WeChat`（第三方登录）；测试基础设施 `SmartAdmin.Testing`；项目模板 `SmartAdmin.Templates`（`dotnet new smart-app`）。
-- **前端内核 `smart-admin-web`。** 布局壳、动态菜单路由、登录鉴权、`v-auth`、全部内置页、共享组件、stores 与语言包，预编译成 ESM + `.d.ts` + 一份 `style.css`。应用从 `web/template` 起步（`npx degit SmartCode-X/SmartAdmin/web/template web`），自己的页面、文案、静态路由、图标经 `createSmartAdmin(...)` 交给内核，页面 key 与内置页相同即覆盖内置页；vue、vue-router、pinia、vue-i18n、naive-ui、@vueuse/core、@iconify/vue、`smart-naive-table`、`smart-naive-icon` 是 peerDependencies，由应用安装。
+- **前端内核 `smart-admin-web`。** 布局壳、动态菜单路由、登录鉴权、`v-auth`、全部内置页、共享组件、stores 与语言包，预编译成 ESM + `.d.ts` + 一份 `style.css`。应用从 `web/template` 起步（`npx degit SimpleOne-X/SmartAdmin/web/template web`），自己的页面、文案、静态路由、图标经 `createSmartAdmin(...)` 交给内核，页面 key 与内置页相同即覆盖内置页；vue、vue-router、pinia、vue-i18n、naive-ui、@vueuse/core、@iconify/vue、`smart-naive-table`、`smart-naive-icon` 是 peerDependencies，由应用安装。

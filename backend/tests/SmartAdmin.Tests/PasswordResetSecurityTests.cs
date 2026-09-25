@@ -84,7 +84,8 @@ public class PasswordResetSecurityTests
         var login = await (await anon.PostJson("/api/v1/auth/login",
             new { account = "frank", password = initial })).ReadEnvelope();
         Assert.Equal(0, login.GetProperty("code").GetInt32());
-        Assert.True(login.GetProperty("data").GetProperty("mustChangePassword").GetBoolean());
+        // 「首次登录须改密码」默认关(见 ForcedPasswordChangeTests),建号首登不带强制改密标志
+        Assert.False(login.GetProperty("data").GetProperty("mustChangePassword").GetBoolean());
     }
 
     [Fact]

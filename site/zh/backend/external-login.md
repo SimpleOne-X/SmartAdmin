@@ -14,39 +14,99 @@
 
 内置 OIDC 零新增依赖：发现文档、JWKS、`id_token` 验签全用 JwtBearer 已经传递进来的 `Microsoft.IdentityModel.*`。四个厂商包各自只引 `Core` 加 Microsoft.\*，用裸 `HttpClient` 对接厂商 API。所以它们能独立发版，也不会把厂商 SDK 拖进内核。
 
-四个可选包还是老规矩，在 `AddSmartAdmin()` 之前注册。它们按 `Code` 和内置 provider 并存：
+四个可选包在 `AddSmartAdmin()` 之前注册。它们只注册厂商的类型描述（`IExternalAuthProviderType`），不读配置，也不抛异常。内置 OIDC 的类型描述由 `AddSmartAdmin()` 注册，不用另调。
 
 ```csharp
-builder.Services.AddSmartAdminWeComAuth(builder.Configuration);
-builder.Services.AddSmartAdminDingTalkAuth(builder.Configuration);
-builder.Services.AddSmartAdminGitHubAuth(builder.Configuration);
-builder.Services.AddSmartAdminWeChatAuth(builder.Configuration);
+builder.Services.AddSmartAdminWeComAuth();
+builder.Services.AddSmartAdminDingTalkAuth();
+builder.Services.AddSmartAdminGitHubAuth();
+builder.Services.AddSmartAdminWeChatAuth();
 builder.Services.AddSmartAdmin(builder.Configuration);
 ```
 
-## 配置分两处放
+第三方登录的连接配置只有数据库这一个来源，appsettings 里 `SmartAdmin:ExternalAuth` 下的厂商与 OIDC 连接节点不会被读取，启动时给出一条警告。传入 `WeComAuthOptions` 这类选项对象的重载，是在代码里显式注册一个 provider，不看数据库，与库里同 `Code` 的配置冲突时以它为准。
 
-密钥和运营项不放在一起，这是刻意的。
+装了哪个包，「登录方式」页里才有对应的一行；没装的显示「未安装」。登录、回调、绑定统一从注册表 `IExternalAuthProviderRegistry` 取 provider，它的结果是两部分的并集：库里配好的连接按类型现建的实例，加上消费者自己实现并注册的 `IExternalAuthProvider`。两边 `Code` 相同时，代码里注册的那个优先。
 
-**连接与密钥走 `appsettings`**，和 Database、Jwt、Email 一个路子，密钥不进库：
+## 配置放在哪里
+
+### 连接与密钥
+
+连接与密钥在 系统配置 → 登录方式 里填：点某个第三方的「设置」，填好保存，立即生效。每一行的状态有三种：「未安装」是服务器没装对应的包，「未配置」是已安装但库里还没有完整配置，开关灰掉，「已配置」才能开关。Gitee、QQ 没有后端包，列表里不出现。连接与密钥只来自数据库，没有 appsettings 里的对应写法。`SmartAdmin:ExternalAuth` 下 `Oidc`、`WeCom`、`DingTalk`、`GitHub`、`WeChat` 这些连接节点不会被读取，启动时如果发现它们还在，会打一条警告，提示到页面里填写。
+
+每种类型要填的字段如下，机密字段加密存放：
+
+| 类型 | 明文字段 | 机密字段（加密） |
+| --- | --- | --- |
+| `wecom` | CorpId、AgentId | CorpSecret |
+| `dingtalk` | AppKey | AppSecret |
+| `github` | ClientId | ClientSecret |
+| `wechat` | AppId | AppSecret |
+| `oidc` | Authority、ClientId、Scopes、UsePkce | ClientSecret |
+
+明文字段在页面上回显，方便核对填的是哪个应用。机密字段整体用 `ISecretProtector`（AES-GCM）加密后存进 `sys_external_auth_provider` 表，页面和接口只回「已配置」与尾四位，任何响应和操作日志里都没有机密明文。密钥不足 8 位时连尾四位也不给，免得短密钥被整个露出。机密字段留空表示不修改，首次保存时必填。
+
+这张表和 `sys_config` 是分开的，因为 `sys_config` 的值会出现在配置列表、「高级」页、导出和操作日志里，密钥放进去就等于明文露出。
+
+`Code` 的规则：
+
+- 官方厂商类型的 `Code` 固定为类型名（`wecom`、`dingtalk`、`github`、`wechat`），每种只能配一份。
+- `oidc` 可以配多条，页面上点「添加 OIDC」。`Code` 由管理员起，格式是 `^[a-z][a-z0-9-]{1,31}$`，不能与上面四个类型名相同。
+- `Code` 和类型保存后不能改。
+
+几条保存时的规则：
+
+- **数据保护主密钥必须配置。** 加密用的主密钥是 `SmartAdmin:Security:DataProtection:Key`。主密钥是进程内的临时密钥时，页面拒绝保存，因为重启后临时密钥丢失，存进去的密钥就永远解不开。
+- **改 OIDC 的 Authority 必须重新输入 Client Secret。** 否则有权限的人可以把 Authority 指向自己控制的地址，登录时服务端就会带着已保存的密钥去那里换令牌。Authority 保存与测试前都要过 `HttpFence` 的地址校验，默认只拦回环和链路本地地址，内网的 Keycloak 不受影响。
+- **保存和清除配置要求近期重新验证过身份。** 清除只删这条配置，不会删除用户已经绑定的外部账号。
+
+主密钥仍在库外，这套加密保护的是「只拿到数据库或备份」的情形，不是「拿到了服务器」。多实例部署时，所有实例必须用同一个主密钥，并且共享缓存（Redis）：配置行整表走读穿透缓存，缓存不共享，一个实例改了配置，别的实例就看不到。
+
+::: warning 谁能改这里，谁就能决定谁能登录
+这几个操作的按钮权限挂在「系统配置」菜单下，读取目录并入「配置-查询」，保存、清除、测试连接各是一个按钮。授给谁要慎重。
+
+和「按账号自动关联」同时开着时，风险最大：有权限的人加一个自己控制的 OIDC IdP，就能让账号名与本地账号相同的人登进那个本地账号。开着自动关联的系统，只把这项权限授给管理 IdP 的人。
+:::
+
+### 测试连接
+
+设置面板左下角的「测试连接」用表单里当前的值检查，不要求先保存；机密留空时用已保存的。结果是一组检查项，每项是 `ok`、`fail` 或 `skipped`，逐项列在面板里，不是一个笼统的「成功」。能验证到哪一步就报到哪一步，验证不了的明说：
+
+| 类型 | 检查项 | 验证不了的 |
+| --- | --- | --- |
+| `wecom` | 用 CorpId 与 CorpSecret 换 access_token，再用 AgentId 查应用 | 无 |
+| `dingtalk` | 用 AppKey 与 AppSecret 换应用 access_token | 无 |
+| `github` | 用一个假授权码请求令牌端点，「码无效」说明凭据有效，「客户端凭据错误」说明无效 | 不发起真实登录 |
+| `wechat` | 用一个假授权码请求令牌端点，确认 AppId 被微信识别 | AppSecret 标为「未验证」 |
+| `oidc` | 取发现文档，确认 `issuer` 一致、有授权端点与令牌端点 | Client Secret 标为「未验证」 |
+
+OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就能验证密钥的通用办法。微信的 AppSecret 验证不了，是因为微信先校验 AppId 和授权码，授权码无效时不会走到密钥校验。某个厂商没有可用的验证方式时，对应检查项标为 `skipped`，而不是硬凑一个通过。
+
+测试请求都由服务端发出，不带任何用户的登录状态，不写库，只受全局限流约束。除了 OIDC 走地址围栏，请求的域名固定为厂商域名。测试连接是个出站请求的触发器，所以只给有权限的人。它不落库，不要求重新验证身份。
+
+### 回调基址与前端结果页
+
+`CallbackBaseUrl` 和 `FrontendResultPath` 在 `appsettings`，和 Database、Jwt、Email 一个路子。它们不是机密，而且启动时的校验有价值：填错就拒绝启动，比运行时才发现好。
 
 ```jsonc
 {
   "SmartAdmin": {
     "ExternalAuth": {
-      "CallbackBaseUrl": "https://admin.example.com",
-      "Oidc": [ { "Code": "keycloak", "Authority": "...", "ClientId": "...", "ClientSecret": "..." } ],
-      "WeCom": { "CorpId": "...", "AgentId": "...", "CorpSecret": "..." }
+      "CallbackBaseUrl": "https://admin.example.com"
     }
   }
 }
 ```
 
+页面上的设置面板把完整的回调地址算出来只读显示，旁边有复制按钮，填到厂商后台即可。生产环境没配 `CallbackBaseUrl` 时，页面顶部给一条警告，因为这种情况下登录时控制器会抛异常。
+
 `CallbackBaseUrl` 只填后端对外的根地址，回调路径 `/api/v1/auth/external/{provider}/callback` 由内核接在后面。开发环境不配会回退到请求主机；生产环境必须配，因为 Host 头能伪造。填错了厂商照样跳转，它们只校验域名，最后落在一条不存在的路径上，看着就是「授权完什么也没发生」。所以启动时先校验：整条回调地址、前端结果页 `FrontendResultPath`、带查询串或 `#` 片段、不是 `http(s)` 绝对地址，都会让应用拒绝启动。网关子路径可以，比如 `https://gw.example.com/admin`。这时前端的 `apiBase` 也要走同一个前缀。内核靠两个 cookie 确认回调与认领来自发起登录的那个浏览器，cookie 的 Path 跟着前缀走（`/admin/api/v1/auth/external`）。前端绕开前缀调接口，cookie 就带不上，登录回调或认领待绑定会报 40014。
 
-`GET /api/v1/auth/external/providers` 只回非密钥字段（code、显示名、图标），够前端点亮按钮就行。
+`GET /api/v1/auth/external/providers` 只回非密钥字段（code、显示名、图标），够前端点亮按钮就行。登录页的按钮只对「已配置且启用」的 provider 出现，没配置的不显示。
 
-**运营项走 `sys_config`**，配置页上运行时可改，按 provider code 组键：
+### 运营项
+
+运营项走 `sys_config`，配置页上运行时可改，按 provider code 组键：
 
 | 配置键 | 默认 | 管什么 |
 | --- | --- | --- |
@@ -56,15 +116,11 @@ builder.Services.AddSmartAdmin(builder.Configuration);
 | `sys.externalauth.{code}.defaultRoleIds` | 空 | 自动开户时给什么角色 |
 | `sys.externalauth.{code}.defaultOrgId` | 空 | 自动开户时落哪个机构 |
 
-一个键都不配，默认行为就是**启用 + 拒绝开户**。只动 `appsettings`，就能跑起一套绑定优先的 SSO。
+一个键都不配，默认行为就是**启用 + 拒绝开户**：连接配好，就是一套绑定优先的 SSO。
 
-`enabled` 在配置中心「第三方登录」页的卡片上开关，企业微信卡片还多一个「按账号自动关联」，对应它的 `linkByAccount`。其余的键不预置，别的 provider 的 `linkByAccount` 也算在内。要用时到「其他配置」新增，分组填 `externalauth`，保存后列在「第三方登录」页底部的「本组其它配置」里。
+`enabled` 是「登录方式」页每一行右侧的开关，和连接配置无关：开关走页面底部的保存条，设置面板里的保存则直接写库。企业微信的行还多一个「按账号自动关联」，对应它的 `linkByAccount`。其余的键不预置，别的 provider 的 `linkByAccount` 也算在内。要用时到「高级」页新增，分组填 `externalauth`。
 
 这几个键的读取收口在 `ISysUserExternalService`，控制器和 `AuthService` 都只调它，不各自散读配置键。
-
-::: tip 没有 provider 管理页，这是有意的
-后端不建 provider 表、不建管理页。厂商密钥本质是部署基建，入库要加密存储、脱敏、再配一套 CRUD，攻击面和工作量都不划算。将来真要一个独立的 Provider 管理页，前端叠一个就行，后端不用动。
-:::
 
 ## 未绑定的账号怎么办
 
@@ -75,7 +131,7 @@ builder.Services.AddSmartAdmin(builder.Configuration);
 
 ### 按账号名关联
 
-本地账号本来就是企业微信账号时，待认领是多余的一步：员工手上根本没有密码可填。把 `sys.externalauth.{code}.linkByAccount` 设成 `true` 之后，外部身份的标识（企业微信就是 `userid`）和某个本地账号完全相同，首次登录就绑上并直接进。以后只认绑定，不再按名字找。比较口径和账号密码登录查账号一样，大小写敏不敏感看数据库排序规则。企业微信的 `userid` 本身不区分大小写，两边写法最好统一。企业微信卡片上打开它会先弹确认框；别的 provider 照前面说的，到「其他配置」加键。
+本地账号本来就是企业微信账号时，待认领是多余的一步：员工手上根本没有密码可填。把 `sys.externalauth.{code}.linkByAccount` 设成 `true` 之后，外部身份的标识（企业微信就是 `userid`）和某个本地账号完全相同，首次登录就绑上并直接进。以后只认绑定，不再按名字找。比较口径和账号密码登录查账号一样，大小写敏不敏感看数据库排序规则。企业微信的 `userid` 本身不区分大小写，两边写法最好统一。在「登录方式」页企业微信那一行打开它，会先弹确认框；别的 provider 照前面说的，到「高级」页加键。
 
 超级管理员、已停用的账号、已经绑过这个 provider 的账号，永不自动关联；找不到同名账号也一样，都交回 `provisioning`。超级管理员要用外部登录，只能自己去个人中心绑。和自动开户同时开着时，先关联，关联不上再开户。按邮箱、手机号这类别的口径关联，覆写 `AuthService.LinkByAccountAsync` 或 `ResolveExternalUserAsync` 即可，不必改内核。
 
@@ -99,16 +155,16 @@ builder.Services.AddSmartAdmin(builder.Configuration);
 
 前端包的内置登录页在企业微信客户端里会自动发起一次企业微信登录，每个浏览器会话只发一次。登录失败，或者主动退出后回到登录页，就停在那里让人自己选，不会来回跳。
 
-首次登录照样要过未绑定这一关。默认拒绝，员工会落回登录页走待认领。本地账号就是企业微信账号的，到「第三方登录」页的企业微信卡片上打开「按账号自动关联」。员工第一次点开就进，不用拿密码认领。本地还没有账号的，打开自动开户。
+首次登录照样要过未绑定这一关。默认拒绝，员工会落回登录页走待认领。本地账号就是企业微信账号的，到「登录方式」页，在企业微信那一行打开「按账号自动关联」。员工第一次点开就进，不用拿密码认领。本地还没有账号的，打开自动开户。
 
 ## 端点
 
-都挂在 `api/v1/auth/external` 下：
+登录、回调、绑定的端点挂在 `api/v1/auth/external` 下：
 
 | 端点 | 用途 |
 | --- | --- |
 | `GET providers` | 列可用 provider，前端据此渲染登录按钮 |
-| `GET providers/all` | 管理端：列出全部已注册 provider（含已禁用），带启用状态和按账号关联开关，供系统配置页的卡片开关 |
+| `GET providers/all` | 管理端：列出注册表里全部已配置的 provider（含已禁用），带启用状态和按账号关联开关，供「登录方式」页的开关 |
 | `GET {provider}/authorize` | 换取跳转地址，带上一次性 state |
 | `GET {provider}/callback` | 厂商回调落点 |
 | `POST exchange` | 用一次性票据换令牌 |
@@ -116,6 +172,15 @@ builder.Services.AddSmartAdmin(builder.Configuration);
 | `GET bindings` | 当前用户已绑定的外部身份 |
 | `POST {provider}/bind` | 【个人中心】发起绑定一个外部身份 |
 | `DELETE {provider}/binding` | 【个人中心】解绑一个外部身份 |
+
+「登录方式」页管理 provider 配置的端点挂在 `api/v1/sys/external-auth/providers` 下，模块名是 `ExternalAuth`：
+
+| 端点 | 用途 |
+| --- | --- |
+| `GET` | 目录：已装的类型，加每个 provider 的配置状态、明文字段、`hasValue` 与尾四位、回调地址 |
+| `PUT {code}` | 新增或更新一条配置，请求带 `type`；机密字段留空表示不修改，要求近期重新验证身份 |
+| `DELETE {code}` | 清除一条配置，不删除用户已绑定的外部账号，要求近期重新验证身份 |
+| `POST test` | 测试连接，用表单里的值，机密留空则用已保存的 |
 
 `state` 和一次性票据都复用短信验证码那套成法：进缓存、`GetAndRemoveAsync` 原子取删，单次有效。`state` 只用字母和数字，企业微信和微信的 OAuth 只收这个字符集。
 
@@ -150,7 +215,7 @@ curl -X POST http://localhost:5100/api/v1/auth/external/exchange \
 
 | 码 | 名 | 什么时候 |
 | --- | --- | --- |
-| 40013 | `OAuthProviderDisabled` | 这个 provider 被运营开关关了 |
+| 40013 | `OAuthProviderDisabled` | 这个 provider 被运营开关关了，或者没有完整配置 |
 | 40014 | `OAuthStateInvalid` | state 对不上或已被消费 |
 | 40015 | `OAuthExchangeFailed` | 向厂商换令牌失败 |
 | 40016 | `OAuthAccountNotBound` | 没绑定，且这个 provider 不许自动开户 |

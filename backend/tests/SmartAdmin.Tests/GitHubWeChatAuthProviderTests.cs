@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartAdmin.Auth.GitHub;
@@ -368,32 +367,5 @@ public class GitHubWeChatAuthProviderTests
         Assert.Equal("微信", wx.DisplayName);
     }
 
-    [Fact]
-    public void AddSmartAdminGitHubAuth_from_configuration_is_noop_without_client_id()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["SmartAdmin:ExternalAuth:GitHub:ClientId"] = "",
-        }).Build();
-        services.AddSmartAdminGitHubAuth(cfg);
-        using var sp = services.BuildServiceProvider();
-        Assert.Empty(sp.GetServices<IExternalAuthProvider>());
-    }
 
-    [Fact]
-    public void AddSmartAdminGitHubAuth_from_configuration_registers_when_configured()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["SmartAdmin:ExternalAuth:GitHub:ClientId"] = "from-cfg",
-            ["SmartAdmin:ExternalAuth:GitHub:ClientSecret"] = "secret",
-        }).Build();
-        services.AddSmartAdminGitHubAuth(cfg);
-        using var sp = services.BuildServiceProvider();
-        Assert.Contains(sp.GetServices<IExternalAuthProvider>(), p => p.Code == "github");
-    }
 }

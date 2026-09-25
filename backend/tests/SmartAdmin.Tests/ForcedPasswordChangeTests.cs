@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
+using Microsoft.Extensions.DependencyInjection;
+using SmartAdmin.Services;
 
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 首登强制改密 HTTP 级回归:管理员建号 → 首登 mustChangePassword=true → 自助改密清标志;
-/// 管理员重置密码 → 标志再次置 true。后端不拦登录,仅经 LoginOutput 透传标志。
+/// 首登强制改密 HTTP 级回归:开关 sys.security.password.forceChangeOnFirstLogin 默认关,建号首登不强制;
+/// 开启后建号 → 首登 mustChangePassword=true → 自助改密清标志;管理员重置密码不看开关,标志总是置 true。
+/// 后端不拦登录,仅经 LoginOutput 透传标志。
 /// </summary>
 public class ForcedPasswordChangeTests
 {
@@ -22,12 +25,20 @@ public class ForcedPasswordChangeTests
         return login.GetProperty("data").GetProperty("mustChangePassword").GetBoolean();
     }
 
+    private static async Task SetForceChangeOnFirstLogin(AdminAppFactory f, bool on)
+    {
+        using var scope = f.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IConfigService>().SaveValuesAsync(
+            [new ConfigBatchItem { ConfigKey = "sys.security.password.forceChangeOnFirstLogin", ConfigValue = on ? "true" : "false" }]);
+    }
+
     [Fact]
     public async Task Created_user_must_change_then_flag_clears_after_self_change()
     {
         using var f = new AdminAppFactory();
         var admin = await SuperAdminClient(f);
         var anon = f.CreateClient();
+        await SetForceChangeOnFirstLogin(f, true);
 
         var add = await (await admin.PostJson("/api/v1/sys/user",
             new { account = "alice", password = "InitPass123", name = "Alice", enabled = true, roleIds = Array.Empty<long>() })).ReadEnvelope();
@@ -46,6 +57,26 @@ public class ForcedPasswordChangeTests
 
         // 再登:标志已清
         Assert.False(await LoginMustChange(anon, "alice", "NewPass456"));
+    }
+
+    [Fact]
+    public async Task First_login_change_is_off_by_default_but_reset_still_forces()
+    {
+        using var f = new AdminAppFactory();
+        var admin = await SuperAdminClient(f);
+        var anon = f.CreateClient();
+
+        var add = await (await admin.PostJson("/api/v1/sys/user",
+            new { account = "carol", password = "InitPass123", name = "Carol", enabled = true, roleIds = Array.Empty<long>() })).ReadEnvelope();
+        Assert.Equal(0, add.GetProperty("code").GetInt32());
+
+        // 开关默认关(种子值 false):首登不强制改密
+        Assert.False(await LoginMustChange(anon, "carol", "InitPass123"));
+
+        // 管理员重置不受此开关影响,仍强制改密
+        var carolId = add.GetProperty("data").GetProperty("id").GetInt64();
+        await admin.PutJson($"/api/v1/sys/user/{carolId}/password", new { newPassword = "ResetPass789" });
+        Assert.True(await LoginMustChange(anon, "carol", "ResetPass789"));
     }
 
     [Fact]

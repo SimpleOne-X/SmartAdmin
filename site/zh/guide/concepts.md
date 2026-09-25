@@ -53,4 +53,4 @@ SmartAdmin             元包:只引用 AspNetCore,消费方装它一个即可�
 
 ---
 
-> 更完整的架构与设计背景见仓库的 [架构与设计文档](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/rebuild-design.md)。
+> 更完整的架构与设计背景见仓库的 [架构与设计文档](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/rebuild-design.md)。

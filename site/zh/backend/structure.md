@@ -63,7 +63,7 @@ app.MapSmartAdmin();
 app.Run();
 ```
 
-`AddSmartAdminRedisCache` 在这里被调用了，且排在 `AddSmartAdmin()` 之前。但只要配置里没把 `SmartAdmin:Cache:Provider` 设成 `Redis`，它就是空操作，不影响零配置体验（SQLite + 进程内缓存）。完整文件里那几个外部登录包与 `AddSmartAdminExcel()` 同样是「没配对应配置节就是空操作」；把这些可选包调用整段去掉，剩下的就是真正零配置的最小宿主。
+`AddSmartAdminRedisCache` 在这里被调用了，且排在 `AddSmartAdmin()` 之前。但只要配置里没把 `SmartAdmin:Cache:Provider` 设成 `Redis`，它就是空操作，不影响零配置体验（SQLite + 进程内缓存）。完整文件里那几个外部登录包只注册厂商类型描述，连接与密钥在「登录方式」页里填，没填就没有对应的登录按钮，对零配置启动没有影响；`AddSmartAdminExcel()` 只是装上 xlsx 编解码。把这些可选包调用整段去掉，剩下的就是真正零配置的最小宿主。
 
 它的 `appsettings.json` 默认关闭文件日志（`SmartAdmin:Logging:File:Enabled: false`），诊断信息靠 stdout 采集。标准 ASP.NET Core 日志级别照常设置。`appsettings.Development.json.example` 是被 gitignore 的 `appsettings.Development.json` 的模板，只放了种子超管账号名和一个空密码（留空是为了让内核首启时打印一个随机密码）。`Properties/launchSettings.json` 把开发环境地址锁定在 `http://localhost:5100`，并设置 `ASPNETCORE_ENVIRONMENT=Development`。
 
@@ -91,7 +91,7 @@ app.Run();
 | `Upload` | `AdminUploadOptions` | 存储根目录、大小上限、后缀白名单 |
 | `Excel` | `AdminExcelOptions` | 导入/导出的行数与文件大小上限，见[给自己的实体接导入导出](/zh/guide/import-export) |
 | `Email` | `AdminEmailOptions` | 邮件通道：`Host` 留空走日志实现，配了就走 `SmtpEmailSender`，见[认证与安全](/zh/backend/auth-security) |
-| `ExternalAuth` | `AdminExternalAuthOptions` | 外部登录 / SSO 的回调基址与内置 OIDC provider 列表，见[外部登录](/zh/backend/external-login) |
+| `ExternalAuth` | `AdminExternalAuthOptions` | 外部登录 / SSO 的回调基址与前端结果页路径。provider 的连接与密钥不在这里，在「登录方式」页填写，见[外部登录](/zh/backend/external-login) |
 | `Api` | `AdminApiOptions` | 禁用模块列表 |
 | `Realtime` | `AdminRealtimeOptions` | 实时推送开关与 Hub 路径，默认关闭，见[实时通知](/zh/backend/realtime) |
 | `DemoMode` | `bool` | `false`：为 `true` 时仅放行 GET/HEAD/OPTIONS，其余写请求一律以错误码 `41002` 拒绝 |

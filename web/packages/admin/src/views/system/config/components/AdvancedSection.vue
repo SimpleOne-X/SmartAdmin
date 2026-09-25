@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// 其他配置 = 分类配置中心的兜底:只列不归任何结构化 Tab 的分组(含空分组)。
-// 结构化分组里没被字段认领的行在各自 Tab 的「本组其它配置」里,这里不重复列。
-// 列驱动搜索/分页/竞态交 SmartTable,新增/编辑弹窗是共用的 ConfigFormModal。
+// 高级:给开发者看的原始键值表。列出所有没被结构化表单认领的配置行——
+// 结构化分组里的零散键、业务模块自己加的配置都在这里;认领清单来自草稿(draft.claimedKeys)。
+// 列驱动搜索/分页/竞态交 SmartTable,新增/编辑弹窗是 ConfigFormModal。
 import { h, ref, watch } from 'vue'
 import { NButton, NSpace, NPopconfirm, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -13,24 +13,28 @@ import { configApi } from '#/api'
 import { translateError } from '#/utils/error'
 import type { SysConfig } from '#/types/api'
 import ConfigFormModal from './ConfigFormModal.vue'
-import { STRUCTURED_GROUPS, bumpConfigRevision, configRevision } from '../groups'
+import SectionLayout from './SectionLayout.vue'
+import { bumpConfigRevision, configRevision } from '../groups'
+import { useConfigDraft } from '../draft'
 
 const { t } = useI18n()
 const message = useMessage()
 const { run } = useConfirm()
 const authStore = useAuthStore()
+const draft = useConfigDraft()
 const tableRef = ref<SmartTableInst<SysConfig>>()
 
-const fetchOtherConfigs = (params: Parameters<typeof configApi.page>[0]) =>
-  configApi.page({ ...params, excludedGroupCodes: STRUCTURED_GROUPS })
+// 在库里排除已认领的键,分页总数才准
+const fetchConfigs = (params: Parameters<typeof configApi.page>[0]) =>
+  configApi.page({ ...params, excludedKeys: draft.claimedKeys.value })
 
-// 任何 Tab 里增删改了配置行都刷当前页(不回第 1 页):改了分组的行要跟着进出本表
+// 保存或增删改了配置行都刷当前页(不回第 1 页)
 watch(configRevision, () => tableRef.value?.refresh())
 
 const columns: SmartTableColumn<SysConfig>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { key: 'configKey', title: () => t('config.key'), search: true },
-  { key: 'name', title: () => t('config.name'), search: true },
+  { key: 'configKey', title: () => t('config.key'), search: true, ellipsis: { tooltip: true } },
+  { key: 'name', title: () => t('config.name'), search: true, ellipsis: { tooltip: true } },
   {
     key: 'configValue',
     title: () => t('config.value'),
@@ -96,21 +100,28 @@ function openEdit(r: SysConfig) {
 </script>
 
 <template>
-  <SmartTable
-    :default-page-size="100"
-    ref="tableRef"
-    :columns="columns"
-    :fetcher="fetchOtherConfigs"
-    storage-key="sys-config"
-    @error="e => message.error(translateError(e))"
-  >
-    <template #toolbar>
-      <n-button v-auth="'POST:/api/v1/sys/config'" type="primary" @click="openAdd">
-        <template #icon><AppIcon icon="ph:plus" :size="16" /></template>
-        {{ t('common.add') }}
-      </n-button>
-    </template>
-  </SmartTable>
+  <SectionLayout :title="t('config.tab.advanced')" :desc="t('config.advanced.desc')">
+    <!-- .fill-main 接上内核的高度链(styles/layout.css):页面不滚,只有表体滚 -->
+    <div class="fill-main">
+      <SmartTable
+        flex-height
+        virtual-scroll
+        :default-page-size="100"
+        ref="tableRef"
+        :columns="columns"
+        :fetcher="fetchConfigs"
+        storage-key="sys-config"
+        @error="e => message.error(translateError(e))"
+      >
+        <template #toolbar>
+          <n-button v-auth="'POST:/api/v1/sys/config'" type="primary" @click="openAdd">
+            <template #icon><AppIcon icon="ph:plus" :size="16" /></template>
+            {{ t('common.add') }}
+          </n-button>
+        </template>
+      </SmartTable>
+    </div>
+  </SectionLayout>
 
   <ConfigFormModal v-model:show="show" :row="editing" />
 </template>

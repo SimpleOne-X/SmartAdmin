@@ -28,7 +28,7 @@ When a new release raises the lower bound of a peer range, `npm install` fails w
 
 ## After installing
 
-1. Read this release's section in the [changelog](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md). A release with breaking changes opens its section with a bold notice.
+1. Read this release's section in the [changelog](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md). A release with breaking changes opens its section with a bold notice.
 2. Start the backend and run `npm run gen:api` from `web/` to regenerate your own `src/api/schema.d.ts`. Wherever the contract changed, the type check in the next step points at it.
 3. Run `npm run typecheck`, then click through your own pages in a browser.
 4. Pages you copied into your own `views/` to override a built-in page under the same key are not updated by an upgrade. Compare them with the new release's built-in source (the file of the same name under `web/packages/admin/src/views/` in the repository) and port the changes yourself.
@@ -39,7 +39,7 @@ The login page footer shows the `version` that `main.ts` passes to `createSmartA
 
 ## Tracking releases
 
-- [Changelog](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md): Keep a Changelog format, one section per release, covering both halves. Breaking changes are batched into the next .NET major release wherever possible.
+- [Changelog](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md): Keep a Changelog format, one section per release, covering both halves. Breaking changes are batched into the next .NET major release wherever possible.
 - Packages are published only from `v*` tags on `main`: the NuGet packages to nuget.org, `smart-admin-web` to npmjs.com, under the same number. Changes on the `dev` branch don't reach any package until they are released.
 
 Going the other way, contributing your own fixes back to SmartAdmin, is covered in the [Contributing Guide](/community/contributing).

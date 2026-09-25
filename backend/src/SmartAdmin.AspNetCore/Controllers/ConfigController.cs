@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
@@ -53,6 +54,25 @@ public class ConfigController(IConfigService configs, ISecurityPolicyProvider po
     {
         await configs.SaveValuesAsync(items);
         return Result<bool>.Ok(true);
+    }
+
+    /// <summary>上传站点 Logo(只收 PNG/JPG/WEBP、1 MB 以内,不受全局上传白名单约束),返回带签名直链的文件信息;
+    /// 前端拿 <c>viewUrl</c> 写进 <c>sys.site.logo</c> 后随批量保存生效。</summary>
+    [HttpPost("logo")]
+    [RolePermission]
+    [OperationLog("上传站点 Logo")]   // 入参是 IFormFile,脱敏器会记占位串,不影响记录本次操作
+    public async Task<Result<FileUploadOutput>> UploadLogo(
+        IFormFile file, [FromServices] ISiteLogoService logos, [FromServices] IFileUrlSigner signer)
+    {
+        await using var stream = file.OpenReadStream();
+        var output = await logos.UploadAsync(new FileUploadInput
+        {
+            Content = stream,
+            FileName = file.FileName,
+            Size = file.Length,
+            ContentType = file.ContentType,
+        });
+        return Result<FileUploadOutput>.Ok(output with { ViewUrl = signer.BuildUrl(output.Id) });
     }
 
     /// <summary>新增配置,返回新 Id</summary>

@@ -33,12 +33,16 @@ SmartAdmin 的外观由 CSS 自定义属性驱动，不是组件 props。变量�
 这些都落地在 `composables/useTheme.ts` 的 `useTheme()` 里，盯着 `app.isDark`、`accent`、`density`、`grayscale` 四样，任意一个变就动手。往 `<html>` 打 `data-theme`、`data-density` 和灰阶用的 `data-gray`，把派生出的 `--color-primary*` 写进 `document.documentElement`，让消费 token 的手写 CSS 立即换色，再重建 Naive 的 `themeOverrides`。`App.vue` 把结果接到 `<n-config-provider :theme-overrides>`，包住整个应用。
 
 ::: tip 完整 token 表
-上面够你换主色、加暗色、判断该改哪一层。完整的令牌清单、语义徽章派生、`token → Naive` 全映射表，见 [`web/DESIGN.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/web/DESIGN.md)。
+上面够你换主色、加暗色、判断该改哪一层。完整的令牌清单、语义徽章派生、`token → Naive` 全映射表，见 [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md)。
 :::
 
 ## Logo：一处配置，全站生效
 
 侧栏、顶栏、登录页、应用选择页的 Logo 都由 `SmartLogo` 渲染。取值按顺序来：后台配置 `sys.site.logo` 有图片地址就用这张图，否则用 `createSmartAdmin({ brand: { logo } })` 传的组件或图片地址，都没有才是内置矢量标。`brand` 是配置为空时的默认，站点信息到达之前的首帧也用它。
+
+换 Logo 不用自己上传再贴地址。在「系统配置 → 品牌与登录页」点 Logo 方块，选一张 PNG、JPG 或 WEBP 图片，裁成正方形，预览里先看效果，点保存才生效。图片走专用接口 `POST /api/v1/sys/config/logo`，只收位图、上限 1 MB，不受「文件上传」里全局白名单的约束。存进 `sys.site.logo` 的是签名直链；部署配了 `SignedUrlTtlMinutes` 也不会过期，因为站点信息每次下发都会按文件重新签一份。
+
+浏览器标签页图标默认跟着 Logo 走：配了 Logo 就换成它，清空就还原模板自带的 favicon。不想要这个行为，传 `createSmartAdmin({ brand: { faviconFromLogo: false } })`。
 
 ## 图标离线注册
 

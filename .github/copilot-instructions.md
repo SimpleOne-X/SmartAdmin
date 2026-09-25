@@ -7,7 +7,7 @@
 SmartAdmin 是**可分发的后台内核**,不是一个应用。后端以 NuGet 包交付,消费者在 `Program.cs` 里调用 `AddSmartAdmin` / `MapSmartAdmin` 就拿到认证、RBAC、多机构数据权限、字典、配置、日志、上传;前端以 npm 包 `smart-admin-web` 交付,与 NuGet 同一个版本号。
 
 - `backend/` —— .NET 10 内核(产品本体)+ 样例宿主 + 测试。
-- `web/` —— Vue 3 + Naive UI 前端内核,npm workspace:`packages/admin` 是包 `smart-admin-web`(布局、路由、stores、共享组件、全部内置页),`template` 是消费者 `npx degit SmartCode-X/SmartAdmin/web/template web` 拿走的薄壳应用,升级只改 `smart-admin-web` 的版本号。
+- `web/` —— Vue 3 + Naive UI 前端内核,npm workspace:`packages/admin` 是包 `smart-admin-web`(布局、路由、stores、共享组件、全部内置页),`template` 是消费者 `npx degit SimpleOne-X/SmartAdmin/web/template web` 拿走的薄壳应用,升级只改 `smart-admin-web` 的版本号。
 
 统领一切的约束是**可替换性**:每个服务都有接口、实现类 `public`、方法 `virtual`、注册一律 `TryAdd`,消费者不 fork 就能换掉任意一环。
 

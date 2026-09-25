@@ -41,4 +41,11 @@ public interface ISecurityPolicyProvider
     /// 默认接口实现返回 0(关闭)——既有的自定义实现无需改动即可编译;内核默认实现从配置中心读取。
     /// </summary>
     Task<int> GetPasswordHistoryCountAsync() => Task.FromResult(0);
+
+    /// <summary>
+    /// 管理员建号(含导入)后是否强制用户首登改密。只在建号时读取、决定新账号的 <c>MustChangePassword</c>;
+    /// 管理员重置密码与密码过期不受此开关影响,照常强制改密。
+    /// 默认接口实现返回 false(关闭,与内核种子默认一致)——既有的自定义实现无需改动即可编译;内核默认实现从配置中心读取。
+    /// </summary>
+    Task<bool> GetForceChangeOnFirstLoginAsync() => Task.FromResult(false);
 }

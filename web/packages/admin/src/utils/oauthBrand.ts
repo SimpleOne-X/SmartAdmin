@@ -38,58 +38,86 @@ export function previewAllBrandProviders(): SsoProviderLike[] {
  */
 export const LINK_BY_ACCOUNT_CODES: readonly string[] = ['wecom']
 
-/** 配置页一行:内置品牌全展示;registered=后端已装包/已配密钥。 */
+/** 服务器上有对应扩展包的官方厂商类型,按「登录方式」页的展示顺序。 */
+export const OFFICIAL_TYPES = ['wecom', 'dingtalk', 'github', 'wechat'] as const
+
+/** 一行的状态:类型没装 / 已装未配 / 已配可用。 */
+export type ProviderState = 'notInstalled' | 'unconfigured' | 'configured'
+
+/** 配置页一行:后端目录里有的类型与 provider,不是预置品牌全量。 */
 export type ConfigProviderRow = {
   code: string
+  /** 类型码;代码注册的 provider 没有类型,为空串 */
+  type: string
   displayName: string
   icon?: string | null
+  state: ProviderState
+  /** db = 在本页配置;code = 消费者用代码注册(只读);none = 没有配置 */
+  source: 'db' | 'code' | 'none'
+  /** 已配置且可用:开关可操作,预览与登录页才会出现它 */
   registered: boolean
   enabled: boolean
   /** 未绑定的外部身份按账号名关联同名本地账号(sys.externalauth.{code}.linkByAccount) */
   linkByAccount: boolean
 }
 
-/**
- * 配置页列表 = 预置品牌(全量) + 其它已注册 code(如 oidc-demo)。
- * 未注册项 registered=false、两个开关强制 false(未部署的方式开了也没用)。
- */
-export function buildConfigProviderRows(
-  registered: readonly {
+type CatalogLike = {
+  types: readonly { type: string }[]
+  providers: readonly {
     code: string
+    type: string
     displayName: string
     icon?: string | null
-    enabled: boolean
-    linkByAccount?: boolean
-  }[],
+    source: string
+    installed: boolean
+    configured: boolean
+  }[]
+}
+
+type AdminLike = { code: string; enabled: boolean; linkByAccount?: boolean }
+
+/**
+ * 配置页列表 = 四个官方厂商(按固定顺序,没装的也列出并标「未安装」)
+ * + 目录里其余的 provider(OIDC 条目、代码注册的)。
+ * 未配置或未安装的行开关强制关:没配好的方式开了也没用,也不写库。
+ */
+export function buildConfigProviderRows(
+  catalog: CatalogLike,
+  admin: readonly AdminLike[],
 ): ConfigProviderRow[] {
-  const byCode = new Map(registered.map(p => [p.code, p]))
+  const installed = new Set(catalog.types.map(x => x.type))
+  const adminByCode = new Map(admin.map(a => [a.code, a]))
+  const byCode = new Map(catalog.providers.map(p => [p.code, p]))
   const rows: ConfigProviderRow[] = []
   const seen = new Set<string>()
 
-  for (const code of BRAND_CODES) {
+  const push = (code: string, official: boolean) => {
     seen.add(code)
-    const r = byCode.get(code)
+    const p = byCode.get(code)
+    const fromCode = p?.source === 'code'
+    const typeInstalled = fromCode || (p ? installed.has(p.type) : installed.has(code))
+    const state: ProviderState = !typeInstalled
+      ? 'notInstalled'
+      : p?.configured
+        ? 'configured'
+        : 'unconfigured'
+    const a = adminByCode.get(code)
+    const registered = state === 'configured'
     rows.push({
       code,
-      displayName: r?.displayName || brandDisplayName(code),
-      icon: r?.icon ?? null,
-      registered: !!r,
-      enabled: r ? r.enabled : false,
-      linkByAccount: r?.linkByAccount ?? false,
+      type: p?.type ?? (official ? code : ''),
+      displayName: p?.displayName || (isBrandCode(code) ? brandDisplayName(code) : code),
+      icon: p?.icon ?? null,
+      state,
+      source: fromCode ? 'code' : p ? 'db' : 'none',
+      registered,
+      enabled: registered && !!a?.enabled,
+      linkByAccount: registered && !!a?.linkByAccount,
     })
   }
-  for (const p of registered) {
-    if (seen.has(p.code)) continue
-    seen.add(p.code)
-    rows.push({
-      code: p.code,
-      displayName: p.displayName,
-      icon: p.icon,
-      registered: true,
-      enabled: p.enabled,
-      linkByAccount: p.linkByAccount ?? false,
-    })
-  }
+
+  for (const code of OFFICIAL_TYPES) push(code, true)
+  for (const p of catalog.providers) if (!seen.has(p.code)) push(p.code, false)
   return rows
 }
 

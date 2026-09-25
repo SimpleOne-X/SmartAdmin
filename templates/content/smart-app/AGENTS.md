@@ -22,10 +22,10 @@
 
 ## 前端与测试
 
-- 前端模板不在本工程里,按需拉一份:`npx degit SmartCode-X/SmartAdmin/web/template web`,再 `cd web && npm install && npm run dev`(`5173`,`/api` 反代到本 host 的 `5100`)。前端内核是 npm 包 `smart-admin-web`,与 `SmartAdmin` NuGet 包同号,升级两边一起改;自己的页面放 `web/src/views/`(菜单 `component` = `views/` 之后去掉 `.vue` 的路径),文案放 `web/src/locales/ext/<locale>/<模块>.ts`,组件、composables、API 原语一律 `import { … } from 'smart-admin-web'`。接口类型 `npm run gen:api` 从跑着的后端 `/openapi/v1.json` 生成,不要手改 `src/api/schema.d.ts`。
+- 前端模板不在本工程里,按需拉一份:`npx degit SimpleOne-X/SmartAdmin/web/template web`,再 `cd web && npm install && npm run dev`(`5173`,`/api` 反代到本 host 的 `5100`)。前端内核是 npm 包 `smart-admin-web`,与 `SmartAdmin` NuGet 包同号,升级两边一起改;自己的页面放 `web/src/views/`(菜单 `component` = `views/` 之后去掉 `.vue` 的路径),文案放 `web/src/locales/ext/<locale>/<模块>.ts`,组件、composables、API 原语一律 `import { … } from 'smart-admin-web'`。接口类型 `npm run gen:api` 从跑着的后端 `/openapi/v1.json` 生成,不要手改 `src/api/schema.d.ts`。
 - `Tests/` 是独立测试工程(主工程已排除其编译),`dotnet test Tests` 跑。加模块时复制 `Tests/SampleDocCrudTests.cs`:起整个 host、登录超管、把新路由的 CRUD 走一遍,守的是「表建了没、路由挂了没、权限码放行没」。宿主工厂 `AppFactory : AdminAppFactory<Program>` 与 `PostJson` / `ReadEnvelope` / `LoginToken` 来自 `SmartAdmin.Testing` 包,别再手写一份。
 
 ## 详版指南
 
-- 内核仓库 `skills/`(新模块全流程 / 建实体 / 后端 CRUD / 前端页面 / 替换服务):https://github.com/SmartCode-X/SmartAdmin/tree/main/skills
-- 文档站:https://smartcode-x.github.io/SmartAdmin/
+- 内核仓库 `skills/`(新模块全流程 / 建实体 / 后端 CRUD / 前端页面 / 替换服务):https://github.com/SimpleOne-X/SmartAdmin/tree/main/skills
+- 文档站:https://simpleone-x.github.io/SmartAdmin/

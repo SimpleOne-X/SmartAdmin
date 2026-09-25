@@ -49,4 +49,4 @@
 | `/health` 和 `/health/ready` 分别探什么、`/openapi` 生产 404 是不是漏了 | [部署指南](/zh/guide/deployment/) 的上线自检 |
 | 多副本启动报 `WorkerId` 相关错误 | [容器化部署](/zh/guide/deployment/docker) |
 
-表里都没有，去仓库 [issue](https://github.com/SmartCode-X/SmartAdmin/issues) 搜关键字。开新 issue 时把 .NET / Node 版本、`SmartAdmin:Database:DbType`、单实例还是多副本、完整报错堆栈一并带上，能省一轮来回。
+表里都没有，去仓库 [issue](https://github.com/SimpleOne-X/SmartAdmin/issues) 搜关键字。开新 issue 时把 .NET / Node 版本、`SmartAdmin:Database:DbType`、单实例还是多副本、完整报错堆栈一并带上，能省一轮来回。

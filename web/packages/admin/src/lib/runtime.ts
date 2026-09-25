@@ -6,6 +6,8 @@ export interface BrandOptions {
   title?: string
   /** 组件或图片地址;不传则用内置 SmartLogo 矢量标 */
   logo?: Component | string
+  /** 浏览器标签页图标跟随 sys.site.logo(配了 Logo 才换,清空即还原模板自带图标);默认 true */
+  faviconFromLogo?: boolean
 }
 
 /**

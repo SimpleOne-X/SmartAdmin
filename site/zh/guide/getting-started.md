@@ -120,7 +120,7 @@ app.Run();
 
 想要更细粒度的依赖控制，可以只引某一层，比如 `.AspNetCore`、`.Services`、`.SqlSugar`、`.Core`。这些包为什么这么分层、「可替换」到底怎么替，归[核心概念](/zh/guide/concepts)讲透，这里先把它跑起来就够。
 
-> 破坏性变更会在[更新日志](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)里明确标出，并尽量攒到下一个大版本发布。开发在 `dev` 分支进行。
+> 破坏性变更会在[更新日志](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)里明确标出，并尽量攒到下一个大版本发布。开发在 `dev` 分支进行。
 
 ## 顺手起前端
 
@@ -140,7 +140,7 @@ npm run dev
 上面是在仓库里直接跑。你自己的项目只需要那层薄壳模板，内核作为 npm 包装进来：
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev

@@ -7,7 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const ORIGIN = 'https://smartcode-x.github.io/SmartAdmin'
+const ORIGIN = 'https://simpleone-x.github.io/SmartAdmin'
 
 /** 索引里不必出现的页：站点骨架与自动生成页。 */
 const EXEMPT = new Set(['changelog.md', 'zh/changelog.md', '404.md'])

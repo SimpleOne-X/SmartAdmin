@@ -49,4 +49,4 @@ Each of these has its own page with the full detail; here are just the symptoms 
 | What `/health` and `/health/ready` each probe, and whether a production 404 on `/openapi` means something's missing | The go-live self-check in the [Deployment guide](/guide/deployment/) |
 | A multi-replica startup errors with something about `WorkerId` | [Containers & Multi-Replica](/guide/deployment/docker) |
 
-Nothing in the table fits? Search the repo's [issues](https://github.com/SmartCode-X/SmartAdmin/issues) for keywords. When you open a new one, bring your .NET / Node version, `SmartAdmin:Database:DbType`, whether it's single-instance or multi-replica, and the full error stack — it saves a round trip.
+Nothing in the table fits? Search the repo's [issues](https://github.com/SimpleOne-X/SmartAdmin/issues) for keywords. When you open a new one, bring your .NET / Node version, `SmartAdmin:Database:DbType`, whether it's single-instance or multi-replica, and the full error stack — it saves a round trip.

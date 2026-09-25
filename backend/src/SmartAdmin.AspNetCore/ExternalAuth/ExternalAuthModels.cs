@@ -34,7 +34,7 @@ public class ExternalOAuthState
 /// <summary>登录页可用的外部登录方式(仅非密钥字段;点亮 SSO 按钮用)。</summary>
 public record ExternalProviderItem
 {
-    /// <summary>provider 码(如 <c>github</c>/<c>wechat</c>),对应 appsettings 里的条目名。</summary>
+    /// <summary>provider 码(如 <c>github</c>/<c>wechat</c>),即登录方式配置里的 Code。</summary>
     public required string Code { get; init; }
     public required string DisplayName { get; init; }
     public string? Icon { get; init; }
@@ -43,7 +43,7 @@ public record ExternalProviderItem
 /// <summary>管理端:全部已注册 provider + 当前运营启用状态(含已禁用,供配置中心开关)。</summary>
 public record ExternalProviderAdminItem
 {
-    /// <summary>provider 码(如 <c>github</c>/<c>wechat</c>),对应 appsettings 里的条目名。</summary>
+    /// <summary>provider 码(如 <c>github</c>/<c>wechat</c>),即登录方式配置里的 Code。</summary>
     public required string Code { get; init; }
     public required string DisplayName { get; init; }
     public string? Icon { get; init; }

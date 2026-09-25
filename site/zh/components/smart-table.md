@@ -138,4 +138,4 @@ authStore.hasPerm('PUT:/api/v1/sys/position/{id}')
 
 `smart-admin-web` 把它声明为 peer 依赖（`^2.0.0`），应用在自己的 `package.json` 里装这一份，内核注入的全局默认值才能被应用页面里的表格读到。改了后端的排序或分页契约后，记得 `npm run gen:api` 重新生成 schema，注意后端要在跑。
 
-包的完整 prop、事件与逃生口 slot 以 [README](https://github.com/SmartCode-X/smart-naive-table/blob/main/README.md) 为准。本页只覆盖它在 SmartAdmin 里的接法。
+包的完整 prop、事件与逃生口 slot 以 [README](https://github.com/SimpleOne-X/smart-naive-table/blob/main/README.md) 为准。本页只覆盖它在 SmartAdmin 里的接法。

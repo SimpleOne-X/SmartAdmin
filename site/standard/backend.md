@@ -1,6 +1,6 @@
 # Backend Standards (.NET 10 kernel)
 
-Check your work against this list before and after touching backend code — every item is a hard rule already implemented in the kernel. To see why a rule is what it is, follow its link into the corresponding deep-dive; for fuller positive/negative examples, see [`docs/coding-standards.md`](https://github.com/SmartCode-X/SmartAdmin/blob/main/docs/coding-standards.md) in the repo.
+Check your work against this list before and after touching backend code — every item is a hard rule already implemented in the kernel. To see why a rule is what it is, follow its link into the corresponding deep-dive; for fuller positive/negative examples, see [`docs/coding-standards.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/coding-standards.md) in the repo.
 
 ::: tip First principle
 The kernel ships as NuGet packages, so a consumer can replace any part without touching the source. Any newly added replaceable service is registered with `TryAdd*`, backed by an interface, and split into `virtual` steps — this is a hard constraint, not a suggestion. See the [replaceability model](/backend/replaceability) for the mechanism.

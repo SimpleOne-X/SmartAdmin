@@ -5,7 +5,7 @@
 ## 开始之前
 
 - Fork 仓库，clone 到本地。
-- **提 PR 请对准 `dev`，不要对准 `main`**：日常开发都在 `dev` 上进行，发版时才会把它合进 `main` 再打 tag（见 [CHANGELOG.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)）。
+- **提 PR 请对准 `dev`，不要对准 `main`**：日常开发都在 `dev` 上进行，发版时才会把它合进 `main` 再打 tag（见 [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)）。
 - 报 bug / 提需求走 GitHub Issues 的三个模板（Bug report / Feature request / Question），仓库关闭了空白 issue。安全漏洞不要开公开 issue。
 
 ## 本地开发环境
@@ -51,7 +51,7 @@ npm run gen:icons     # 包里用了新的 ph:* 图标后重生成离线图标�
 
 ## 包版本集中管理
 
-后端依赖版本统一收在 [`backend/Directory.Packages.props`](https://github.com/SmartCode-X/SmartAdmin/blob/main/backend/Directory.Packages.props) 的 `<PackageVersion>` 里，新增或升级依赖改这里，**不要**在单个 `.csproj` 里单独锁版本。共享的构建/NuGet 元数据（作者、仓库地址、License 等）在 `backend/Directory.Build.props`。
+后端依赖版本统一收在 [`backend/Directory.Packages.props`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/backend/Directory.Packages.props) 的 `<PackageVersion>` 里，新增或升级依赖改这里，**不要**在单个 `.csproj` 里单独锁版本。共享的构建/NuGet 元数据（作者、仓库地址、License 等）在 `backend/Directory.Build.props`。
 
 ## 提交信息：中文 Conventional Commits
 
@@ -88,8 +88,8 @@ PR 上会跑 CI（后端四库矩阵、前端、模板冒烟），本地先跑�
 
 **不要通过公开 issue 报告安全漏洞。** SmartAdmin 以 NuGet 包和 npm 包分发，内置认证、RBAC 和多组织数据权限。公开报告等于在补丁出来之前就对所有下游消费方公布 0-day。
 
-请走 GitHub 的私密漏洞报告：[新建 Security Advisory](https://github.com/SmartCode-X/SmartAdmin/security/advisories/new)，只有维护者能看到。维护者会在 7 天内响应，并与你协调修复和披露节奏。详见 [SECURITY.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/SECURITY.md)。
+请走 GitHub 的私密漏洞报告：[新建 Security Advisory](https://github.com/SimpleOne-X/SmartAdmin/security/advisories/new)，只有维护者能看到。维护者会在 7 天内响应，并与你协调修复和披露节奏。详见 [SECURITY.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/SECURITY.md)。
 
 ## 许可证
 
-SmartAdmin 基于 [Apache License 2.0](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE) 开源，提交的代码默认以同一许可证贡献。
+SmartAdmin 基于 [Apache License 2.0](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE) 开源，提交的代码默认以同一许可证贡献。

@@ -42,6 +42,9 @@ public class SecurityPolicyProvider(
     /// <summary>配置键:密码历史防重用条数(0=关)。</summary>
     public const string KEY_HISTORY_COUNT = "sys.security.password.historyCount";
 
+    /// <summary>配置键:管理员建号后是否强制首登改密。</summary>
+    public const string KEY_FORCE_CHANGE_FIRST_LOGIN = "sys.security.password.forceChangeOnFirstLogin";
+
     /// <summary>配置键:访问令牌有效期(分钟)。</summary>
     public const string KEY_ACCESS_MIN = "sys.security.session.accessMinutes";
 
@@ -78,6 +81,9 @@ public class SecurityPolicyProvider(
 
     /// <inheritdoc />
     public virtual Task<int> GetPasswordHistoryCountAsync() => IntAsync(KEY_HISTORY_COUNT, 0);
+
+    /// <inheritdoc />
+    public virtual Task<bool> GetForceChangeOnFirstLoginAsync() => BoolAsync(KEY_FORCE_CHANGE_FIRST_LOGIN, false);
 
     /// <inheritdoc />
     public virtual async Task ValidatePasswordAsync(string password)

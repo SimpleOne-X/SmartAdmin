@@ -428,7 +428,34 @@ export const externalAuthApi = {
     client
       .DELETE('/api/v1/auth/external/{provider}/binding', { params: { path: { provider: code } } })
       .then(r => unwrap<boolean>(r)),
+  /** 管理端:类型目录 + 全部 provider 的配置状态(机密只回 hasValue 与尾四位)。「登录方式」页。 */
+  catalog: () =>
+    client.GET('/api/v1/sys/external-auth/providers', {}).then(r => unwrap<ExternalAuthCatalog>(r)),
+  /** 新增或更新一条配置;机密留空 = 不改。需重新验证身份。 */
+  saveProvider: (code: string, body: ExternalAuthProviderSaveInput) =>
+    client
+      .PUT('/api/v1/sys/external-auth/providers/{code}', { params: { path: { code } }, body })
+      .then(r => unwrap<boolean>(r)),
+  /** 清除配置(软删,不动用户已绑定的外部账号)。需重新验证身份。 */
+  removeProvider: (code: string) =>
+    client
+      .DELETE('/api/v1/sys/external-auth/providers/{code}', { params: { path: { code } } })
+      .then(r => unwrap<boolean>(r)),
+  /** 连接测试:用表单里的值,机密留空取已保存的;不落库,失败原因在 checks 里。 */
+  testProvider: (body: ExternalAuthProviderTestInput) =>
+    client
+      .POST('/api/v1/sys/external-auth/providers/test', { body })
+      .then(r => unwrap<ExternalAuthTestResult>(r)),
 }
+
+export type ExternalAuthCatalog = components['schemas']['ExternalAuthCatalogOutput']
+export type ExternalAuthType = components['schemas']['ExternalAuthTypeView']
+export type ExternalAuthField = components['schemas']['ExternalAuthFieldView']
+export type ExternalAuthProvider = components['schemas']['ExternalAuthProviderView']
+export type ExternalAuthProviderSaveInput = components['schemas']['ExternalAuthProviderSaveInput']
+export type ExternalAuthProviderTestInput = components['schemas']['ExternalAuthProviderTestInput']
+export type ExternalAuthTestResult = components['schemas']['ExternalAuthTestView']
+export type ExternalAuthCheck = components['schemas']['ExternalAuthCheckView']
 
 export const dashboardApi = {
   /** 工作台首页统计([ActiveSession]:任何登录用户可取,无需权限码)。 */
@@ -783,6 +810,7 @@ export const configApi = {
     name?: string
     groupCode?: string
     excludedGroupCodes?: string[]
+    excludedKeys?: string[]
   }) =>
     client
       .GET('/api/v1/sys/config/page', {
@@ -793,6 +821,7 @@ export const configApi = {
             Name: params.name,
             GroupCode: params.groupCode,
             ExcludedGroupCodes: params.excludedGroupCodes,
+            ExcludedKeys: params.excludedKeys,
           },
         },
       })
@@ -826,6 +855,22 @@ export const configApi = {
   /** 批量按键回写配置值(结构化表单保存);仅更新已存在键,未知键后端忽略。 */
   saveBatch: (items: { configKey: string; configValue?: string | null }[]) =>
     client.PUT('/api/v1/sys/config/batch', { body: items }).then(r => unwrap<boolean>(r)),
+  /**
+   * 上传站点 Logo(只收 PNG/JPG/WEBP、1 MB 以内,不受全局上传白名单约束)。
+   * 返回的 viewUrl 是签名直链,写进 sys.site.logo 随批量保存生效。FormData 写法同 fileApi.upload。
+   */
+  uploadLogo: (file: File) =>
+    client
+      .POST('/api/v1/sys/config/logo', {
+        timeout: LONG_TIMEOUT_MS,
+        body: { file: file as unknown as string },
+        bodySerializer: body => {
+          const fd = new FormData()
+          fd.append('file', (body as unknown as { file: File }).file)
+          return fd
+        },
+      })
+      .then(r => unwrap<FileUploadOutput>(r)),
   /** 站点信息(匿名可读:站点标题/副标题/版权等品牌展示白名单)。 */
   siteInfo: () =>
     client.GET('/api/v1/sys/config/site', {}).then(r =>
@@ -835,6 +880,15 @@ export const configApi = {
         copyright?: string | null
         copyrightUrl?: string | null
         logo?: string | null
+        loginHero?: Record<
+          string,
+          {
+            headline?: string | null
+            highlight?: string | null
+            features?: string[] | null
+          }
+        > | null
+        showFeatures?: boolean | null
         captchaEnabled?: boolean
         smsLoginEnabled?: boolean
       }>(r),

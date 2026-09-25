@@ -13,13 +13,18 @@ public class ConfigService(
     IRepository<SysConfig> configs,
     ICacheProvider cache,
     AdminCacheOptions cacheOptions,
-    IEventBus events) : IConfigService
+    IEventBus events,
+    IFileUrlSigner? fileUrls = null) : IConfigService   // 可选:签名器只在 AspNetCore 层注册,纯 Services 宿主里为 null(Logo 直链不续签)
 {
     /// <inheritdoc />
     public virtual async Task<PagedList<SysConfig>> PageAsync(ConfigPageInput input)
     {
         var excludedGroups = input.ExcludedGroupCodes?
             .Where(static group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray() ?? [];
+        var excludedKeys = input.ExcludedKeys?
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
             .Distinct(StringComparer.Ordinal)
             .ToArray() ?? [];
         var query = configs.AsQueryable()
@@ -30,6 +35,9 @@ public class ConfigService(
         // 空分组也是消费方可管理的自定义配置,不能因 SQL 的 NULL NOT IN 语义被误滤掉。
         if (excludedGroups.Length > 0)
             query = query.Where(c => c.GroupCode == null || !excludedGroups.Contains(c.GroupCode!));
+        // 配置中心「高级」页:结构化表单已认领的键不重复列出;在库里过滤,分页总数才准。
+        if (excludedKeys.Length > 0)
+            query = query.Where(c => !excludedKeys.Contains(c.ConfigKey));
 
         return await query.OrderBy(c => c.Sort).ToPagedListAsync(input.Current, input.Size);
     }
@@ -62,28 +70,55 @@ public class ConfigService(
     public virtual async Task<SiteInfoOutput> GetSiteInfoAsync()
     {
         // 整体缓存一份:这是匿名端点,每次打开登录页都要读,拆成七个键就是七次串行往返
-        var cached = await cache.GetAsync<SiteInfoOutput>(CacheKeys.SiteInfo);
-        if (cached is not null) return cached;
-
-        var info = await LoadSiteInfoAsync();
-        var ttl = cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : (TimeSpan?)null;
-        await cache.SetAsync(CacheKeys.SiteInfo, info, ttl);
-        return info;
+        var info = await cache.GetAsync<SiteInfoOutput>(CacheKeys.SiteInfo);
+        if (info is null)
+        {
+            info = await LoadSiteInfoAsync();
+            var ttl = cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : (TimeSpan?)null;
+            await cache.SetAsync(CacheKeys.SiteInfo, info, ttl);
+        }
+        // 续签放在缓存之外:缓存寿命可能长过直链寿命,缓存里那份链接不能原样下发
+        return info with { Logo = LocalFileUrl.Refresh(info.Logo, fileUrls) };
     }
 
     /// <summary>逐键装配站点信息(仅缓存未命中时执行)。</summary>
-    protected virtual async Task<SiteInfoOutput> LoadSiteInfoAsync() => new()
+    protected virtual async Task<SiteInfoOutput> LoadSiteInfoAsync()
     {
-        Title = await GetValueByKeyAsync(ConfigSeed.SITE_TITLE_KEY),
-        Subtitle = await GetValueByKeyAsync(ConfigSeed.SITE_SUBTITLE_KEY),
-        Copyright = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_KEY),
-        CopyrightUrl = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_URL_KEY),
-        Logo = await GetValueByKeyAsync(ConfigSeed.SITE_LOGO_KEY),
-        // 匿名暴露验证码开关(不含类型等内部细节),供登录页决定是否渲染验证码;缺失即视为关。
-        CaptchaEnabled = bool.TryParse(await GetValueByKeyAsync(CaptchaService.KEY_ENABLED), out var e) && e,
-        // 匿名暴露短信免密登录开关,供登录页决定是否渲染短信登录入口;缺失即视为关。MFA 不在此暴露(由登录 40009 信令带内下发)。
-        SmsLoginEnabled = bool.TryParse(await GetValueByKeyAsync(SmsOtpService.KEY_LOGIN_ENABLED), out var s) && s,
-    };
+        var zhHeadline = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HEADLINE_ZH_KEY);
+        var zhHighlight = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HIGHLIGHT_ZH_KEY);
+        var zhFeatures = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_FEATURES_ZH_KEY);
+        var enHeadline = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HEADLINE_EN_KEY);
+        var enHighlight = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HIGHLIGHT_EN_KEY);
+        var enFeatures = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_FEATURES_EN_KEY);
+
+        return new()
+        {
+            Title = await GetValueByKeyAsync(ConfigSeed.SITE_TITLE_KEY),
+            Subtitle = await GetValueByKeyAsync(ConfigSeed.SITE_SUBTITLE_KEY),
+            Copyright = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_KEY),
+            CopyrightUrl = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_URL_KEY),
+            Logo = await GetValueByKeyAsync(ConfigSeed.SITE_LOGO_KEY),
+            LoginHero = new Dictionary<string, LoginHeroOutput>(StringComparer.Ordinal)
+            {
+                ["zh-CN"] = new() { Headline = zhHeadline, Highlight = zhHighlight, Features = SplitFeatures(zhFeatures) },
+                ["en-US"] = new() { Headline = enHeadline, Highlight = enHighlight, Features = SplitFeatures(enFeatures) },
+            },
+            ShowFeatures = !bool.TryParse(await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_SHOW_FEATURES_KEY), out var show) || show,
+            // 匿名暴露验证码开关(不含类型等内部细节),供登录页决定是否渲染验证码;缺失即视为关。
+            CaptchaEnabled = bool.TryParse(await GetValueByKeyAsync(CaptchaService.KEY_ENABLED), out var e) && e,
+            // 匿名暴露短信免密登录开关,供登录页决定是否渲染短信登录入口;缺失即视为关。MFA 不在此暴露(由登录 40009 信令带内下发)。
+            SmsLoginEnabled = bool.TryParse(await GetValueByKeyAsync(SmsOtpService.KEY_LOGIN_ENABLED), out var s) && s,
+        };
+    }
+
+    /// <summary>卖点一行一条;去空行并限制 5 条,和前端输入约束保持一致。</summary>
+    internal static IReadOnlyList<string> SplitFeatures(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Take(5)
+                .ToArray();
 
     /// <inheritdoc />
     // ponytail: 少量键逐条查改足够;键集变大再合并成 IN 查询 + 批量更新。

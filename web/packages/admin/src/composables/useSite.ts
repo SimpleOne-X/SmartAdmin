@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { configApi } from '#/api'
+import { normalizeLoginHero, type LoginHeroCopy } from '#/lib/loginHero'
 import { runtime } from '#/lib/runtime'
 
 // 站点品牌信息(匿名 GET /sys/config/site 下发)。App.vue 启动、登录页各皮肤、登录后框架(侧栏/顶栏/水印)
@@ -10,6 +11,8 @@ export interface SiteInfo {
   copyright: string
   copyrightUrl: string
   logo: string
+  loginHero: Record<string, LoginHeroCopy>
+  showFeatures: boolean
   captchaEnabled: boolean
   smsLoginEnabled: boolean
 }
@@ -21,6 +24,8 @@ const site = reactive<SiteInfo>({
   copyright: '',
   copyrightUrl: '',
   logo: '',
+  loginHero: {},
+  showFeatures: true,
   captchaEnabled: false,
   smsLoginEnabled: false,
 })
@@ -37,6 +42,8 @@ export function loadSite(force = false): Promise<void> {
       site.copyright = s.copyright ?? ''
       site.copyrightUrl = s.copyrightUrl ?? ''
       site.logo = s.logo ?? ''
+      site.loginHero = normalizeLoginHero(s.loginHero)
+      site.showFeatures = s.showFeatures !== false
       site.captchaEnabled = !!s.captchaEnabled
       site.smsLoginEnabled = !!s.smsLoginEnabled
     })

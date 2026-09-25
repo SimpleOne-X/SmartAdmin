@@ -2,7 +2,7 @@
 
 先跑起来，再改代码。后端内核是 .NET 10 + SqlSugar，前端内核是 npm 包 `smart-admin-web`（Vue 3 + Naive UI，源码在 `web/packages/admin`，薄壳模板在 `web/template`），两侧都在这一个仓库里。
 
-- 上手、架构、部署：<https://smartcode-x.github.io/SmartAdmin/zh/>
+- 上手、架构、部署：<https://simpleone-x.github.io/SmartAdmin/zh/>
 - 仓库怎么分层、哪些约定是硬的：根目录 `CLAUDE.md`
 - 术语表与已定的取舍：`CONTEXT.md`、`docs/adr/`
 

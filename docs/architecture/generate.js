@@ -200,7 +200,7 @@ function layered(t) {
     s += `<text x="${lx}" y="${ly + 5}" font-family="${FONT}" font-size="13.5" fill="${S.text3}">${esc(name)}</text>`;
     lx += textW(name, 7.4, 13.5) + 30;
   }
-  s += `<text x="${W - 100}" y="${ly + 5}" text-anchor="end" font-family="${MONO}" font-size="12.5" fill="${S.text4}">github.com/SmartCode-X/SmartAdmin</text>`;
+  s += `<text x="${W - 100}" y="${ly + 5}" text-anchor="end" font-family="${MONO}" font-size="12.5" fill="${S.text4}">github.com/SimpleOne-X/SmartAdmin</text>`;
   return s;
 }
 

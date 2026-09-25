@@ -5,7 +5,7 @@ A PR opened against `main` gets sent back: `main` only receives release merges, 
 ## Before you start
 
 - Fork the repo and clone it locally.
-- **Development happens on the `dev` branch; `main` only accepts release merges** — target your PR at `dev`, not `main`. `dev` is merged into `main` and tagged only at release time (see [CHANGELOG.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md)).
+- **Development happens on the `dev` branch; `main` only accepts release merges** — target your PR at `dev`, not `main`. `dev` is merged into `main` and tagged only at release time (see [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)).
 - File bugs / feature requests through one of the three GitHub Issue templates (Bug report / Feature request / Question) — the repo has blank issues disabled. **Do not** open a public issue for a security vulnerability; see "Security issues" below.
 
 ## Local development environment
@@ -51,7 +51,7 @@ If running both sides separately is a hassle, `dev-start.bat` at the repo root l
 
 ## Centralized package versioning
 
-Backend dependency versions are all collected in [`backend/Directory.Packages.props`](https://github.com/SmartCode-X/SmartAdmin/blob/main/backend/Directory.Packages.props)'s `<PackageVersion>` — add or bump dependencies there, **not** by pinning a version in an individual `.csproj`. Shared build/NuGet metadata (author, repo URL, license, etc.) lives in `backend/Directory.Build.props`.
+Backend dependency versions are all collected in [`backend/Directory.Packages.props`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/backend/Directory.Packages.props)'s `<PackageVersion>` — add or bump dependencies there, **not** by pinning a version in an individual `.csproj`. Shared build/NuGet metadata (author, repo URL, license, etc.) lives in `backend/Directory.Build.props`.
 
 ## Commit messages: Chinese Conventional Commits
 
@@ -88,8 +88,8 @@ For `web/**`, run `npm run lint` → `npm run format:check` → `npm test` (vite
 
 **Do not report security vulnerabilities through a public issue.** SmartAdmin distributes as NuGet and npm packages with built-in auth, RBAC, and multi-org data permissions — a public report would disclose a 0-day to every downstream consumer before a patch exists.
 
-Please use GitHub's private vulnerability reporting instead: [open a security advisory](https://github.com/SmartCode-X/SmartAdmin/security/advisories/new), visible to maintainers only. Maintainers will respond within 7 days and coordinate the fix and disclosure timeline with you. See [SECURITY.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/SECURITY.md) for details.
+Please use GitHub's private vulnerability reporting instead: [open a security advisory](https://github.com/SimpleOne-X/SmartAdmin/security/advisories/new), visible to maintainers only. Maintainers will respond within 7 days and coordinate the fix and disclosure timeline with you. See [SECURITY.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/SECURITY.md) for details.
 
 ## License
 
-SmartAdmin is open-sourced under the [Apache License 2.0](https://github.com/SmartCode-X/SmartAdmin/blob/main/LICENSE); code you submit is contributed under the same license by default.
+SmartAdmin is open-sourced under the [Apache License 2.0](https://github.com/SimpleOne-X/SmartAdmin/blob/main/LICENSE); code you submit is contributed under the same license by default.

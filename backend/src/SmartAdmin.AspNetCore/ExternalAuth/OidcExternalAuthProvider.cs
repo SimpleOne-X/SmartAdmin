@@ -13,7 +13,9 @@ namespace SmartAdmin.AspNetCore;
 /// 任何合规 OpenID Connect IdP。<b>零新包</b>:发现文档 / JWKS / id_token 验签全用 JwtBearer 已传递的
 /// <c>Microsoft.IdentityModel.*</c>(<see cref="ConfigurationManager{T}"/> + <see cref="JsonWebTokenHandler"/>);
 /// token 端点交换用 <see cref="IHttpClientFactory"/>(ASP.NET Core 共享框架内)。
-/// <para>每个 appsettings 里配置的 OIDC 条目实例化一个本类(各持自己的 authority/clientId);按 <see cref="Code"/> 选型。
+/// <para>Authority 由管理员填写,服务端会去请求它,所以发现文档、JWKS 与令牌端点的请求都走
+/// <see cref="ExternalAuthHttpClient.Name"/> 这个带 SSRF 围栏的命名客户端。</para>
+/// <para>每条 OIDC 配置由 <see cref="OidcExternalAuthProviderType"/> 实例化一个本类(各持自己的 authority/clientId);按 <see cref="Code"/> 选型。
 /// 方法 <c>virtual</c>:换 token 端点鉴权方式(如 client_secret_basic)、加自定义 claim 映射,继承覆写即可。</para>
 /// </summary>
 public class OidcExternalAuthProvider : IExternalAuthProvider
@@ -44,7 +46,7 @@ public class OidcExternalAuthProvider : IExternalAuthProvider
         _configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
             metadataAddress,
             new OpenIdConnectConfigurationRetriever(),
-            new HttpDocumentRetriever { RequireHttps = requireHttps });
+            new FencedDocumentRetriever(httpFactory, requireHttps));
     }
 
     /// <inheritdoc />
@@ -119,7 +121,7 @@ public class OidcExternalAuthProvider : IExternalAuthProvider
         if (Options.UsePkce)
             form["code_verifier"] = request.CodeVerifier;
 
-        using var http = _httpFactory.CreateClient();
+        using var http = _httpFactory.CreateClient(ExternalAuthHttpClient.Name);
         using var resp = await http.PostAsync(cfg.TokenEndpoint, new FormUrlEncodedContent(form), cancellationToken);
         var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)

@@ -29,7 +29,9 @@ public class AuthService(
     // TOTP/MFA(等保三级一期):尾随可选;DI 正常注入;子类省略时 TOTP 检查直通
     IMfaPolicyService? mfaPolicy = null,
     IMfaChallengeService? mfaChallenge = null,
-    AdminSecurityOptions? security = null) : IAuthService
+    AdminSecurityOptions? security = null,
+    // 外部登录 provider 注册表(代码注册的 ∪ 库里配置的):非空时取 provider 都走它,为空时退回上面的 externalProviders
+    IExternalAuthProviderRegistry? providerRegistry = null) : IAuthService
 {
     private readonly AdminSecurityOptions security = security ?? new AdminSecurityOptions();
 
@@ -306,7 +308,7 @@ public class AuthService(
     {
         // 外部登录依赖三件可选注入(provider 集合 / 绑定服务 / RBAC);DI 下必然齐备,但手工构造 AuthService 且
         // 省略了这些参数的消费者子类会走到这——给出明确"该能力未接线"信号(40013),而非后续裸 NRE。
-        AdminException.ThrowIf(externalProviders is null || externalBindings is null || rbac is null, ErrorCode.OAuthProviderDisabled);
+        AdminException.ThrowIf((providerRegistry is null && externalProviders is null) || externalBindings is null || rbac is null, ErrorCode.OAuthProviderDisabled);
         ExternalIdentity identity;
         try
         {
@@ -326,7 +328,7 @@ public class AuthService(
         ExternalIdentity identity,
         CancellationToken cancellationToken = default)
     {
-        AdminException.ThrowIf(externalProviders is null || externalBindings is null || rbac is null, ErrorCode.OAuthProviderDisabled);
+        AdminException.ThrowIf((providerRegistry is null && externalProviders is null) || externalBindings is null || rbac is null, ErrorCode.OAuthProviderDisabled);
         SysUser? user = null;
         try
         {
@@ -344,12 +346,14 @@ public class AuthService(
         }
     }
 
-    /// <summary>解析外部身份:按 code 选 provider(不存在/被运营关掉抛 40013),调其 ExchangeAsync 换身份。</summary>
+    /// <summary>解析外部身份:按 code 从注册表选 provider(不存在/配置不完整/被运营关掉抛 40013),调其 ExchangeAsync 换身份。</summary>
     protected virtual async Task<ExternalIdentity> ResolveExternalIdentityAsync(
         ExternalLoginInput input,
         CancellationToken cancellationToken = default)
     {
-        var provider = externalProviders?.FirstOrDefault(p => p.Code == input.ProviderCode);
+        var provider = providerRegistry is not null
+            ? await providerRegistry.FindAsync(input.ProviderCode, cancellationToken)
+            : externalProviders?.FirstOrDefault(p => p.Code == input.ProviderCode);
         AdminException.ThrowIf(provider is null, ErrorCode.OAuthProviderDisabled);
         AdminException.ThrowIf(!await externalBindings!.IsEnabledAsync(input.ProviderCode), ErrorCode.OAuthProviderDisabled);
         return await provider!.ExchangeAsync(

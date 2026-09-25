@@ -29,7 +29,7 @@ ENV ASPNETCORE_HTTP_PORTS=8080
 # 自带同名 .deps.json/.runtimeconfig.json,依赖包的 dll 没有——用它当"哪个是我"的判据。
 ENTRYPOINT ["/bin/sh", "-c", "exec dotnet \"$(basename \"$(ls *.deps.json)\" .deps.json).dll\""]
 
-# 跑起来至少要注入这些(生产缺任何一条都会以一条读得懂的错误 fail-fast,详见 https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/):
+# 跑起来至少要注入这些(生产缺任何一条都会以一条读得懂的错误 fail-fast,详见 https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/):
 #   ASPNETCORE_ENVIRONMENT=Production
 #   SmartAdmin__Jwt__SecretKey=<≥32 字节随机串>
 #   SmartAdmin__Database__DbType / __ConnectionString

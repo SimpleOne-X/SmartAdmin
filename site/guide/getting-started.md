@@ -120,7 +120,7 @@ To share sessions and cache across replicas (multi-instance deployment), also in
 
 If you need finer-grained control over dependencies, you can reference a single layer instead (`.AspNetCore` / `.Services` / `.SqlSugar` / `.Core`). Why the packages are layered this way, and what "replaceable" actually means in practice, are covered in full in [Core Concepts](/guide/concepts); this page is only about getting it running.
 
-> Breaking changes are marked clearly in the [Changelog](https://github.com/SmartCode-X/SmartAdmin/blob/main/CHANGELOG.md) and batched into the next major release wherever possible. Development happens on the `dev` branch.
+> Breaking changes are marked clearly in the [Changelog](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md) and batched into the next major release wherever possible. Development happens on the `dev` branch.
 
 ## Run the frontend while you're at it
 
@@ -140,7 +140,7 @@ When the frontend regenerates its API types (`npm run gen:api`), the backend mus
 The above runs it inside the repository. Your own project only needs the thin shell template, with the kernel installed as an npm package:
 
 ```bash
-npx degit SmartCode-X/SmartAdmin/web/template web
+npx degit SimpleOne-X/SmartAdmin/web/template web
 cd web
 npm install
 npm run dev

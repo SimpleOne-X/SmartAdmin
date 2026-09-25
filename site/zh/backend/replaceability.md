@@ -85,6 +85,8 @@ builder.Services.AddSmartAdmin(builder.Configuration, options =>
 | `ReplaceRealtimePublisher_ShouldUseUserImplementation` | 消费方 `Replace` 掉 `IRealtimePublisher`，容器解析出的是消费方实现 |
 | `OverrideAuthStep_ShouldAffectLoginFlow` | 重写 `AuthService` 的一个 `virtual` 步骤，登录流程返回被改写的结果 |
 | `ExternalAuthProvider_ShouldBePluggable` | 消费方前置注册的外部登录 provider，最终出现在容器解析出的 provider 集合里（加法式，不覆盖内置的） |
+| `ExternalAuthProviderType_ShouldBePluggable` | 消费方前置注册的外部登录类型描述，最终出现在类型集合里（加法式，内置 OIDC 类型仍在） |
+| `PreRegisteredExtensionPoint_ShouldWinOverBuiltIn`（含 `IExternalAuthProviderService`、`IExternalAuthProviderRegistry` 两项） | 消费方前置注册管理服务或注册表，容器解析出的是消费方实现，内置的被跳过 |
 | `DisabledModule_ShouldRemoveBuiltInController` | 禁用的模块内置控制器被摘除（404），未禁的仍在 |
 | `CustomController_ShouldOwnSameRouteAfterModuleDisabled` | 禁掉内置模块后，消费方控制器接管同一路由 |
 | `CustomSeedData_ShouldRunOnceAndBeIdempotent` | 消费方种子首启插入、二启幂等不重复 |

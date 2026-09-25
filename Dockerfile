@@ -7,7 +7,7 @@
 #
 # MinimalHost 的 appsettings.json 没有 SmartAdmin 配置节（它是"零配置即可运行"的活证据），
 # 所以所有配置都通过 docker-compose.yml 的 SmartAdmin__Xxx__Yyy 环境变量注入——这同时也演示了
-# 文档站「部署」一节描述的双下划线配置方式(https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/)。
+# 文档站「部署」一节描述的双下划线配置方式(https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
@@ -48,7 +48,7 @@ COPY --from=build /app/publish ./
 # （绑定挂载会用宿主机的所有权覆盖，导致非 root 用户无法写入——这是容器化上传/SQLite 时最常见的坑。）
 #   /app/data    SQLite 数据库文件 + 开发环境 JWT 签名密钥（相对于 ContentRoot，即 /app）
 #   /data/upload 上传文件。**刻意放在 wwwroot 外部**：一旦有人在此镜像中添加 UseStaticFiles()，
-#                wwwroot 下的上传目录将被匿名访问——这是一个认证绕过（见 https://smartcode-x.github.io/SmartAdmin/zh/guide/deployment/route-a 的告警）。
+#                wwwroot 下的上传目录将被匿名访问——这是一个认证绕过（见 https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/route-a 的告警）。
 RUN mkdir -p /app/data /data/upload && chown -R $APP_UID:$APP_UID /app/data /data/upload
 
 USER $APP_UID

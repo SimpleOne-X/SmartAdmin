@@ -102,4 +102,4 @@ createSmartAdmin({
 npm i smart-naive-icon
 ```
 
-`SmartIconPicker` 的完整 props（`collections` / `localIcons` / `cap` / `clearable` 等）、`SmartIcon` 的 API，以及 SSR / Nuxt 注意事项，见 [包 README](https://github.com/SmartCode-X/smart-naive-icon/blob/main/README.md)。
+`SmartIconPicker` 的完整 props（`collections` / `localIcons` / `cap` / `clearable` 等）、`SmartIcon` 的 API，以及 SSR / Nuxt 注意事项，见 [包 README](https://github.com/SimpleOne-X/smart-naive-icon/blob/main/README.md)。

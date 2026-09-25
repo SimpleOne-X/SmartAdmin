@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        安全问题**不要**走这里，按 [SECURITY.md](https://github.com/SmartCode-X/SmartAdmin/blob/main/SECURITY.md) 私下报告——公开 issue 等于对所有下游消费方直接开 0-day。
+        安全问题**不要**走这里，按 [SECURITY.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/SECURITY.md) 私下报告——公开 issue 等于对所有下游消费方直接开 0-day。
   - type: input
     id: version
     attributes:
