@@ -14,7 +14,7 @@
 
 ## Unreleased
 
-## 10.15.0 - 2026-09-24
+## 10.15.0 - 2026-09-25
 
 **本版含破坏性变更：** 四个第三方登录可选包的 `AddSmartAdminXxxAuth(IConfiguration)` 重载已删除，`appsettings` 里的厂商与 OIDC 连接节点不再读取，升级前先读 *Changed*。另外「建号首登强制改密」的缺省行为由开变关，见 *Changed*。
 
