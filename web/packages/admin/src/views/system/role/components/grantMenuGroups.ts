@@ -1,5 +1,5 @@
-// 角色授权表格的分组逻辑(纯函数,GrantMenuTable.vue 只管渲染与勾选联动)。
-// 三列:目录 | 页面 | 按钮。按钮正常挂在页面下;直接挂在目录下的按钮是"无页面权限项"
+// 角色授权列表的分组与勾选联动逻辑(纯函数,GrantMenuTable.vue 只管渲染)。
+// 三层:目录 → 页面 → 按钮。按钮正常挂在页面下;直接挂在目录下的按钮是"无页面权限项"
 //(只给移动端 / 第三方调的接口,没有对应页面),渲染成该目录组里的一行 anchor 行,否则它们勾不到。
 import { MenuType, type MenuTreeNode } from '#/types/menu'
 
@@ -7,12 +7,16 @@ export interface ButtonItem {
   id: number
   title: string
   checked: boolean
+  /** 权限码(多条以 ; 连接),只作悬停提示,不参与勾选与提交。 */
+  permission?: string
 }
 export interface MenuRow {
   id: number
   title: string
   checked: boolean
   buttons: ButtonItem[]
+  /** 页面路由,只作副标题;anchor 行没有。 */
+  path?: string
   /** 无页面权限项行:承载目录直属按钮。id 是所属目录的 id,只作 key,不进 collectChecked。 */
   anchor?: boolean
 }
@@ -24,12 +28,19 @@ export interface CatalogGroup {
   menus: MenuRow[]
   /** 根级直挂按钮的合成分组(id=0),自身不是可授权节点,不进 collectChecked。 */
   synthetic?: boolean
+  /** 顶级页面(如工作台)自成的一组:界面上不画目录头,直接是一行。 */
+  standalone?: boolean
 }
 
 function toButtons(nodes: MenuTreeNode[], grantedSet: Set<number>): ButtonItem[] {
   return nodes
     .filter(b => b.type === MenuType.Button)
-    .map(b => ({ id: b.id, title: b.title, checked: grantedSet.has(b.id) }))
+    .map(b => ({
+      id: b.id,
+      title: b.title,
+      checked: grantedSet.has(b.id),
+      permission: b.permission || undefined,
+    }))
 }
 
 function toMenuRow(m: MenuTreeNode, grantedSet: Set<number>, prefix = ''): MenuRow {
@@ -38,6 +49,7 @@ function toMenuRow(m: MenuTreeNode, grantedSet: Set<number>, prefix = ''): MenuR
     title: prefix + m.title,
     checked: grantedSet.has(m.id),
     buttons: toButtons(m.children, grantedSet),
+    path: m.path || undefined,
   }
 }
 
@@ -76,12 +88,96 @@ function catalogRows(
   return rows
 }
 
-export function recomputeGroup(group: CatalogGroup) {
-  // anchor 行自身不是节点,只数它的按钮
-  const items = group.menus.flatMap(m => (m.anchor ? m.buttons : [m, ...m.buttons]))
+/** 一个目录下的可勾选条目:页面 + 按钮;anchor 行自身不是节点,只数它的按钮。 */
+function rowItems(menus: MenuRow[]): (MenuRow | ButtonItem)[] {
+  return menus.flatMap(m => (m.anchor ? m.buttons : [m, ...m.buttons]))
+}
+
+/** 一组行的勾选态(全勾 / 半勾)。搜索时目录头按可见行算,落库的目录状态按全部行算。 */
+export function menusState(menus: MenuRow[]): { checked: boolean; indeterminate: boolean } {
+  const items = rowItems(menus)
   const checkedCount = items.filter(x => x.checked).length
-  group.checked = checkedCount > 0 && checkedCount === items.length
-  group.indeterminate = checkedCount > 0 && checkedCount < items.length
+  return {
+    checked: checkedCount > 0 && checkedCount === items.length,
+    indeterminate: checkedCount > 0 && checkedCount < items.length,
+  }
+}
+
+export function recomputeGroup(group: CatalogGroup) {
+  Object.assign(group, menusState(group.menus))
+}
+
+// ── 勾选联动 ──
+
+/** 勾/取消整个目录:其下页面与按钮一并跟随。搜索过滤时 rows 传可见行,不动被过滤掉的行。 */
+export function setGroupChecked(group: CatalogGroup, val: boolean, rows: MenuRow[] = group.menus) {
+  for (const m of rows) {
+    m.checked = val
+    for (const b of m.buttons) b.checked = val
+  }
+  recomputeGroup(group)
+}
+
+/** 勾/取消一个页面(或 anchor 行):其按钮一并跟随。 */
+export function setMenuChecked(group: CatalogGroup, menu: MenuRow, val: boolean) {
+  menu.checked = val
+  for (const b of menu.buttons) b.checked = val
+  recomputeGroup(group)
+}
+
+/**
+ * 勾/取消一个按钮。按钮全勾时顺手把页面勾上;页面已勾时取消单个按钮不回收页面权限
+ * (页面权限与按钮权限各自授予)。anchor 行自身不是节点,勾选态就等于「按钮是否全勾」。
+ */
+export function setButtonChecked(
+  group: CatalogGroup,
+  menu: MenuRow,
+  button: ButtonItem,
+  val: boolean,
+) {
+  button.checked = val
+  const allChecked = menu.buttons.length > 0 && menu.buttons.every(b => b.checked)
+  if (allChecked || menu.anchor) menu.checked = allChecked
+  recomputeGroup(group)
+}
+
+// ── 计数(仅用于展示) ──
+
+export interface Count {
+  on: number
+  total: number
+}
+
+export function groupCount(group: Pick<CatalogGroup, 'menus'>): Count {
+  const items = rowItems(group.menus)
+  return { on: items.filter(x => x.checked).length, total: items.length }
+}
+
+export function menuButtonCount(menu: MenuRow): Count {
+  return { on: menu.buttons.filter(b => b.checked).length, total: menu.buttons.length }
+}
+
+/** 全部分组的授权概况:on / total 含页面与按钮;pages / buttons 是已授权的两类各多少。 */
+export type GrantCounts = Count & { pages: number; buttons: number }
+
+/** 授权列表对外汇报的概况:计数 + 相对打开时是否有未保存的改动。 */
+export type GrantSummary = GrantCounts & { dirty: boolean }
+
+export function countGrants(groups: CatalogGroup[]): GrantCounts {
+  let on = 0
+  let total = 0
+  let pages = 0
+  let buttons = 0
+  for (const g of groups) {
+    for (const item of rowItems(g.menus)) {
+      total++
+      if (!item.checked) continue
+      on++
+      if ('buttons' in item) pages++
+      else buttons++
+    }
+  }
+  return { on, total, pages, buttons }
 }
 
 /**
@@ -106,6 +202,7 @@ export function buildGroups(
       checked: grantedSet.has(node.id),
       indeterminate: false,
       menus,
+      standalone: node.type === MenuType.Menu,
     }
     recomputeGroup(group)
     groups.push(group)

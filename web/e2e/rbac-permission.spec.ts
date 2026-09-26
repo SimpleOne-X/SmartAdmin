@@ -60,22 +60,21 @@ test.describe('RBAC 权限', () => {
     await expect(menuItem).toBeVisible({ timeout: 3_000 })
     await menuItem.click()
 
-    // 等容器打开,GrantMenuTable 渲染
-    const drawer = formContainer(page)
+    // 等授权面板打开(GrantMenuSheet:固定的抽屉,不随 formStyle 变 modal),列表渲染需要等 API 返回菜单树
+    const drawer = page.locator('.n-drawer')
     await expect(drawer).toBeVisible({ timeout: 5_000 })
-    // GrantMenuTable 渲染需要等 API 返回菜单树
-    await expect(drawer.locator('.grant-grid')).toBeVisible({ timeout: 10_000 })
+    await expect(drawer.locator('.gt-scroll .gt-group').first()).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(500) // 等 checkbox 渲染完毕
 
-    // 勾选"组织管理"目录(级联选中其下所有菜单+按钮)——幂等:已勾则跳过
-    const orgCatalog = drawer.locator('.col-catalog').filter({ hasText: '组织管理' })
-    await expect(orgCatalog).toBeVisible({ timeout: 5_000 })
-    const checkbox = orgCatalog.locator('.n-checkbox')
-    const isChecked = await checkbox.evaluate((el) => el.classList.contains('n-checkbox--checked'))
-    if (!isChecked) await checkbox.click()
+    // 勾选"组织管理"目录(级联选中其下所有菜单+按钮)——幂等:已全勾则跳过;半勾时点一下即变全勾
+    const orgGroup = drawer.locator('.gt-group').filter({ hasText: '组织管理' })
+    const orgCheckbox = orgGroup.locator('.gt-group-head .gt-cb')
+    await expect(orgCheckbox).toBeVisible({ timeout: 5_000 })
+    if (!(await orgCheckbox.isChecked())) await orgCheckbox.click()
+    await expect(orgCheckbox).toBeChecked()
 
-    // 保存
-    await drawer.getByText(/保存|Save/i).click()
+    // 保存(底栏永远在视野里;文案里另有「有未保存的修改」,所以按按钮角色取,不能用 getByText)
+    await drawer.getByRole('button', { name: /^(保存|Save)$/ }).click()
     await expect(page.locator('.n-message')).toContainText(/保存|saved/i, { timeout: 5_000 })
 
     // ③ 退出,以 scope_all 用户重新登录

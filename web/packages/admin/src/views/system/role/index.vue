@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 角色管理 = SmartTable CRUD(照职位范式)+ 两个专属抽屉:授权菜单(勾选菜单树)、数据范围(选范围类型 + 自定义机构)。
+// 角色管理 = SmartTable CRUD(照职位范式)+ 两个专属抽屉:授权菜单(GrantMenuSheet,勾选菜单树)、数据范围(选范围类型 + 自定义机构)。
 // 删角色会**物理**删掉用户↔角色关联(不可恢复)——所以删前先查一次持有人数当面告知,单删与批量删都盖到,
 // 只给行内按钮加警告的话,勾选 + 批量删就绕过去了。
 import { computed, h, onMounted, reactive, ref, shallowRef } from 'vue'
@@ -24,7 +24,7 @@ import FormContainer from '#/components/FormContainer/index.vue'
 import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import OrgTreeSelect from '#/components/OrgTreeSelect/index.vue'
 import UserPicker from '#/components/UserPicker/index.vue'
-import GrantMenuTable from './components/GrantMenuTable.vue'
+import GrantMenuSheet from './components/GrantMenuSheet.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { roleApi, menuApi, moduleApi, userApi } from '#/api'
@@ -241,18 +241,18 @@ async function save() {
   }
 }
 
-// ── 授权菜单抽屉(分组表格 → 全量替换角色授权)──
+// ── 授权菜单抽屉(目录卡片列表 → 全量替换角色授权)──
 const showMenus = ref(false)
-// 整份替换 + 只读(勾选态在 GrantMenuTable 自己的 reactive 里),不需要深响应
+// 整份替换 + 只读(勾选态在 GrantMenuTable 自己的 reactive 里,改动经 GrantMenuSheet 带回 saveMenus),不需要深响应
 const menuTree = shallowRef<MenuTreeNode[]>([])
 const menuGranted = shallowRef<number[]>([])
-const menuRoleId = ref<number | null>(null)
+const menuRole = ref<SysRole | null>(null)
 const defaultModuleId = ref(UNASSIGNED)
 
 async function openMenus(r: SysRole) {
-  menuRoleId.value = r.id
   try {
     const [tree, granted] = await Promise.all([menuApi.tree(), roleApi.getMenus(r.id)])
+    menuRole.value = r
     menuTree.value = tree
     menuGranted.value = granted
     defaultModuleId.value = auth.currentModuleId ?? modules.value[0]?.id ?? UNASSIGNED
@@ -261,13 +261,10 @@ async function openMenus(r: SysRole) {
     message.error(translateError(e))
   }
 }
-function onMenuCheckedUpdate(ids: number[]) {
-  menuGranted.value = ids
-}
-async function saveMenus() {
-  if (menuRoleId.value === null) return
+async function saveMenus(ids: number[]) {
+  if (menuRole.value === null) return
   try {
-    await roleApi.setMenus(menuRoleId.value, menuGranted.value)
+    await roleApi.setMenus(menuRole.value.id, ids)
     message.success(t('role.grantSaved'))
   } catch (e) {
     message.error(translateError(e))
@@ -418,21 +415,16 @@ async function saveScope() {
   </FormContainer>
 
   <!-- 授权菜单 -->
-  <FormContainer
+  <GrantMenuSheet
     v-model:show="showMenus"
-    :title="t('role.grantMenus')"
-    :width="820"
-    :on-confirm="saveMenus"
-    :confirm-text="t('common.save')"
-  >
-    <GrantMenuTable
-      :tree="menuTree"
-      :granted="menuGranted"
-      :modules="modules"
-      :default-module-id="defaultModuleId"
-      @update:checked="onMenuCheckedUpdate"
-    />
-  </FormContainer>
+    :role-name="menuRole?.name ?? ''"
+    :role-code="menuRole?.code ?? ''"
+    :tree="menuTree"
+    :granted="menuGranted"
+    :modules="modules"
+    :default-module-id="defaultModuleId"
+    :on-save="saveMenus"
+  />
 
   <!-- 授权用户 -->
   <UserPicker ref="userPickerRef" @confirm="onUserConfirm" />

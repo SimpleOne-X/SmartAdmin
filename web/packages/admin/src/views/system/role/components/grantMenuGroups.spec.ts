@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { MenuType, type MenuTreeNode } from '#/types/menu'
-import { buildGroups, collectChecked, recomputeGroup } from './grantMenuGroups'
+import {
+  buildGroups,
+  collectChecked,
+  countGrants,
+  groupCount,
+  menusState,
+  menuButtonCount,
+  recomputeGroup,
+  setButtonChecked,
+  setGroupChecked,
+  setMenuChecked,
+} from './grantMenuGroups'
 
 const node = (
   id: number,
@@ -98,5 +109,106 @@ describe('collectChecked', () => {
     recomputeGroup(ops)
     expect(ops.checked).toBe(true)
     expect(collectChecked(groups).toSorted((a, b) => a - b)).toEqual([300, 301, 350, 351, 352])
+  })
+})
+
+// ── 勾选联动(原先写在 GrantMenuTable.vue 里,抽成纯函数后用这组用例锁住行为)──
+describe('勾选联动', () => {
+  it('勾目录:其下页面与按钮全勾,取消则全清', () => {
+    const [ops] = buildGroups(tree, new Set(), ANCHOR)
+    setGroupChecked(ops, true)
+    expect(ops.checked).toBe(true)
+    expect(ops.indeterminate).toBe(false)
+    expect(ops.menus.every(m => m.buttons.every(b => b.checked))).toBe(true)
+    setGroupChecked(ops, false)
+    expect(collectChecked([ops])).toEqual([])
+  })
+
+  it('勾页面:按钮跟着勾,目录变半勾', () => {
+    const [ops] = buildGroups(tree, new Set(), ANCHOR)
+    const page = ops.menus[1]
+    setMenuChecked(ops, page, true)
+    expect(page.buttons.map(b => b.checked)).toEqual([true, true])
+    expect(ops.indeterminate).toBe(true)
+  })
+
+  it('按钮全勾时页面自动勾上;取消一个按钮页面保持已勾', () => {
+    const [ops] = buildGroups(tree, new Set(), ANCHOR)
+    const page = ops.menus[1]
+    setButtonChecked(ops, page, page.buttons[0], true)
+    expect(page.checked).toBe(false)
+    setButtonChecked(ops, page, page.buttons[1], true)
+    expect(page.checked).toBe(true)
+    setButtonChecked(ops, page, page.buttons[1], false)
+    // 与原实现一致:页面已勾时,单个按钮取消不回收页面权限
+    expect(page.checked).toBe(true)
+  })
+
+  it('anchor 行的勾选态恒等于「按钮是否全勾」', () => {
+    const [ops] = buildGroups(tree, new Set(), ANCHOR)
+    const anchor = ops.menus[0]
+    setButtonChecked(ops, anchor, anchor.buttons[0], true)
+    expect(anchor.checked).toBe(true)
+    setButtonChecked(ops, anchor, anchor.buttons[0], false)
+    expect(anchor.checked).toBe(false)
+  })
+})
+
+describe('搜索视图', () => {
+  it('目录勾选只作用于传入的可见行,但目录状态按全部行重算', () => {
+    const [ops] = buildGroups(tree, new Set(), ANCHOR)
+    const visible = [ops.menus[1]]
+    setGroupChecked(ops, true, visible)
+    expect(ops.menus[1].checked).toBe(true)
+    expect(ops.menus[0].checked).toBe(false)
+    expect(ops.indeterminate).toBe(true)
+    // 视图(可见行)自己的状态是全勾
+    expect(menusState(visible)).toEqual({ checked: true, indeterminate: false })
+    expect(menusState(ops.menus)).toEqual({ checked: false, indeterminate: true })
+  })
+
+  it('顶级页面标记 standalone,目录与合成组不标', () => {
+    const groups = buildGroups([...tree, node(7, MenuType.Button, '根级锚点')], new Set(), ANCHOR)
+    expect(groups.map(g => !!g.standalone)).toEqual([false, true, false])
+  })
+})
+
+describe('计数与展示字段', () => {
+  const withMeta: MenuTreeNode[] = [
+    node(300, MenuType.Catalog, '系统运维', [
+      node(
+        350,
+        MenuType.Menu,
+        '消息通知',
+        [
+          node(351, MenuType.Button, '通知-查询', [], { permission: 'GET:/api/v1/notice' }),
+          node(352, MenuType.Button, '通知-发布'),
+        ],
+        { path: '/ops/notice' },
+      ),
+      node(301, MenuType.Button, '连通性探针'),
+    ]),
+    node(100, MenuType.Menu, '工作台'),
+  ]
+
+  it('页面带 path、按钮带权限码;空值不带字段', () => {
+    const [ops] = buildGroups(withMeta, new Set(), ANCHOR)
+    const page = ops.menus[1]
+    expect(page.path).toBe('/ops/notice')
+    expect(page.buttons[0].permission).toBe('GET:/api/v1/notice')
+    expect(page.buttons[1].permission).toBeUndefined()
+    expect(ops.menus[0].path).toBeUndefined()
+  })
+
+  it('groupCount / menuButtonCount', () => {
+    const [ops] = buildGroups(withMeta, new Set([350, 351]), ANCHOR)
+    // 条目 = 探针按钮(anchor 行只数按钮)+ 页面 + 2 个按钮
+    expect(groupCount(ops)).toEqual({ on: 2, total: 4 })
+    expect(menuButtonCount(ops.menus[1])).toEqual({ on: 1, total: 2 })
+  })
+
+  it('countGrants:总数、已授权、页面数、按钮数(anchor 行自身不算页面)', () => {
+    const groups = buildGroups(withMeta, new Set([350, 351, 301, 100]), ANCHOR)
+    expect(countGrants(groups)).toEqual({ on: 4, total: 5, pages: 2, buttons: 2 })
   })
 })
