@@ -65,3 +65,6 @@ backend/scratchpad/
 
 ## /loop 任务账本（跨轮记忆，操作态，不提交）
 .loop/
+
+## Playwright MCP 截图/日志（本地评审产物，不提交）
+.playwright-mcp/
