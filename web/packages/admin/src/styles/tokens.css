@@ -1,6 +1,6 @@
 /**
  * SmartAdmin 设计 tokens —— 唯一色源(single source of truth)
- * 来源:Claude Design 工程「设计系统 Design Tokens」(docs/design-mockups/design-tokens.dc.html)提炼。
+ * 来源:Claude Design 工程「设计系统 Design Tokens」提炼(原型已移除,本文件即单源)。
  * spike/theme-refresh:色板整层换为 daisyUI(MIT)企业向主题 —— 亮色采 corporate;
  *   暗色:深蓝黑渐变底(slate 950/900)+ 贴近背景的深色卡片 + 青绿主色。
  *
@@ -105,7 +105,7 @@
   --space-24: 24px;
   --space-32: 32px;
 
-  /* ── 圆角(design_handoff_rbac_admin:更圆)──────────────── */
+  /* ── 圆角(偏圆)──────────────── */
   --radius-sm: 6px; /* 标签 / 小控件 */
   --radius-md: 10px; /* 按钮 / 输入 / 表格单元 */
   --radius-lg: 12px; /* 卡片 / 面板 / 弹层 */

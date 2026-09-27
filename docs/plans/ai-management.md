@@ -1,6 +1,6 @@
 # AI 管理模块开发计划
 
-> **状态**:已完成 · **拟定**:2026-09-13 · **完成**:2026-09-14 · **设计图**:[`docs/design-mockups/ai-management.html`](../design-mockups/ai-management.html)(在线版:https://claude.ai/code/artifact/76b596b4-cc15-4db3-8277-411fb5c52219)
+> **状态**:已完成 · **拟定**:2026-09-13 · **完成**:2026-09-14 · **设计图**:https://claude.ai/code/artifact/76b596b4-cc15-4db3-8277-411fb5c52219(仓库内副本已移除)
 >
 > 本文是执行文档:按第 12 节的批次逐批实施、逐项勾选。「为什么这么定」已沉淀成 [ADR 0009](../adr/0009-ai-gateway-in-kernel.md)。
 >
@@ -356,7 +356,7 @@ e2e(可选):在 `web/e2e` 现有页面级冒烟模板上加「AI 模型页可渲
 - `README.md` 内置功能清单加一行。
 - `docs/adr/0009-ai-gateway-in-kernel.md`:AI 网关进内核、协议适配器、直连不引 SDK、审批留给 Pro;被否方案:独立包、只留契约、Microsoft.Extensions.AI。
 - `CONTEXT.md` 加「AI 管理」术语段:厂商、预设、协议、全局默认模型、场景、用量记录。
-- `docs/design-mockups/ai-management.html` 已放入,实施后如有偏离在本文记一笔。
+- 设计图(见文首在线版)实施后如有偏离在本文记一笔。
 
 ## 12. 实施批次(按提交切,每批独立可验)
 

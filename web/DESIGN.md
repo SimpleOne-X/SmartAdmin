@@ -1,7 +1,7 @@
 # SmartAdmin 设计系统规范(DESIGN.md)
 
 > 设计单源:`../docs/rebuild-design.md` §7。**tokens 单源:[`packages/admin/src/styles/tokens.css`](packages/admin/src/styles/tokens.css)** —— 一切颜色/字号/间距/圆角/阴影都从那里的 CSS 变量取,本文件只做规范说明与「token → Naive UI」映射。
-> 视觉来源:RBAC 后台原型 [`../docs/design-mockups/design_handoff_rbac_admin/`](../docs/design-mockups/design_handoff_rbac_admin/README.md)(权威说明 = 其 `README.md`);`../docs/design-mockups/design-tokens.dc.html` 是 token 草稿,与本文件不一致时以本文件和 tokens.css 为准。本文件细化**圆角 / 阴影 / 顶栏毛玻璃 / 侧栏配色 / 主色派生规则 / 6 主色候选 / 密度档**。
+> 视觉来源:早期 RBAC 后台原型与 token 草稿(已从仓库移除,git 历史可查),现以本文件和 tokens.css 为准;新版原型见 [`../docs/design-mockups/ui-redesign-v1/SmartAdmin-原型设计-V1.html`](../docs/design-mockups/ui-redesign-v1/SmartAdmin-原型设计-V1.html)(草稿,未确认)。本文件细化**圆角 / 阴影 / 顶栏毛玻璃 / 侧栏配色 / 主色派生规则 / 6 主色候选 / 密度档**。
 > **色板**:中性/语义色整层采 daisyUI(MIT)企业向主题——亮色 corporate、暗色 slate 深蓝黑画布 + 贴近背景的深色卡片(OKLCH 原值转 sRGB hex,warning/error/三级文字按可读性加深)。**默认 UI 主色青绿 `#14B8A6`**(Logo 固定品牌靛蓝 `#646CFF`、不随用户换的 accent 变);圆角/字号/间距/阴影自成体系,不采 daisyUI 的 radius 4px/depth 0。手法补充:卡片 1px 描边 + 浅色玻璃 / 暗色平涂(styles/index.css 质感层)、表头次级色+600 字重(naive-theme.ts)。
 
 ---
