@@ -1,0 +1,2159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SmartAdmin · Apple 风格原型</title>
+<!--
+  设计原型(非生产代码)。全部控件来自 Naive UI 官方组件(与项目同版本 naive-ui 2.45.3),
+  Apple 风格只靠两样东西做出来:
+    1) Naive 的 GlobalThemeOverrides(见下方 buildOverrides)—— 定稿后可直接搬进 theme/naive-theme.ts;
+    2) 布局壳的少量 CSS(侧栏毛玻璃、工具栏、大标题)—— 对应 layouts/*.vue 的 scoped 样式。
+  打开需联网(CDN 加载 Vue / Naive UI / 图标 / Inter 字体)。
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/naive-ui@2.45.3/dist/index.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/iconify-icon@2/dist/iconify-icon.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg-app);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+  }
+  iconify-icon { display: inline-block; vertical-align: middle; }
+  .mono { font-family: var(--font-mono); font-size: 13.5px; letter-spacing: 0; }
+  .muted { color: var(--text-2); }
+  .faint { color: var(--text-3); }
+  .num { font-variant-numeric: tabular-nums; }
+  /* 英文小标签:等宽 + 宽字距 + 大写,只做辅助层级,不抢正文 */
+  .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); font-weight: 500; }
+
+  /* ───────── 环境画布:近黑底 + 顶部一束冷光 + 渐隐点阵 + 极细噪点 ───────── */
+  .canvas { position: relative; isolation: isolate; }
+  .canvas::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 95% 10%, var(--ambient-1), transparent 65%),
+      radial-gradient(800px 600px at 0% 100%, var(--ambient-2), transparent 62%);
+  }
+  .canvas::after {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 120px, transparent 60%);
+            mask-image: linear-gradient(180deg, transparent 0, #000 120px, transparent 60%);
+  }
+  .noise { position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: var(--noise-opacity); mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* ───────── 布局壳 ───────── */
+  .layout { --side-w: 244px; display: grid; grid-template-columns: var(--side-w) 1fr; height: 100vh; overflow: hidden; transition: grid-template-columns .28s cubic-bezier(.2,.8,.2,1); }
+  .layout.collapsed { --side-w: 68px; }
+
+  /* 侧栏:玻璃材质,选中项 = 半透明亮面 + 发丝内描边(不用彩色实底) */
+  .sidebar {
+    display: flex; flex-direction: column; min-height: 0; position: relative; z-index: 2;
+    background: var(--bg-sidebar);
+    backdrop-filter: saturate(160%) blur(40px);
+    -webkit-backdrop-filter: saturate(160%) blur(40px);
+    border-right: 1px solid var(--hairline);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 18px; flex-shrink: 0; }
+  .brand-mark { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0;
+    color: var(--mark-fg); background: var(--mark-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 0 1px var(--hairline), 0 6px 18px -6px var(--signal-glow); }
+  .brand-name { font-weight: 600; font-size: 15px; white-space: nowrap; letter-spacing: -0.02em; }
+  .brand-name small { display: block; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; color: var(--text-3); font-weight: 500; margin-top: 1px; }
+  .side-search { padding: 0 12px 12px; }
+  .collapsed .brand { padding: 0; justify-content: center; }
+  .collapsed .brand-name, .collapsed .side-search, .collapsed .side-user-meta, .collapsed .side-status { display: none; }
+  .side-menu { flex: 1; min-height: 0; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent); }
+  @media (max-height: 860px) { .side-status { display: none; } }
+  
+  .side-foot { padding: 10px 12px 12px; border-top: 1px solid var(--hairline); }
+  .side-status { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-size: 12.5px; color: var(--text-3); }
+  .side-user { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; cursor: pointer; }
+  .side-user:hover { background: var(--hover); }
+  .collapsed .side-user { justify-content: center; padding: 6px 0; }
+  .side-user-meta { min-width: 0; line-height: 1.25; }
+  .side-user-meta b { display: block; font-size: 14px; font-weight: 600; }
+  .side-user-meta span { font-size: 13px; color: var(--text-3); }
+
+  /* 呼吸点:服务在线状态,唯一的常驻动效 */
+  .pulse { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
+  .pulse::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--ok); opacity: .6; animation: pulse 2.4s ease-out infinite; }
+  @keyframes pulse { from { transform: scale(.6); opacity: .7; } to { transform: scale(1.8); opacity: 0; } }
+
+  .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .toolbar {
+    height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 0 18px 0 12px;
+    background: var(--bg-header);
+    backdrop-filter: saturate(160%) blur(24px);
+    -webkit-backdrop-filter: saturate(160%) blur(24px);
+    border-bottom: 1px solid var(--hairline);
+    position: relative; z-index: 5;
+  }
+  .toolbar .crumb { margin-left: 6px; font-size: 14px; }
+  .toolbar .spacer { flex: 1; }
+  .status-pill { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; color: var(--text-2);
+    border: 1px solid var(--hairline); background: var(--glass); margin-right: 6px; }
+  .status-pill .mono { font-size: 12.5px; color: var(--text-3); }
+  .tabsbar { padding: 8px 18px 0; flex-shrink: 0; border-bottom: 1px solid var(--hairline); }
+  .page-scroll { flex: 1; min-height: 0; }
+  /* 自适应:内容区随窗口铺开(2K@125% ≈ 2048 CSS px 也不留大片空白),超宽屏才封顶 */
+  .page { padding: clamp(20px, 2vw, 40px) clamp(16px, 2.4vw, 48px) 56px; max-width: 2200px; margin: 0 auto; animation: pageIn .4s cubic-bezier(.2,.8,.2,1); }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .page { animation: none; } .layout { transition: none; } .pulse::after { animation: none; } }
+
+  /* 大标题 */
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 26px; flex-wrap: wrap; }
+  .page-head .eyebrow { display: block; margin-bottom: 8px; }
+  .large-title { font-size: 32px; line-height: 38px; font-weight: 600; letter-spacing: -0.035em; margin: 0; }
+  .subtitle { margin: 6px 0 0; font-size: 14px; color: var(--text-2); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text-3); margin: 28px 0 10px 4px; font-family: var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+
+  /* 玻璃卡片:半透明 + 模糊 + 顶边光(渐变描边,上亮下暗) */
+  .n-card.a-card { position: relative; box-shadow: var(--shadow-1); backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%); }
+  .n-card.a-card::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+    background: linear-gradient(180deg, var(--edge-top) 0%, var(--edge-mid) 30%, var(--edge-bottom) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude; }
+  .n-card.a-card.hoverlift { transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+  .n-card.a-card.hoverlift:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+
+  /* 浮层统一玻璃 */
+  .n-popover:not(.n-tooltip), .n-dropdown-menu, .n-drawer, .n-card.n-modal, .n-dialog, .n-message, .n-notification, .n-base-select-menu, .n-date-panel {
+    backdrop-filter: blur(40px) saturate(170%); -webkit-backdrop-filter: blur(40px) saturate(170%); }
+
+  .grid { display: grid; gap: 16px; }
+  .g-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .g-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .g-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .g-main { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+  .g-side { grid-template-columns: 280px minmax(0,1fr); align-items: start; }
+  .g-side-lg { grid-template-columns: 320px minmax(0,1fr); align-items: start; }
+
+  /* 图标底块:中性玻璃 */
+  .sym { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0;
+    background: var(--glass-strong); color: var(--text-1); box-shadow: inset 0 0 0 1px var(--hairline), inset 0 1px 0 var(--edge-light); }
+  .sym.sm { width: 28px; height: 28px; border-radius: 8px; }
+  /* 头像:单色,不做彩色 */
+  .n-avatar { background: var(--glass-strong) !important; color: var(--text-1) !important; font-weight: 500; box-shadow: inset 0 0 0 1px var(--hairline); }
+
+  /* 统计卡:等宽大数字 + 迷你走势 */
+  .stat-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .stat-val { color: var(--text-1); font-size: 34px; line-height: 1; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .stat-val small { font-size: 15px; color: var(--text-3); margin-left: 4px; letter-spacing: 0; }
+  .stat-foot { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 14px; gap: 10px; }
+  .mini { width: 96px; height: 28px; display: block; overflow: visible; }
+  .delta { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); }
+  .delta.down { color: var(--err); }
+
+  .toolbar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar-row .grow { flex: 1; }
+  .user-cell { display: flex; align-items: center; gap: 10px; }
+  .user-cell b { display: block; font-weight: 500; font-size: 14px; }
+  .user-cell span { display: block; font-size: 13px; color: var(--text-3); font-family: var(--font-mono); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+
+  .set-row-label b { display: block; font-weight: 500; font-size: 14px; }
+  .set-row-label span { display: block; font-size: 13.5px; color: var(--text-3); margin-top: 2px; }
+  .set-row-icon { display: flex; gap: 12px; align-items: center; }
+
+  .role-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; cursor: pointer; transition: background .15s; }
+  .role-item:hover { background: var(--hover); }
+  .role-item.on { background: var(--tab-active-bg); box-shadow: inset 0 0 0 1px var(--tab-active-ring); }
+  .role-item.on b { color: var(--tab-active-fg); }
+  .role-item b { font-weight: 500; font-size: 14px; display: block; }
+  .role-item span { font-size: 13px; color: var(--text-3); }
+  .role-item .grow { flex: 1; min-width: 0; }
+
+  .qa-btn.n-button { height: 100%; min-height: 84px; width: 100%; }
+  .qa-inner { display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 14px; }
+
+  .spark { width: 100%; height: 210px; display: block; overflow: visible; }
+  .glow-line { filter: drop-shadow(0 0 6px var(--signal-glow)); }
+  .axis { font-family: var(--font-mono); font-size: 12px; fill: var(--text-3); letter-spacing: 0; }
+
+  /* 登录:暗场 + 透视网格地面 + 玻璃卡片 */
+  .login { min-height: 100vh; display: grid; place-items: center; padding: 24px; position: relative; overflow: hidden; background: var(--bg-app); }
+  .login-floor { position: absolute; left: -50%; right: -50%; bottom: -10%; height: 60%; pointer-events: none;
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 56px 56px; transform: perspective(700px) rotateX(62deg); transform-origin: 50% 100%;
+    -webkit-mask-image: linear-gradient(0deg, #000 10%, transparent 80%); mask-image: linear-gradient(0deg, #000 10%, transparent 80%); }
+  .login-halo { position: absolute; left: 50%; top: -30%; width: 1100px; height: 700px; transform: translateX(-50%); pointer-events: none;
+    background: radial-gradient(closest-side, var(--ambient-1), transparent); }
+  .login-card { width: 400px; max-width: 100%; position: relative; z-index: 2; }
+  .login-card::before { content: ''; position: absolute; left: 50%; top: 46%; width: 760px; height: 760px; transform: translate(-50%, -50%); z-index: -1; pointer-events: none;
+    background: radial-gradient(closest-side, var(--signal-glow), transparent); filter: blur(30px); opacity: .55; }
+  .login-logo { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 1px var(--hairline), 0 0 44px var(--signal-glow) !important; }
+  .login-logo { width: 56px; height: 56px; border-radius: 15px; margin: 0 auto 22px; display: grid; place-items: center;
+    color: var(--mark-fg); background: var(--mark-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 1px var(--hairline), 0 14px 40px -10px var(--signal-glow); }
+  .login .eyebrow { display: block; text-align: center; margin-bottom: 10px; }
+  .login h1 { text-align: center; font-size: 30px; font-weight: 600; letter-spacing: -0.035em; margin: 0 0 8px; }
+  .login p.lead { text-align: center; color: var(--text-2); margin: 0 0 28px; font-size: 14px; }
+  .login-foot { text-align: center; font-size: 13px; color: var(--text-3); margin-top: 22px; }
+  .login-corner { position: absolute; top: 16px; right: 16px; z-index: 3; }
+
+  .review-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 3000;
+    display: flex; gap: 8px; align-items: center; padding: 6px 8px 6px 14px; border-radius: 999px;
+    background: var(--bg-elevated-a); border: 1px solid var(--hairline); box-shadow: var(--shadow-2);
+    backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); font-size: 13.5px; }
+
+  .swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; padding: 0; position: relative;
+    box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); }
+  .swatch.on::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--text-1); }
+  .swatch:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+  .token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .token { border-radius: 10px; border: 1px solid var(--hairline); overflow: hidden; font-size: 13px; }
+  .token i { display: block; height: 44px; }
+  .token div { padding: 7px 10px; }
+  .token code { font-family: var(--font-mono); color: var(--text-2); }
+
+  .spec li { margin: 4px 0; line-height: 1.7; }
+  .spec h3 { margin: 18px 0 6px; font-size: 15px; }
+  .cmdk-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+  .cmdk-item.on { background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+  kbd { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--hairline-strong); color: var(--text-3); background: var(--glass); }
+
+  /* ───────── 页签(参考 NaiveAdmin Max;仍是 Naive n-tabs type="card",只改样式) ─────────
+     页签条与顶栏同色、无分隔线,宽度随文字;激活页签 = 信号色淡底 + 信号色文字,
+     顶部圆角、底部两侧反向圆角"脚"贴住下边线。 */
+  .toolbar { background: var(--tab-strip); border-bottom: none; backdrop-filter: none; -webkit-backdrop-filter: none; height: 50px; }
+  .tabsbar.chrome-tabs { padding: 0 12px 0 14px; border-bottom: none; background: var(--tab-strip); position: relative; z-index: 4; box-shadow: inset 0 -1px 0 var(--hairline); }
+  .chrome-tabs .n-tabs-nav { height: 42px; align-items: flex-end; }
+  .chrome-tabs .n-tabs-tab-pad, .chrome-tabs .n-tabs-pad, .chrome-tabs .n-tabs-scroll-padding { border: none !important; width: 0 !important; }
+  .chrome-tabs .n-tabs .n-tabs-nav--card-type .n-tabs-tab,
+  .chrome-tabs .n-tabs-tab {
+    position: relative; height: 36px; padding: 0 12px 0 16px !important; margin: 0 6px 0 0 !important;
+    border: none !important; border-radius: 10px 10px 0 0 !important; background: transparent !important;
+    color: var(--text-2); font-size: 14px; transition: color .15s, background-color .15s;
+  }
+  .chrome-tabs .n-tabs-tab:not(.n-tabs-tab--active):hover { color: var(--text-1); background: var(--hover) !important; }
+  .ctab { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .ctab iconify-icon { flex-shrink: 0; }
+  .chrome-tabs .n-tabs-tab.n-tabs-tab--active { background: var(--tab-active-bg) !important; color: var(--tab-active-fg); font-weight: 500; z-index: 2; }
+  .chrome-tabs .n-tabs-tab--active::before, .chrome-tabs .n-tabs-tab--active::after {
+    content: ''; position: absolute; bottom: 0; width: 10px; height: 10px; pointer-events: none; }
+  .chrome-tabs .n-tabs-tab--active::before { left: -10px; background: radial-gradient(circle at 0 0, transparent 9.5px, var(--tab-active-bg) 10px); }
+  .chrome-tabs .n-tabs-tab--active::after { right: -10px; background: radial-gradient(circle at 100% 0, transparent 9.5px, var(--tab-active-bg) 10px); }
+  .chrome-tabs .n-tabs-tab__close { width: 16px; height: 16px; border-radius: 50% !important; margin-left: 6px !important; color: inherit; opacity: .7; }
+  .chrome-tabs .n-tabs-tab__close:hover { opacity: 1; }
+  .chrome-tabs .n-tabs-nav__suffix { padding: 0 0 6px 8px; border: none !important; display: flex; gap: 2px; }
+
+  /* ═══════════════ Liquid Glass 外壳(覆盖上面的平铺壳) ═══════════════
+     背景是一整张氛围壁纸;侧栏、顶部(工具栏+页签)、卡片都是悬浮的玻璃面板,
+     离屏幕边缘 12px、圆角 22、顶边高光、深投影。层次来自"玻璃叠在光上"。 */
+  body { background: var(--wallpaper); background-attachment: fixed; }
+  .layout { padding: 12px; gap: 12px; background: transparent; --side-w: 252px; }
+  .layout.collapsed { --side-w: 76px; }
+  .glass-panel, .sidebar {
+    background: var(--glass-panel) !important;
+    backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid var(--glass-border) !important;
+    box-shadow: var(--glass-shadow);
+  }
+  .sidebar { border-radius: 22px; overflow: hidden; }
+  .side-foot { border-top-color: var(--hairline); }
+  .main { gap: 12px; }
+  .shell-head { border-radius: 20px; overflow: hidden; flex-shrink: 0; position: relative; z-index: 5; }
+  .shell-head .toolbar { background: transparent !important; height: 54px; padding: 0 14px 0 10px; }
+  .shell-head .tabsbar.chrome-tabs { background: transparent !important; box-shadow: inset 0 1px 0 var(--hairline) !important; padding: 0 10px 0 12px; }
+  .shell-head .chrome-tabs .n-tabs-nav { height: 46px; align-items: center; }
+  .shell-head .chrome-tabs .n-tabs .n-tabs-nav--card-type .n-tabs-tab,
+  .shell-head .chrome-tabs .n-tabs-tab { height: 32px; border-radius: 10px !important; margin-right: 4px !important; padding: 0 10px 0 14px !important; }
+  .shell-head .chrome-tabs .n-tabs-tab--active::before, .shell-head .chrome-tabs .n-tabs-tab--active::after { display: none; }
+  .shell-head .chrome-tabs .n-tabs-tab.n-tabs-tab--active { box-shadow: inset 0 0 0 1px var(--tab-active-ring), inset 0 1px 0 var(--edge-light); }
+  .shell-head .chrome-tabs .n-tabs-nav__suffix { padding: 0 0 0 8px; }
+  .page-scroll { border-radius: 22px; }
+  .canvas::before, .canvas::after { display: none; }
+  .page { padding: 18px 8px 56px; max-width: 2400px; }
+  .page-head { margin-bottom: 22px; padding: 10px 6px 0; }
+  .large-title { font-size: 34px; line-height: 40px; }
+
+  /* 卡片玻璃更通透,顶边高光更亮 */
+  .n-card.a-card { backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%); box-shadow: var(--glass-shadow-soft); border-radius: 20px; }
+
+  .login { background: var(--wallpaper); }
+  .login-floor { opacity: .7; }
+  .login .n-card.a-card { background: var(--glass-panel); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+
+  /* ═══════════════ 紧凑密度 + 数据表格铺满(ERP / MES) ═══════════════
+     字号上调一档(正文 15 / 表格 14 / 辅助 ≥13),紧凑只压间距、行高、留白。 */
+  body { font-size: 15px; }
+  .layout { padding: 8px; gap: 8px; --side-w: 232px; }
+  .layout.collapsed { --side-w: 68px; }
+  .main { gap: 8px; }
+  .brand { height: 50px; }
+  .sidebar { border-radius: 16px; }
+  .shell-head { border-radius: 14px; }
+  .shell-head .toolbar { height: 44px; }
+  .shell-head .chrome-tabs .n-tabs-nav { height: 40px; }
+  .shell-head .chrome-tabs .n-tabs .n-tabs-nav--card-type .n-tabs-tab,
+  .shell-head .chrome-tabs .n-tabs-tab { height: 30px; padding: 0 8px 0 11px !important; font-size: 14px; color: var(--text-3); }
+  .shell-head .chrome-tabs .n-tabs-tab:not(.n-tabs-tab--active):hover { color: var(--text-1); }
+  /* 激活页签:扁平淡色底 + 信号色文字加粗 + 底部 2px 信号色横线;无描边、无发光 */
+  .shell-head .chrome-tabs .n-tabs .n-tabs-nav--card-type .n-tabs-tab.n-tabs-tab--active,
+  .shell-head .chrome-tabs .n-tabs-tab.n-tabs-tab--active {
+    background: linear-gradient(var(--signal), var(--signal)) center bottom / calc(100% - 20px) 2px no-repeat, var(--tab-on-bg) !important;
+    color: var(--tab-on-fg) !important; font-weight: 600; box-shadow: none;
+  }
+  .shell-head .chrome-tabs .n-tabs-tab--active .ctab iconify-icon { color: var(--tab-on-fg); }
+  .page { padding: 10px 2px 16px; max-width: none; }
+  .page-head { margin-bottom: 10px; padding: 2px 4px 0; }
+  .page-head .eyebrow { margin-bottom: 2px; }
+  .large-title { font-size: 24px; line-height: 30px; letter-spacing: -0.03em; }
+  .subtitle { margin: 2px 0 0; }
+  .section-title { margin: 16px 0 6px 2px; }
+  .grid { gap: 12px; }
+  .g-side { grid-template-columns: 240px minmax(0,1fr); }
+  .g-side-lg { grid-template-columns: 280px minmax(0,1fr); }
+  .n-card.a-card { border-radius: 14px; backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); }
+  .stat-val { font-size: 28px; }
+  .stat-top { margin-bottom: 8px; }
+  .stat-foot { margin-top: 6px; }
+  .mini { width: 84px; height: 24px; }
+  .sym { width: 28px; height: 28px; border-radius: 8px; }
+  .sym.sm { width: 24px; height: 24px; border-radius: 7px; }
+  .toolbar-row { margin-bottom: 8px; gap: 8px; }
+  .role-item { padding: 7px 10px; }
+  .qa-btn.n-button { min-height: 60px; }
+  .spark { height: 190px; }
+  .status-pill { height: 26px; }
+  .ucell-t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .ucell-t b, .ucell-t span { display: inline !important; white-space: nowrap; }
+  .user-cell { gap: 8px; }
+  /* 原型评审条:放到侧栏空白处,不压住表格分页 */
+  .review-bar { left: 20px; bottom: 96px; transform: none; flex-direction: column; align-items: stretch; width: 196px; border-radius: 14px; padding: 8px; gap: 6px; opacity: .55; transition: opacity .15s; }
+  .review-bar:hover, .review-bar:focus-within { opacity: 1; }
+  .review-bar > .muted { padding: 0 4px; font-size: 12px; }
+  @media (max-width: 1000px) { .status-pill, .toolbar .crumb { display: none; } }
+  .card-title { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin-right: 8px; white-space: nowrap; letter-spacing: -0.01em; }
+  .card-title em { font-style: normal; font-size: 13px; font-weight: 400; color: var(--text-3); margin-left: 2px; }
+
+  /* 表格页:无大标题,标题 + 筛选 + 操作合并成一行;表格撑满剩余高度,表头固定、分页贴底、超宽横向滚动 */
+  .page-scroll:has(.page.fit) .n-scrollbar-content { height: 100%; }
+  .page.fit { display: flex; flex-direction: column; height: 100%; padding: 0; gap: 8px; animation: none; }
+  .page.fit > .n-card.a-card.fill, .page.fit > .g-side { flex: 1; min-height: 0; }
+  .page.fit > .n-card.a-card.fill.top { flex: 3; }
+  .page.fit > .n-card.a-card.fill.bottom { flex: 2; }
+  .page.fit .g-side { grid-template-rows: minmax(0, 1fr); align-items: stretch; gap: 8px; }
+  .page.fit .n-card.fill { display: flex; flex-direction: column; min-height: 0; }
+  .page.fit .n-card.fill > .n-card-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .page.fit .n-data-table { flex: 1; min-height: 0; }
+  .page.fit .g-side > .n-card:first-child { overflow: auto; }
+  .page.fit .toolbar-row { flex-shrink: 0; }
+  .row-sel .n-data-table-td { background-color: var(--tab-active-bg) !important; }
+
+  /* 响应式:按内容区容器宽度(已扣侧栏)而不是视口宽度 */
+  .page-scroll { container-type: inline-size; }
+  @container (max-width: 1100px) { .g-4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @container (max-width: 1000px) { .g-main, .g-3, .g-side, .g-side-lg { grid-template-columns: 1fr; } .page.fit .g-side { grid-template-rows: auto minmax(0, 1fr); } }
+  @container (max-width: 620px) { .g-4, .g-2 { grid-template-columns: 1fr; } }
+
+  /* 可访问性 / 降级 */
+  .n-modal-mask, .n-drawer-mask { background-color: var(--mask) !important; }
+  .noise { mix-blend-mode: normal; opacity: calc(var(--noise-opacity) * .5); }
+  .role-item:focus-visible, .side-user:focus-visible, .cmdk-item:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+  .toolbar .n-button:focus-visible, .tabsbar .n-button:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+    .hoverlift:hover { transform: none !important; }
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-panel, .sidebar, .n-card.a-card { background: var(--glass-solid) !important; }
+  }
+
+  /* ═══════════════ 导航完整隐藏 / 一屏放下 / 科技感 / 倒角修复 ═══════════════ */
+  .layout.collapsed { --side-w: 0px; gap: 0; }
+  .layout.collapsed .sidebar { visibility: hidden; opacity: 0; pointer-events: none; border-width: 0; box-shadow: none; }
+  .sidebar { transition: opacity .2s ease, visibility .2s; }
+  .side-mask { position: fixed; inset: 0; z-index: 55; background: var(--mask); }
+  .layout.narrow { grid-template-columns: 1fr !important; }
+  .layout.narrow .sidebar { position: fixed; left: 8px; top: 8px; bottom: 8px; width: 232px; z-index: 60; box-shadow: var(--glass-shadow); }
+
+  /* 倒角:容器不再用大圆角裁剪,卡片贴边时四角保持完整 */
+  .page-scroll { border-radius: 0; }
+  .page.fit { padding: 0 2px 2px; }
+
+  /* 每页一屏:除"组件规范"外都固定高度,内容多的卡片在卡片内滚动 */
+  .page.fit > * { min-width: 0; }
+  .page.tbl > .page-head { display: none; }
+  .page.fit > .page-head { flex-shrink: 0; margin: 0; padding: 0 2px; }
+  .page.fit > .page-head .eyebrow { display: none; }
+  .page.fit > .page-head > div:first-child { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .page.fit .large-title { font-size: 22px; line-height: 28px; }
+  .page.fit .subtitle { margin: 0; }
+  .page.fit .n-card.a-card { display: flex; flex-direction: column; min-height: 0; }
+  .page.fit .n-card.a-card > .n-card-header { flex-shrink: 0; }
+  .page.fit .n-card.a-card > .n-card-content { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+  .page.fit .n-card.a-card.row > .n-card-content { flex-direction: row; }
+  .page.fit .n-card.a-card.fill > .n-card-content { overflow: hidden; }
+  .page.fit .g-side > .n-card:first-child > .n-card-content { overflow: auto; }
+  .page.fit .n-card-content > * { flex-shrink: 0; }
+  .page.fit .n-card-content > .pane { flex: 1 1 0; min-height: 0; overflow: auto; }
+  .page.fit .n-card-content > .n-data-table { flex: 1 1 0; min-height: 0; }
+  .page.fit > .pane { flex: 1; min-height: 0; overflow: auto; }
+  .page.fit > .grid { min-height: 0; }
+  .page.fit > .g-side, .page.fit > .g-side-lg { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .p-role .g-side-lg > div { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .p-role .g-side-lg > div > .n-card:first-child { flex-shrink: 0; }
+  .page.fit.p-workbench { display: grid; grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1.1fr); gap: 8px; }
+  .page.fit.p-monitor { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
+  .p-profile .g-side > .n-card { align-self: start; }
+  .p-profile .g-side > div:last-child { overflow: auto; min-height: 0; }
+  .p-profile .section-title { margin: 8px 0 4px 2px; }
+  .p-recycle .n-card-content { justify-content: center; align-items: center; }
+  .cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 0 12px; align-content: start; }
+  .cfg-sec .section-title { margin-top: 4px; }
+  .spark { flex: 1 1 0; min-height: 60px; height: auto; width: 100%; }
+  .spark path, .spark line { vector-effect: non-scaling-stroke; }
+  .axis-row { display: flex; justify-content: space-between; flex-shrink: 0; padding-top: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+  .page.fit .toolbar-row { flex-wrap: nowrap; }
+  .page.fit .toolbar-row > .n-input, .page.fit .toolbar-row > .n-select, .page.fit .toolbar-row > .n-date-picker { flex: 0 1 auto; min-width: 0; }
+  .page.fit .toolbar-row > .n-button, .page.fit .toolbar-row > .card-title { flex-shrink: 0; }
+  @container (max-width: 1700px) { .tb-opt { display: none !important; } }
+  .row-sel .n-data-table-td { background-color: var(--n-merged-td-color) !important; background-image: linear-gradient(var(--tab-active-bg), var(--tab-active-bg)); }
+  @container (max-width: 1000px) { .page.fit .g-side, .page.fit .g-side-lg { grid-template-rows: auto minmax(0, 1fr); } }
+
+  /* 科技感:渐变数字、发光竖条、深海蓝渐变主按钮、图标点色 */
+  .stat-val, .kpi-i b { background: linear-gradient(120deg, var(--num-a), var(--num-b)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card-title iconify-icon { color: var(--signal); }
+  .sidebar .n-menu-item-content { position: relative; }
+  .sidebar .n-menu-item-content--selected::after { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 3px; background: var(--signal); }
+  [data-theme='light'] .n-button.cta {
+    background-image: linear-gradient(135deg, #0B2A6F 0%, #0A5BD6 100%); border-color: transparent;
+    box-shadow: 0 10px 22px -10px rgba(10, 91, 214, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .page.fit .n-list .n-list-item { padding: 6px 0; }
+  .page.fit .n-list .n-list-item .n-thing-main__description { margin-top: 0; }
+  .page.fit .n-timeline .n-timeline-item-content__content { margin-top: 2px; }
+  .page.fit .n-timeline .n-timeline-item { padding-bottom: 8px; }
+  .page.fit .n-card.a-card > .n-card-header { padding-bottom: 6px; }
+  .page.fit .n-timeline .n-timeline-item { padding-bottom: 2px; }
+  .page.fit .n-timeline .n-timeline-item-content__title { font-size: 14px; }
+  .page.fit .n-timeline .n-timeline-item-content__content { font-size: 13.5px; line-height: 1.4; }
+  .page.fit .n-timeline .n-timeline-item-content__meta { margin-top: 0; font-size: 12.5px; }
+  @container (max-width: 1100px) { .page.fit .g-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @container (max-width: 760px) { .page.fit .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-height: 820px) {
+    .p-workbench .mini { display: none; }
+    .p-workbench .stat-val { font-size: 24px; }
+    .p-workbench .stat-top { margin-bottom: 2px; }
+    .p-workbench .stat-foot { margin-top: 2px; }
+    .p-workbench .axis-row { display: none; }
+  }
+  .page.fit .n-card.a-card { overflow: hidden; }
+
+  .top-user { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 4px; margin-left: 4px; border-radius: 999px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+  .top-user:hover, .top-user:focus-visible { background: var(--hover); border-color: var(--hairline); outline: none; }
+  .top-user-name { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  @media (max-width: 1100px) { .top-user-name { display: none; } }
+  .udrop { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 6px; min-width: 200px; }
+  .udrop b { font-size: 14px; }
+  .udrop span { font-size: 13px; color: var(--text-3); }
+  .n-card.centered .n-card-content, .p-recycle .n-card-content { justify-content: center; align-items: center; }
+  /* 表格最后一行不画底线:卡片底边不出现多余横线 */
+  .n-data-table .n-data-table-td.n-data-table-td--last-row { border-bottom: 0 !important; }
+
+  .module-wrap { height: 100vh; overflow: auto; padding: 56px 24px; display: flex; flex-direction: column; align-items: center; }
+  .module-head { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; width: 100%; max-width: 980px; }
+  .module-head h1 { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .module-back { margin-left: auto; }
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; width: 100%; max-width: 980px; }
+  .mod-card { cursor: pointer; }
+  .mod-card.current { box-shadow: inset 0 0 0 1.5px var(--signal), var(--glass-shadow-soft); }
+  .mod-card:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .mod-body { display: flex; align-items: center; gap: 12px; }
+  .mod-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .mod-t b { font-size: 16px; font-weight: 600; }
+  .mod-t span { font-size: 13px; color: var(--text-3); }
+  .brand-name small { font-family: var(--font); font-size: 12.5px; letter-spacing: 0.02em; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="noise" aria-hidden="true"></div>
+
+<script type="text/x-template" id="shell-tpl">
+  <!-- ═══════════ 登录页 ═══════════ -->
+  <div v-if="route === 'login'" class="login">
+    <div class="login-halo"></div><div class="login-floor"></div>
+    <div class="login-corner">
+      <n-button quaternary circle :aria-label="isDark ? '切换到浅色' : '切换到深色'" @click="toggleDark">
+        <template #icon><iconify-icon :icon="isDark ? 'ph:moon' : 'ph:sun'" width="18" /></template>
+      </n-button>
+    </div>
+    <div class="login-card">
+      <div class="login-logo"><iconify-icon icon="ph:shield-check-fill" width="28" /></div>
+      <span class="eyebrow">SmartAdmin · Control Center</span>
+      <h1>欢迎回来</h1>
+      <n-card :bordered="true" class="a-card" content-style="padding: 26px 26px 22px">
+        <n-form :show-label="false" size="large">
+          <n-form-item path="u"><n-input v-model:value="login.user" placeholder="账号 / 邮箱 / 手机号"><template #prefix><iconify-icon icon="ph:user" width="18" class="faint" /></template></n-input></n-form-item>
+          <n-form-item path="p"><n-input v-model:value="login.pass" type="password" show-password-on="click" placeholder="密码"><template #prefix><iconify-icon icon="ph:lock-simple" width="18" class="faint" /></template></n-input></n-form-item>
+          <n-form-item path="c">
+            <n-input-group>
+              <n-input v-model:value="login.captcha" placeholder="验证码" />
+              <n-button secondary style="width: 120px" class="mono">X7K2</n-button>
+            </n-input-group>
+          </n-form-item>
+        </n-form>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin: -4px 0 18px">
+          <n-checkbox v-model:checked="login.remember">记住我</n-checkbox>
+          <n-button text type="primary">忘记密码?</n-button>
+        </div>
+        <n-button class="cta" type="primary" size="large" block :loading="login.loading" @click="doLogin">继续</n-button>
+        <n-divider style="margin: 22px 0 16px"><span class="faint" style="font-size: 13px; font-weight:400">或使用以下方式</span></n-divider>
+        <div class="grid g-3" style="gap:10px">
+          <n-button secondary><template #icon><iconify-icon icon="ph:building-office" width="17" /></template>企业 SSO</n-button>
+          <n-button secondary><template #icon><iconify-icon icon="ph:github-logo" width="17" /></template>GitHub</n-button>
+          <n-button secondary><template #icon><iconify-icon icon="ph:qr-code" width="17" /></template>扫码</n-button>
+        </div>
+      </n-card>
+      <div class="login-foot">© 2026 SmartAdmin · <n-button text size="tiny" style="font-size: 13px">隐私政策</n-button> · <n-button text size="tiny" style="font-size: 13px">帮助</n-button></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 404 ═══════════ -->
+  <div v-else-if="route === '404'" class="login">
+    <n-result status="404" title="找不到这个页面" description="链接可能已失效,或你没有访问权限。" size="large">
+      <template #footer>
+        <n-space justify="center">
+          <n-button secondary @click="go('workbench')">返回工作台</n-button>
+          <n-button class="cta" type="primary" @click="route = 'login'">重新登录</n-button>
+        </n-space>
+      </template>
+    </n-result>
+  </div>
+
+  <!-- ═══════════ 应用选择页(多应用门户) ═══════════ -->
+  <div v-else-if="route === 'module'" class="module-wrap">
+    <div class="module-head">
+      <div class="brand-mark"><iconify-icon icon="ph:shield-check-fill" width="18" /></div>
+      <h1>选择应用</h1>
+      <n-button text size="small" class="module-back" @click="route = prevRoute"><template #icon><iconify-icon icon="ph:arrow-left" width="15" /></template>返回</n-button>
+    </div>
+    <div class="module-grid">
+      <n-card v-for="m in MODULES" :key="m.id" class="a-card hoverlift mod-card" :class="{ current: m.id === curModuleId }" content-style="padding: 16px 18px" role="button" tabindex="0" @click="switchModule(m.id)" @keydown.enter="switchModule(m.id)">
+        <div class="mod-body">
+          <div class="sym"><iconify-icon :icon="m.icon" width="22" /></div>
+          <div class="mod-t"><b>{{ m.title }}</b><span class="mono">{{ m.code }}</span></div>
+          <n-tag v-if="m.id === defaultModuleId" size="small" type="primary" :bordered="false">默认</n-tag>
+          <n-button v-else text size="tiny" @click.stop="setDefault(m.id)">设为默认</n-button>
+        </div>
+      </n-card>
+    </div>
+  </div>
+
+  <!-- ═══════════ 应用壳 ═══════════ -->
+  <div v-else class="layout" :class="{ collapsed, narrow: isNarrow }">
+    <div v-if="isNarrow && !collapsed" class="side-mask" @click="collapsed = true"></div>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><iconify-icon icon="ph:shield-check-fill" width="18" /></div>
+        <span class="brand-name">SmartAdmin<small>{{ curModule.code }} · {{ curModule.title }}</small></span>
+      </div>
+      <div class="side-search">
+        <n-input size="small" readonly placeholder="搜索" @click="cmdk.show = true" style="cursor:pointer">
+          <template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template>
+        </n-input>
+      </div>
+      <n-scrollbar class="side-menu">
+        <n-menu
+          v-model:expanded-keys="expandedKeys"
+          :value="route"
+          :options="menuOptions"
+          :collapsed="false"
+          :collapsed-width="68"
+          :collapsed-icon-size="20"
+          :icon-size="18"
+          :root-indent="14"
+          :indent="14"
+          @update:value="go"
+        />
+      </n-scrollbar>
+    </aside>
+
+    <section class="main">
+      <div class="shell-head glass-panel">
+      <header class="toolbar">
+        <n-button quaternary circle :aria-label="collapsed ? '显示导航栏' : '隐藏导航栏'" :title="(collapsed ? '显示' : '隐藏') + '导航栏 (Ctrl+B)'" @click="collapsed = !collapsed">
+          <template #icon><iconify-icon icon="ph:sidebar-simple" width="19" /></template>
+        </n-button>
+        <n-button-group size="small">
+          <n-button quaternary circle aria-label="后退"><template #icon><iconify-icon icon="ph:caret-left" width="16" /></template></n-button>
+          <n-button quaternary circle aria-label="前进" disabled><template #icon><iconify-icon icon="ph:caret-right" width="16" /></template></n-button>
+        </n-button-group>
+        <n-breadcrumb class="crumb">
+          <n-breadcrumb-item v-for="c in crumbs" :key="c">{{ c }}</n-breadcrumb-item>
+        </n-breadcrumb>
+        <div class="spacer"></div>
+        
+
+        <n-tooltip>
+          <template #trigger>
+            <n-button quaternary circle aria-label="切换主题" @click="toggleDark">
+              <template #icon><iconify-icon :icon="isDark ? 'ph:moon' : 'ph:sun'" width="19" /></template>
+            </n-button>
+          </template>
+          {{ isDark ? '切换到浅色模式' : '切换到深色模式' }}
+        </n-tooltip>
+        <n-tooltip>
+          <template #trigger>
+            <n-button quaternary circle :aria-label="isFs ? '退出全屏' : '全屏'" @click="toggleFs">
+              <template #icon><iconify-icon :icon="isFs ? 'ph:corners-in' : 'ph:corners-out'" width="19" /></template>
+            </n-button>
+          </template>
+          {{ isFs ? '退出全屏' : '全屏' }}
+        </n-tooltip>
+        <n-tooltip>
+          <template #trigger>
+            <n-button quaternary circle aria-label="语言"><template #icon><iconify-icon icon="ph:translate" width="19" /></template></n-button>
+          </template>
+          语言 / Language
+        </n-tooltip>
+        <n-popover trigger="click" placement="bottom-end" :width="360" style="padding:0">
+          <template #trigger>
+            <n-button quaternary circle aria-label="通知">
+              <template #icon>
+                <n-badge :value="3" :max="99" :offset="[2, -2]"><iconify-icon icon="ph:bell" width="19" /></n-badge>
+              </template>
+            </n-button>
+          </template>
+          <div style="padding: 12px 14px 4px; display:flex; justify-content:space-between; align-items:center">
+            <b style="font-size: 15px">通知</b>
+            <n-button text type="primary" size="small">全部已读</n-button>
+          </div>
+          <n-tabs type="segment" size="small" style="padding: 6px 14px 0" animated>
+            <n-tab-pane name="a" tab="全部 (3)">
+              <n-list hoverable clickable :show-divider="false" style="margin: 0 -8px">
+                <n-list-item v-for="n in notices" :key="n.t">
+                  <n-thing :title="n.t" :description="n.time" content-style="font-size: 14px">
+                    <template #avatar><div class="sym sm"><iconify-icon :icon="n.i" width="15" /></div></template>
+                  </n-thing>
+                </n-list-item>
+              </n-list>
+            </n-tab-pane>
+            <n-tab-pane name="b" tab="公告"><n-empty description="暂无公告" style="padding: 28px 0" /></n-tab-pane>
+          </n-tabs>
+          <div style="border-top:1px solid var(--separator); padding:8px; text-align:center">
+            <n-button text size="small">查看全部</n-button>
+          </div>
+        </n-popover>
+        <n-tooltip>
+          <template #trigger>
+            <n-button quaternary circle aria-label="切换模块" @click="openModule"><template #icon><iconify-icon icon="ph:squares-four" width="19" /></template></n-button>
+          </template>
+          切换模块
+        </n-tooltip>
+        <n-dropdown :options="userMenu" placement="bottom-end" @select="onUserMenu">
+          <div class="top-user" tabindex="0" role="button" aria-label="账号菜单">
+            <n-avatar round :size="28">安</n-avatar>
+            <span class="top-user-name">Andy Zhong</span>
+            <iconify-icon icon="ph:caret-down" width="13" class="faint" />
+          </div>
+        </n-dropdown>
+      </header>
+
+
+      <div v-if="prefs.tabs" class="tabsbar chrome-tabs">
+        <n-tabs type="card" size="small" :value="route" @update:value="go" @close="closeTab">
+          <n-tab v-for="t in openTabs" :key="t" :name="t" :closable="t !== 'workbench'" @contextmenu.prevent="onTabCtx($event, t)" @auxclick="e => e.button === 1 && t !== 'workbench' && closeTab(t)">
+            <span class="ctab" :title="titleOf(t)"><iconify-icon :icon="iconOf(t)" width="15" /><span class="ctab-t">{{ titleOf(t) }}</span></span>
+          </n-tab>
+          <template #suffix>
+            <n-tooltip><template #trigger><n-button quaternary circle size="small" aria-label="刷新当前页"><template #icon><iconify-icon icon="ph:arrow-clockwise" width="15" /></template></n-button></template>刷新当前页</n-tooltip>
+            <n-dropdown :options="tabMenu" placement="bottom-end" @select="onTabMenu">
+              <n-button quaternary circle size="small" aria-label="页签操作"><template #icon><iconify-icon icon="ph:dots-nine" width="15" /></template></n-button>
+            </n-dropdown>
+          </template>
+        </n-tabs>
+      </div>
+      </div>
+      <n-scrollbar class="page-scroll canvas">
+        <div class="page" :class="['p-' + route, { fit: route !== 'components', tbl: tblRoutes.includes(route) }]" :key="route + ':' + reloadKey">
+
+<!-- ─────────── 工作台 ─────────── -->
+<template v-if="route === 'workbench'">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Overview · Sat 26 Sep</span><h1 class="large-title">下午好,Andy</h1>
+    </div>
+    <n-space>
+      <n-button secondary @click="go('components')"><template #icon><iconify-icon icon="ph:squares-four" width="17" /></template>组件规范</n-button>
+      <n-button class="cta" type="primary" @click="userDrawer = true"><template #icon><iconify-icon icon="ph:plus" width="17" /></template>新建用户</n-button>
+    </n-space>
+  </div>
+
+  <div class="grid g-4">
+    <n-card v-for="s in stats" :key="s.label" class="a-card hoverlift" content-style="padding: 12px 14px">
+      <div class="stat-top"><span class="eyebrow">{{ s.en }}</span><div class="sym sm"><iconify-icon :icon="s.icon" width="15" /></div></div>
+      <div class="stat-val">{{ s.value }}<small v-if="s.unit">{{ s.unit }}</small></div>
+      <div class="stat-foot">
+        <span class="muted" style="font-size: 14px">{{ s.label }}</span>
+        <div style="text-align:right">
+          <svg class="mini" viewBox="0 0 96 28" aria-hidden="true"><path :d="miniPath(s.spark)" fill="none" :stroke="s.up ? p.signal : p.error" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="glow-line" /></svg>
+          <div class="delta" :class="{ down: !s.up }">{{ s.up ? '+' : '−' }}{{ s.delta }} 较昨日</div>
+        </div>
+      </div>
+    </n-card>
+  </div>
+
+  <div class="grid g-main">
+    <n-card class="a-card">
+      <template #header><div><span class="eyebrow">Traffic · 30d</span><div style="display:flex; align-items:baseline; gap:10px; margin-top:6px"><span class="stat-val" style="font-size: 26px">48,210</span><span class="delta">+18.4% 较上期</span></div></div></template>
+      <template #header-extra>
+        <n-radio-group v-model:value="trendRange" size="small">
+          <n-radio-button value="7">7 天</n-radio-button>
+          <n-radio-button value="30">30 天</n-radio-button>
+          <n-radio-button value="90">90 天</n-radio-button>
+        </n-radio-group>
+      </template>
+      <svg class="spark" viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="近 30 天访问量趋势,整体上升">
+        <defs>
+          <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" :stop-color="p.signal" stop-opacity=".3" /><stop offset="100%" :stop-color="p.signal" stop-opacity="0" /></linearGradient>
+          <linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" :stop-color="p.signal" /><stop offset="100%" stop-color="#22D3EE" /></linearGradient>
+        </defs>
+        <g :stroke="p.separator" stroke-width="1" stroke-dasharray="2 4">
+          <line x1="0" x2="600" y1="40" y2="40" /><line x1="0" x2="600" y1="90" y2="90" /><line x1="0" x2="600" y1="140" y2="140" /><line x1="0" x2="600" y1="190" y2="190" />
+        </g>
+        <path :d="trend.area" fill="url(#ga)" />
+        <path :d="trend.line2" fill="none" :stroke="p.text4" stroke-width="1.2" stroke-dasharray="3 4" />
+        <path :d="trend.line" class="glow-line" fill="none" stroke="url(#gl)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+      </svg>
+      <div class="axis-row"><span v-for="d in ['09/01','09/06','09/11','09/16','09/21','09/26']" :key="d">{{ d }}</span></div>
+      <n-space size="large" style="margin-top: 10px; font-size: 13.5px">
+        <span><span class="dot" :style="{ background: p.signal, boxShadow: '0 0 8px ' + p.signal }"></span>本期访问</span>
+        <span class="muted"><span class="dot" :style="{ background: p.text3 }"></span>上期</span>
+      </n-space>
+    </n-card>
+
+    <n-card title="快捷入口" class="a-card">
+      <template #header-extra><n-button text type="primary" size="small">编辑</n-button></template>
+      <div class="grid g-3" style="gap:10px; grid-auto-rows: 1fr; flex: 1; min-height: 0">
+        <n-button v-for="q in quick" :key="q.t" secondary class="qa-btn" @click="go(q.to)">
+          <div class="qa-inner">
+            <div class="sym sm"><iconify-icon :icon="q.i" width="16" /></div>
+            {{ q.t }}
+          </div>
+        </n-button>
+      </div>
+    </n-card>
+  </div>
+
+  <div class="grid g-3">
+    <n-card title="待办" class="a-card" content-style="padding-top:4px">
+      <template #header-extra><n-tag size="small" round :bordered="false">4</n-tag></template>
+      <n-list :show-divider="true">
+        <n-list-item v-for="t in todos" :key="t.t">
+          <template #prefix><n-checkbox v-model:checked="t.done" /></template>
+          <div :style="{ textDecoration: t.done ? 'line-through' : 'none', color: t.done ? p.text3 : p.text1 }">{{ t.t }}</div>
+          <div class="faint" style="font-size: 13px">{{ t.due }}</div>
+          <template #suffix><n-tag size="small" :type="t.lv" :bordered="false">{{ t.lvT }}</n-tag></template>
+        </n-list-item>
+      </n-list>
+    </n-card>
+    <n-card title="最近登录" class="a-card" content-style="padding-top:4px">
+      <template #header-extra><n-button text size="small" @click="go('log')">全部</n-button></template>
+      <n-list>
+        <n-list-item v-for="l in logins" :key="l.time">
+          <n-thing :title="l.dev" :description="l.where" title-style="font-size: 14px; font-weight:500">
+            <template #avatar><div class="sym sm"><iconify-icon :icon="l.i" width="15" /></div></template>
+          </n-thing>
+          <template #suffix><span class="faint num" style="font-size: 13px; white-space:nowrap">{{ l.time }}</span></template>
+        </n-list-item>
+      </n-list>
+    </n-card>
+    <n-card title="系统公告" class="a-card" content-style="padding-top:8px">
+      <n-timeline>
+        <n-timeline-item title="v10.15.0 已发布" content="角色授权菜单界面重做,授权更直观" time="9 月 25 日" />
+        <n-timeline-item title="周日 02:00 例行维护" content="预计 30 分钟,期间登录不受影响" time="9 月 24 日" />
+        <n-timeline-item title="新增 AI 模型管理" content="支持填入 Key 即用" time="9 月 17 日" />
+      </n-timeline>
+    </n-card>
+  </div>
+</template>
+
+<!-- ─────────── 用户管理 ─────────── -->
+<template v-else-if="route === 'user'">
+  <div class="page-head">
+    <div><span class="eyebrow">Identity / Users</span><h1 class="large-title">用户</h1></div>
+    <n-space>
+      <n-button secondary><template #icon><iconify-icon icon="ph:download-simple" width="17" /></template>导入</n-button>
+      <n-button secondary><template #icon><iconify-icon icon="ph:export" width="17" /></template>导出</n-button>
+      <n-button class="cta" type="primary" @click="userDrawer = true"><template #icon><iconify-icon icon="ph:plus" width="17" /></template>新建用户</n-button>
+    </n-space>
+  </div>
+  <div class="grid g-side">
+    <n-card class="a-card fill" size="small" content-style="padding: 10px">
+      <n-input v-model:value="orgKw" size="small" placeholder="筛选机构" clearable style="margin-bottom:10px">
+        <template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template>
+      </n-input>
+      <n-tree :data="orgTree" :pattern="orgKw" default-expand-all block-line selectable :default-selected-keys="['1']" />
+    </n-card>
+    <n-card class="a-card fill" content-style="padding: 10px 12px 8px">
+      <div class="toolbar-row">
+        <span class="card-title"><iconify-icon icon="ph:users" width="18" />用户<em>共 {{ users.length }} 人</em></span>
+        <n-input placeholder="搜索姓名、账号或手机号" clearable style="width: 260px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="16" class="faint" /></template></n-input>
+        <n-select placeholder="状态" clearable style="width: 120px" :options="[{label:'启用',value:1},{label:'停用',value:0}]" />
+        <n-select placeholder="角色" clearable multiple max-tag-count="responsive" style="width: 180px" :options="roleOptions" />
+        <n-button class="tb-opt" quaternary><template #icon><iconify-icon icon="ph:arrow-counter-clockwise" width="16" /></template>重置</n-button>
+        <div class="grow"></div>
+        <template v-if="checked.length">
+          <span class="muted" style="font-size: 14px">已选 {{ checked.length }} 项</span>
+          <n-button secondary size="small">分配角色</n-button>
+          <n-button secondary size="small" type="error" @click="confirmDelete">删除</n-button>
+        </template>
+        <n-button class="tb-opt" secondary><template #icon><iconify-icon icon="ph:download-simple" width="16" /></template>导入</n-button>
+        <n-button class="tb-opt" secondary><template #icon><iconify-icon icon="ph:export" width="16" /></template>导出</n-button>
+        <n-button class="cta" type="primary" @click="userDrawer = true"><template #icon><iconify-icon icon="ph:plus" width="16" /></template>新建用户</n-button>
+        <n-tooltip><template #trigger><n-button quaternary circle aria-label="刷新"><template #icon><iconify-icon icon="ph:arrow-clockwise" width="17" /></template></n-button></template>刷新</n-tooltip>
+        <n-tooltip><template #trigger><n-button quaternary circle aria-label="列设置"><template #icon><iconify-icon icon="ph:columns" width="17" /></template></n-button></template>列设置</n-tooltip>
+      </div>
+      <n-data-table :columns="userColumns" :data="users" :row-key="r => r.id" v-model:checked-row-keys="checked" :pagination="{ pageSize: 30, showSizePicker: true, pageSizes: [20, 30, 50, 100], showQuickJumper: true, prefix: ({ itemCount }) => `共 ${itemCount} 条` }" :single-line="true" flex-height :scroll-x="1040" />
+    </n-card>
+  </div>
+</template>
+
+<!-- ─────────── 角色管理 ─────────── -->
+<template v-else-if="route === 'role'">
+  <div class="page-head">
+    <div><span class="eyebrow">Access / Roles</span><h1 class="large-title">角色</h1></div>
+    <n-button class="cta" type="primary"><template #icon><iconify-icon icon="ph:plus" width="17" /></template>新建角色</n-button>
+  </div>
+  <div class="grid g-side-lg">
+    <n-card class="a-card" size="small" content-style="padding: 10px">
+      <n-input size="small" placeholder="搜索角色" style="margin: 2px 0 8px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template></n-input>
+      <div v-for="(r, i) in roles" :key="r.code" class="role-item" :class="{ on: roleIdx === i }" @click="roleIdx = i" role="button" tabindex="0" @keydown.enter="roleIdx = i">
+        <div class="sym sm"><iconify-icon :icon="r.i" width="15" /></div>
+        <div class="grow"><b>{{ r.name }}</b><span>{{ r.members }} 名成员</span></div>
+        <n-tag v-if="!r.on" size="small" :bordered="false">停用</n-tag>
+        <iconify-icon icon="ph:caret-right" width="14" class="faint" />
+      </div>
+    </n-card>
+
+    <div>
+      <n-card class="a-card">
+        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+          <div class="sym" :style="{ width:'48px', height:'48px', borderRadius:'13px' }"><iconify-icon :icon="role.i" width="24" /></div>
+          <div style="flex:1; min-width: 200px">
+            <div style="display:flex; align-items:center; gap:8px"><b style="font-size: 19px">{{ role.name }}</b><n-tag size="small" :bordered="false" class="mono">{{ role.code }}</n-tag></div>
+          </div>
+          <n-space>
+            <n-button secondary>编辑</n-button>
+            <n-dropdown :options="[{label:'复制角色',key:'c'},{label:'停用',key:'d'},{type:'divider',key:'x'},{label:'删除',key:'del',props:{style:'color:'+p.error}}]"><n-button secondary circle aria-label="更多"><template #icon><iconify-icon icon="ph:dots-three" width="18" /></template></n-button></n-dropdown>
+          </n-space>
+        </div>
+      </n-card>
+
+      <n-card class="a-card" style="flex: 1; min-height: 0" content-style="padding-top: 6px">
+        <n-tabs type="segment" v-model:value="roleTab" style="max-width: 520px; flex-shrink: 0">
+          <n-tab name="menu">菜单权限</n-tab>
+          <n-tab name="scope">数据范围</n-tab>
+          <n-tab name="member">成员 ({{ role.members }})</n-tab>
+        </n-tabs>
+
+        <div v-if="roleTab === 'menu'" class="pane" style="margin-top: 10px">
+          <div class="toolbar-row">
+            <n-input size="small" placeholder="搜索菜单或权限码" style="width:240px" v-model:value="permKw"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template></n-input>
+            <div class="grow"></div>
+            <n-checkbox size="small">父子联动</n-checkbox>
+            <n-button size="small" quaternary>全部展开</n-button>
+            <n-button size="small" quaternary>全选</n-button>
+          </div>
+          <n-tree style="max-width: 980px" :data="permTree" checkable cascade block-line default-expand-all :pattern="permKw" v-model:checked-keys="permChecked" :render-suffix="permSuffix" />
+        </div>
+
+        <div v-else-if="roleTab === 'scope'" class="pane" style="margin-top: 10px; max-width: 640px">
+          <n-radio-group v-model:value="scope" style="width:100%">
+            <n-list bordered style="border-radius: 12px">
+              <n-list-item v-for="s in scopes" :key="s.v">
+                <n-radio :value="s.v"><span class="set-row-label"><b>{{ s.t }}</b></span></n-radio>
+              </n-list-item>
+            </n-list>
+          </n-radio-group>
+          <n-collapse-transition :show="scope === 'custom'">
+            <div class="section-title">选择可访问的机构</div>
+            <n-card size="small" embedded :bordered="false"><n-tree :data="orgTree" checkable cascade default-expand-all block-line :default-checked-keys="['11','12']" /></n-card>
+          </n-collapse-transition>
+        </div>
+
+        <div v-else class="pane" style="margin-top: 10px">
+          <div class="toolbar-row"><n-input size="small" placeholder="搜索成员" style="width:240px" /><div class="grow"></div><n-button size="small" secondary><template #icon><iconify-icon icon="ph:user-plus" width="15" /></template>添加成员</n-button></div>
+          <n-data-table size="small" :columns="memberColumns" :data="users.slice(0, 5)" :single-line="true" />
+        </div>
+
+        <n-divider style="margin: 10px 0 8px" />
+        <div style="display:flex; justify-content:flex-end; gap:8px; align-items:center">
+          <n-button secondary>撤销修改</n-button>
+          <n-button class="cta" type="primary" @click="msg.success('角色权限已保存')">保存</n-button>
+        </div>
+      </n-card>
+    </div>
+  </div>
+</template>
+
+<!-- ─────────── 菜单管理 ─────────── -->
+<template v-else-if="route === 'menu'">
+  <div class="page-head">
+    <div><span class="eyebrow">Access / Menus</span><h1 class="large-title">菜单</h1></div>
+    <n-space>
+      <n-button secondary>全部折叠</n-button>
+      <n-button class="cta" type="primary" @click="menuModal = true"><template #icon><iconify-icon icon="ph:plus" width="17" /></template>新建菜单</n-button>
+    </n-space>
+  </div>
+  <n-card class="a-card fill" content-style="padding: 10px 12px 8px">
+    <div class="toolbar-row">
+      <span class="card-title"><iconify-icon icon="ph:list-dashes" width="18" />菜单</span>
+      <n-radio-group v-model:value="menuApp" size="small">
+        <n-radio-button value="admin">管理后台</n-radio-button>
+        <n-radio-button value="portal">门户</n-radio-button>
+      </n-radio-group>
+      <n-input size="small" placeholder="搜索名称或路由" style="width:240px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template></n-input>
+      <div class="grow"></div>
+      <n-button secondary>全部折叠</n-button>
+      <n-button class="cta" type="primary" @click="menuModal = true"><template #icon><iconify-icon icon="ph:plus" width="16" /></template>新建菜单</n-button>
+    </div>
+    <n-data-table :columns="menuColumns" :data="menuRows" :row-key="r => r.id" default-expand-all :single-line="true" flex-height :scroll-x="900" />
+  </n-card>
+</template>
+
+<!-- ─────────── 字典管理 ─────────── -->
+<template v-else-if="route === 'dict'">
+  <div class="page-head">
+    <div><span class="eyebrow">Data / Dictionary</span><h1 class="large-title">字典</h1></div>
+    <n-button class="cta" type="primary"><template #icon><iconify-icon icon="ph:plus" width="17" /></template>新建字典</n-button>
+  </div>
+  <div class="grid g-side">
+    <n-card class="a-card fill" size="small" content-style="padding: 10px">
+      <n-input size="small" placeholder="搜索字典" style="margin: 2px 0 8px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="15" class="faint" /></template></n-input>
+      <div v-for="(d, i) in dicts" :key="d.code" class="role-item" :class="{ on: dictIdx === i }" role="button" tabindex="0" @click="dictIdx = i" @keydown.enter="dictIdx = i">
+        <div class="grow"><b>{{ d.name }}</b><span class="mono">{{ d.code }}</span></div>
+        <span class="faint num" style="font-size: 13px">{{ d.n }}</span>
+      </div>
+    </n-card>
+    <n-card class="a-card fill" :title="dicts[dictIdx].name" content-style="padding-top: 4px">
+      <template #header-extra><n-space><n-button size="small" secondary>编辑字典</n-button><n-button class="cta" size="small" type="primary">新增字典项</n-button></n-space></template>
+      <n-data-table :columns="dictColumns" :data="dictItems" :single-line="true" flex-height :scroll-x="640" />
+    </n-card>
+  </div>
+</template>
+
+<!-- ─────────── 系统配置 ─────────── -->
+<template v-else-if="route === 'config'">
+  <div class="page-head">
+    <div><span class="eyebrow">System / Settings</span><h1 class="large-title">系统配置</h1></div>
+    <n-space><n-button secondary>恢复默认</n-button><n-button class="cta" type="primary" @click="msg.success('配置已保存')">保存更改</n-button></n-space>
+  </div>
+  <n-tabs type="segment" v-model:value="cfgTab" style="max-width: 560px; flex-shrink: 0">
+    <n-tab name="basic">基础</n-tab><n-tab name="security">安全</n-tab><n-tab name="upload">上传</n-tab><n-tab name="mail">邮件</n-tab>
+  </n-tabs>
+  <div class="pane cfg-grid">
+    <template v-if="cfgTab === 'basic'">
+      <div class="cfg-sec">
+        <div class="section-title">站点</div>
+        <n-card class="a-card" content-style="padding: 0 16px">
+          <n-list>
+            <n-list-item><div class="set-row-label"><b>站点名称</b></div><template #suffix><n-input value="SmartAdmin" style="width: 240px" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>Logo</b></div><template #suffix><n-space align="center" :wrap="false"><div class="brand-mark"><iconify-icon icon="ph:shield-check-fill" width="18" /></div><n-button size="small" secondary>更换</n-button></n-space></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>默认语言</b></div><template #suffix><n-select value="zh-CN" style="width: 160px" :options="[{label:'简体中文',value:'zh-CN'},{label:'English',value:'en'}]" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>全局水印</b></div><template #suffix><n-switch v-model:value="prefs.watermark" /></template></n-list-item>
+          </n-list>
+        </n-card>
+      </div>
+      <div class="cfg-sec">
+        <div class="section-title">备案与页脚</div>
+        <n-card class="a-card" content-style="padding: 0 16px">
+          <n-list>
+            <n-list-item><div class="set-row-label"><b>ICP 备案号</b></div><template #suffix><n-input placeholder="未设置" style="width: 240px" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>页脚版权</b></div><template #suffix><n-input value="© 2026 SmartAdmin" style="width: 240px" /></template></n-list-item>
+          </n-list>
+        </n-card>
+      </div>
+    </template>
+    <template v-else-if="cfgTab === 'security'">
+      <div class="cfg-sec">
+        <div class="section-title">登录</div>
+        <n-card class="a-card" content-style="padding: 0 16px">
+          <n-list>
+            <n-list-item><div class="set-row-label"><b>登录验证码</b></div><template #suffix><n-switch :default-value="true" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>失败锁定阈值</b></div><template #suffix><n-input-number :default-value="5" :min="1" style="width: 140px"><template #suffix>次</template></n-input-number></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>锁定时长</b></div><template #suffix><n-input-number :default-value="15" style="width: 140px"><template #suffix>分钟</template></n-input-number></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>强制双因素认证(MFA)</b></div><template #suffix><n-switch /></template></n-list-item>
+          </n-list>
+        </n-card>
+      </div>
+      <div class="cfg-sec">
+        <div class="section-title">密码策略</div>
+        <n-card class="a-card" content-style="padding: 0 16px">
+          <n-list>
+            <n-list-item><div class="set-row-label"><b>最小长度</b></div><template #suffix><n-slider :default-value="8" :min="6" :max="32" style="width: 220px" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>复杂度</b></div><template #suffix><n-checkbox-group :default-value="['a','n']"><n-space><n-checkbox value="a" label="字母" /><n-checkbox value="n" label="数字" /><n-checkbox value="s" label="符号" /></n-space></n-checkbox-group></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>定期更换</b></div><template #suffix><n-select value="90" style="width: 140px" :options="[{label:'从不',value:'0'},{label:'每 90 天',value:'90'},{label:'每 180 天',value:'180'}]" /></template></n-list-item>
+          </n-list>
+        </n-card>
+      </div>
+    </template>
+    <template v-else>
+      <n-card class="a-card" style="grid-column: 1 / -1"><n-empty description="暂无配置项"><template #extra><n-button size="small" secondary @click="cfgTab = 'basic'">看基础配置</n-button></template></n-empty></n-card>
+    </template>
+  </div>
+</template>
+
+<!-- ─────────── 生产工单(MES 示例:主表 + 明细页签) ─────────── -->
+<template v-else-if="route === 'mes'">
+  <n-card class="a-card fill top" content-style="padding: 10px 12px 8px">
+    <div class="toolbar-row">
+      <span class="card-title"><iconify-icon icon="ph:factory" width="18" />生产工单<em>共 {{ workOrders.length }} 张</em></span>
+      <n-input placeholder="工单号 / 产品" clearable style="width: 180px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="16" class="faint" /></template></n-input>
+      <n-select placeholder="产线" clearable multiple max-tag-count="responsive" style="width: 160px" :options="mesLines.map(l => ({ label: l, value: l }))" />
+      <n-select placeholder="状态" clearable style="width: 110px" :options="Object.keys(mesStatus).map(l => ({ label: l, value: l }))" />
+      <n-date-picker class="tb-opt" type="daterange" clearable style="width: 240px" />
+      <n-button type="primary" secondary><template #icon><iconify-icon icon="ph:magnifying-glass" width="16" /></template>查询</n-button>
+      <n-button class="tb-opt" quaternary>重置</n-button>
+      <div class="grow"></div>
+      <n-button class="tb-opt" secondary><template #icon><iconify-icon icon="ph:download-simple" width="16" /></template>导入</n-button>
+      <n-button class="tb-opt" secondary><template #icon><iconify-icon icon="ph:export" width="16" /></template>导出</n-button>
+      <n-button class="cta" type="primary"><template #icon><iconify-icon icon="ph:plus" width="16" /></template>新建工单</n-button>
+      <n-tooltip><template #trigger><n-button quaternary circle aria-label="刷新"><template #icon><iconify-icon icon="ph:arrow-clockwise" width="17" /></template></n-button></template>刷新</n-tooltip>
+      <n-tooltip><template #trigger><n-button quaternary circle aria-label="列设置"><template #icon><iconify-icon icon="ph:columns" width="17" /></template></n-button></template>列设置</n-tooltip>
+    </div>
+    <n-data-table :columns="mesColumns" :data="workOrders" :row-key="r => r.no" :summary="mesSummary" :row-props="mesRowProps" :row-class-name="r => (r.no === selWo.no ? 'row-sel' : '')" :pagination="{ pageSize: 30, size: 'small', showSizePicker: true, pageSizes: [30, 50, 100, 200], showQuickJumper: true, prefix: ({ itemCount }) => `共 ${itemCount} 条` }" :single-line="true" flex-height :scroll-x="1800" />
+  </n-card>
+  <n-card class="a-card fill bottom" content-style="padding: 4px 0 0">
+    <div class="toolbar-row" style="margin: 0 12px 2px">
+      <n-tabs v-model:value="detailTab" type="line" style="flex: 1">
+        <n-tab name="op">工序明细</n-tab><n-tab name="bom">物料 BOM</n-tab><n-tab name="rec">报工记录</n-tab>
+      </n-tabs>
+      <span class="muted" style="font-size: 14px">当前工单 <b class="mono" style="color: var(--text-1)">{{ selWo.no }}</b> · {{ selWo.product }}</span>
+    </div>
+    <n-data-table v-if="detailTab === 'op'" size="small" :bordered="false" :columns="opColumns" :data="opRows" :single-line="true" flex-height :scroll-x="820" />
+    <n-data-table v-else-if="detailTab === 'bom'" size="small" :bordered="false" :columns="bomColumns" :data="bomRows" :single-line="true" flex-height :scroll-x="900" />
+    <n-data-table v-else size="small" :bordered="false" :columns="recColumns" :data="recRows" :single-line="true" flex-height :scroll-x="820" />
+  </n-card>
+</template>
+
+<!-- ─────────── 操作日志 ─────────── -->
+<template v-else-if="route === 'log'">
+  <div class="page-head">
+    <div><span class="eyebrow">Audit / Operations</span><h1 class="large-title">操作日志</h1></div>
+    <n-button secondary><template #icon><iconify-icon icon="ph:export" width="17" /></template>导出</n-button>
+  </div>
+  <n-card class="a-card fill" content-style="padding: 10px 12px 8px">
+    <div class="toolbar-row">
+      <span class="card-title"><iconify-icon icon="ph:clock-counter-clockwise" width="18" />操作日志</span>
+      <n-date-picker class="tb-opt" type="daterange" clearable style="width: 260px" />
+      <n-select placeholder="模块" clearable style="width: 140px" :options="[{label:'用户',value:1},{label:'角色',value:2},{label:'菜单',value:3}]" />
+      <n-select placeholder="结果" clearable style="width: 110px" :options="[{label:'成功',value:1},{label:'失败',value:0}]" />
+      <n-input placeholder="操作人 / IP / 路径" clearable style="width: 220px"><template #prefix><iconify-icon icon="ph:magnifying-glass" width="16" class="faint" /></template></n-input>
+      <n-button type="primary" secondary>查询</n-button>
+      <div class="grow"></div>
+      <n-button class="tb-opt" secondary><template #icon><iconify-icon icon="ph:export" width="16" /></template>导出</n-button>
+    </div>
+    <n-data-table :columns="logColumns" :data="logs" :row-props="logRowProps" :pagination="{ pageSize: 30, showSizePicker: true, pageSizes: [30, 50, 100], showQuickJumper: true, prefix: ({ itemCount }) => `共 ${itemCount} 条` }" :single-line="true" flex-height :scroll-x="980" />
+  </n-card>
+</template>
+
+<!-- ─────────── 服务监控 ─────────── -->
+<template v-else-if="route === 'monitor'">
+  <div class="page-head">
+    <div><span class="eyebrow">Runtime / Health</span><h1 class="large-title">服务监控</h1></div>
+    <n-space align="center"><n-switch :default-value="true" size="small"><template #checked>自动刷新</template><template #unchecked>已暂停</template></n-switch><n-button secondary circle aria-label="立即刷新"><template #icon><iconify-icon icon="ph:arrow-clockwise" width="17" /></template></n-button></n-space>
+  </div>
+  <div class="grid g-4">
+    <n-card v-for="m in meters" :key="m.t" class="a-card row" content-style="display:flex; align-items:center; gap:16px; padding: 12px 16px">
+      <n-progress type="circle" :percentage="m.v" :color="m.c" :rail-color="p.fill" :stroke-width="10" style="width: 60px" :show-indicator="false" />
+      <div><div class="muted" style="font-size: 14px">{{ m.t }}</div><div class="num" style="font-size: 26px; font-weight:600; letter-spacing:-.02em">{{ m.v }}<span style="font-size: 14px; font-weight:500" class="muted">%</span></div><div class="faint" style="font-size: 13px">{{ m.d }}</div></div>
+    </n-card>
+  </div>
+  <div class="grid g-2">
+    <n-card title="服务器" class="a-card">
+      <n-descriptions :column="2" label-placement="left" size="small" label-style="color: var(--text-3)">
+        <n-descriptions-item label="主机名">sa-prod-01</n-descriptions-item>
+        <n-descriptions-item label="操作系统">Ubuntu 24.04</n-descriptions-item>
+        <n-descriptions-item label="运行时">.NET 10.0.3</n-descriptions-item>
+        <n-descriptions-item label="运行时长">12 天 4 小时</n-descriptions-item>
+        <n-descriptions-item label="数据库">SQL Server 2022</n-descriptions-item>
+        <n-descriptions-item label="缓存">Redis 7.4</n-descriptions-item>
+      </n-descriptions>
+    </n-card>
+    <n-card title="集群节点" class="a-card" content-style="padding-top:4px">
+      <n-list>
+        <n-list-item v-for="nd in nodes" :key="nd.n">
+          <n-thing :title="nd.n" :description="nd.d" title-style="font-size: 14px;font-weight:500" />
+          <template #suffix><n-tag :type="nd.ok ? 'success' : 'warning'" size="small" round :bordered="false"><span class="dot" :style="{ background: nd.ok ? p.success : p.warning }"></span>{{ nd.s }}</n-tag></template>
+        </n-list-item>
+      </n-list>
+    </n-card>
+  </div>
+</template>
+
+<!-- ─────────── 个人中心 ─────────── -->
+<template v-else-if="route === 'profile'">
+  <div class="page-head"><div><span class="eyebrow">Account</span><h1 class="large-title">个人中心</h1></div></div>
+  <div class="grid g-side">
+    <n-card class="a-card" content-style="padding: 18px 16px; text-align:center">
+      <n-avatar round :size="84" :style="{ fontSize: '32px' }">安</n-avatar>
+      <div style="font-size: 19px; font-weight:600; margin-top:12px">Andy Zhong</div>
+      <div class="muted" style="font-size: 14px">andy@smartadmin.dev</div>
+      <n-space justify="center" style="margin-top: 12px"><n-tag size="small" :bordered="false" type="primary">超级管理员</n-tag><n-tag size="small" :bordered="false">研发中心</n-tag></n-space>
+      <n-button secondary block style="margin-top:18px">更换头像</n-button>
+    </n-card>
+    <div>
+      <div class="section-title" style="margin-top:0">账号</div>
+      <n-card class="a-card" content-style="padding: 0 18px">
+        <n-list hoverable clickable>
+          <n-list-item v-for="row in profileRows" :key="row.t">
+            <div class="set-row-icon"><div class="sym sm"><iconify-icon :icon="row.i" width="15" /></div><div class="set-row-label"><b>{{ row.t }}</b></div></div>
+            <template #suffix><n-space align="center" :wrap="false"><span class="muted" style="white-space:nowrap">{{ row.v }}</span><iconify-icon icon="ph:caret-right" width="14" class="faint" /></n-space></template>
+          </n-list-item>
+        </n-list>
+      </n-card>
+      <div class="section-title">安全</div>
+      <n-card class="a-card" content-style="padding: 0 18px">
+        <n-list>
+          <n-list-item><div class="set-row-icon"><div class="sym sm"><iconify-icon icon="ph:shield-check" width="15" /></div><div class="set-row-label"><b>双因素认证</b></div></div><template #suffix><n-switch :default-value="true" /></template></n-list-item>
+          <n-list-item><div class="set-row-icon"><div class="sym sm"><iconify-icon icon="ph:key" width="15" /></div><div class="set-row-label"><b>登录密码</b></div></div><template #suffix><n-button size="small" secondary>修改</n-button></template></n-list-item>
+          <n-list-item><div class="set-row-icon"><div class="sym sm"><iconify-icon icon="ph:devices" width="15" /></div><div class="set-row-label"><b>登录设备</b></div></div><template #suffix><n-button size="small" secondary type="error">全部下线</n-button></template></n-list-item>
+        </n-list>
+      </n-card>
+      <div class="section-title">通知</div>
+      <n-card class="a-card" content-style="padding: 0 18px">
+        <n-list>
+          <n-list-item v-for="nt in notifyPrefs" :key="nt.t"><div class="set-row-label"><b>{{ nt.t }}</b></div><template #suffix><n-switch v-model:value="nt.on" /></template></n-list-item>
+        </n-list>
+      </n-card>
+    </div>
+  </div>
+</template>
+
+<!-- ─────────── 回收站(空状态) ─────────── -->
+<template v-else-if="route === 'recycle'">
+  <div class="page-head"><div><span class="eyebrow">Data / Recycle bin</span><h1 class="large-title">回收站</h1></div></div>
+  <n-card class="a-card fill" content-style="padding: 20px">
+    <n-empty size="huge" description="回收站是空的">
+      <template #icon><iconify-icon icon="ph:trash" width="56" /></template>
+      <template #extra><n-button size="small" secondary @click="go('workbench')">返回工作台</n-button></template>
+    </n-empty>
+  </n-card>
+</template>
+
+<!-- ─────────── 其余菜单页(原型未绘制):通用空页 ─────────── -->
+<template v-else-if="!['components'].includes(route)">
+  <div class="page-head"><div><h1 class="large-title">{{ currentTitle }}</h1></div></div>
+  <n-card class="a-card fill centered" content-style="padding: 20px">
+    <n-empty size="huge" description="暂无内容">
+      <template #icon><iconify-icon :icon="iconOf(route)" width="56" /></template>
+      <template #extra><n-button size="small" secondary @click="go('workbench')">返回工作台</n-button></template>
+    </n-empty>
+  </n-card>
+</template>
+
+<!-- ─────────── 组件规范 ─────────── -->
+<template v-else>
+  <div class="page-head"><div><span class="eyebrow">Design system</span><h1 class="large-title">组件规范</h1></div></div>
+  <div class="grid g-2">
+    <n-card title="按钮" class="a-card">
+      <n-space vertical :size="14">
+        <n-space><n-button class="cta" type="primary">主要操作</n-button><n-button secondary>次要操作</n-button><n-button tertiary>第三级</n-button><n-button quaternary>第四级</n-button><n-button text type="primary">文字链接</n-button></n-space>
+        <n-space><n-button type="error">删除</n-button><n-button secondary type="error">危险次要</n-button><n-button class="cta" type="primary" loading>保存中</n-button><n-button disabled>不可用</n-button></n-space>
+        <n-space align="center"><n-button class="cta" size="small" type="primary">小</n-button><n-button class="cta" type="primary">中(默认 32)</n-button><n-button class="cta" size="large" type="primary">大(登录页)</n-button><n-button secondary circle aria-label="更多"><template #icon><iconify-icon icon="ph:dots-three" width="18" /></template></n-button></n-space>
+        <div class="faint" style="font-size: 13.5px">规则:一屏一个 <b>primary</b>;其余用 <b>secondary</b>(灰底,Apple 式)而不是描边按钮;工具栏图标按钮用 <b>quaternary circle</b>。</div>
+      </n-space>
+    </n-card>
+    <n-card title="输入" class="a-card">
+      <n-space vertical :size="12">
+        <n-input placeholder="普通输入框(聚焦出现 3px 主色光环)" />
+        <n-input placeholder="禁用" disabled />
+        <n-input status="error" value="格式不正确" />
+        <n-space :wrap="false"><n-select placeholder="下拉选择" :options="roleOptions" style="width: 200px" /><n-date-picker placeholder="日期" style="width: 180px" /><n-input-number placeholder="数字" style="width: 140px" /></n-space>
+        <n-space align="center"><n-switch :default-value="true" /><n-switch /><n-checkbox :default-checked="true">复选</n-checkbox><n-radio :checked="true">单选</n-radio></n-space>
+      </n-space>
+    </n-card>
+    <n-card title="分段控件 / 标签 / 徽标" class="a-card">
+      <n-space vertical :size="14">
+        <n-tabs type="segment" style="max-width: 360px"><n-tab name="1">日</n-tab><n-tab name="2">周</n-tab><n-tab name="3">月</n-tab></n-tabs>
+        <n-radio-group :default-value="'a'"><n-radio-button value="a">列表</n-radio-button><n-radio-button value="b">卡片</n-radio-button><n-radio-button value="c">看板</n-radio-button></n-radio-group>
+        <n-space><n-tag :bordered="false">默认</n-tag><n-tag type="primary" :bordered="false">主色</n-tag><n-tag type="success" :bordered="false">启用</n-tag><n-tag type="warning" :bordered="false">待审核</n-tag><n-tag type="error" :bordered="false">停用</n-tag><n-tag type="info" :bordered="false">信息</n-tag><n-tag round :bordered="false" closable>可关闭</n-tag></n-space>
+        <n-space :size="22" align="center"><n-badge :value="5"><n-avatar round :size="34">A</n-avatar></n-badge><n-badge dot><n-avatar :size="34">B</n-avatar></n-badge><n-avatar-group :options="[{name:'王'},{name:'李'},{name:'张'},{name:'赵'}]" :size="30" :max="3" /></n-space>
+      </n-space>
+    </n-card>
+    <n-card title="反馈" class="a-card">
+      <n-space vertical :size="10">
+        <n-alert type="info" :bordered="false" title="提示">柔和底色,不加描边。</n-alert>
+        <n-alert type="success" :bordered="false">保存成功</n-alert>
+        <n-alert type="warning" :bordered="false">密码将在 7 天后过期</n-alert>
+        <n-alert type="error" :bordered="false">连接数据库失败</n-alert>
+        <n-space>
+          <n-button secondary size="small" @click="msg.success('已保存')">Message</n-button>
+          <n-button secondary size="small" @click="confirmDelete">确认对话框</n-button>
+          <n-button secondary size="small" @click="notify">Notification</n-button>
+          <n-button secondary size="small" @click="menuModal = true">表单弹窗</n-button>
+          <n-button secondary size="small" @click="userDrawer = true">表单抽屉</n-button>
+          <n-button secondary size="small" @click="cmdk.show = true">⌘K 搜索</n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+    <n-card title="步骤 / 进度 / 分页" class="a-card">
+      <n-space vertical :size="18">
+        <n-steps :current="2" size="small"><n-step title="上传文件" /><n-step title="字段映射" /><n-step title="校验" /><n-step title="导入" /></n-steps>
+        <n-progress type="line" :percentage="64" :height="6" :show-indicator="false" />
+        <n-pagination :page-count="12" :page="3" />
+      </n-space>
+    </n-card>
+    <n-card title="空状态 / 结果页" class="a-card">
+      <div class="grid g-2"><n-empty description="暂无数据" /><n-result status="success" title="导入完成" description="共 1,280 条" size="small" /></div>
+    </n-card>
+  </div>
+
+  <div class="section-title">颜色令牌 · 当前:{{ isDark ? '深色' : '浅色' }}</div>
+  <n-card class="a-card">
+    <div class="token-grid">
+      <div class="token" v-for="t in tokenList" :key="t[0]"><i :style="{ background: t[1] }"></i><div><b>{{ t[2] }}</b><br><code>{{ t[0] }}</code> <code>{{ t[1] }}</code></div></div>
+    </div>
+  </n-card>
+
+  <div class="section-title">设计说明(交付给实现)</div>
+  <n-card class="a-card spec">
+    <h3 style="margin-top:0">1. 风格基调</h3>
+    <ul>
+      <li>参考 visionOS / Apple Pro 应用(Final Cut、Logic):<b>单色主调 + 玻璃材质 + 发丝光边 + 等宽数字</b>。不用渐变按钮、彩色图标块、柔光装饰。</li>
+      <li><b>单色主调</b>:主按钮深色下白底黑字、浅色下黑底白字;侧栏选中项是半透明亮面加内描边,不用彩色实底。</li>
+      <li><b>信号色</b>:唯一的彩色(系统蓝),只出现在数据线、聚焦环、开关、进度这些"有信息量"的地方。</li>
+      <li><b>材质</b>:卡片、弹层、侧栏都是半透明磨砂;卡片顶边一道渐变光边(上亮下暗)。画布是近黑底,顶部有一束极淡的冷光,点阵网格向下渐隐,再叠一层极细的噪点。</li>
+      <li><b>页签</b>:Chrome 式。工具栏和页签条同色,激活页签与画布同色,用反向圆角接进内容区;工作台固定为只有图标的页签。</li>
+      <li><b>字体</b>:数字、编号、英文小标签(eyebrow)用 JetBrains Mono,正文用 Inter + 苹方 / 微软雅黑。</li>
+    </ul>
+    <h3>2. 组件用法约定(不新增组件)</h3>
+    <ul>
+      <li>按钮:<code>type="primary"</code> 一屏一个;其余一律 <code>secondary</code>(灰底);图标按钮 <code>quaternary circle</code>;危险操作 <code>type="error"</code>。</li>
+      <li>分段控件:<code>n-tabs type="segment"</code>(页内切换) / <code>n-radio-group + n-radio-button</code>(筛选、时间范围)。</li>
+      <li>设置类页面:<code>n-card</code> 包 <code>n-list</code>,左文字(标题 + 说明)右控件,即 iOS 设置行。</li>
+      <li>表格:<code>single-line</code>,表头与行同底色、次级字色 500 字重,无斑马纹;状态用 <code>n-tag :bordered="false"</code>。</li>
+      <li>标签 / Alert 一律 <code>:bordered="false"</code>(柔和底色);卡片圆角 14,控件 8,弹窗 14。</li>
+    </ul>
+    <h3>3. 需要你确认的点</h3>
+    <ol>
+      <li><b>默认主色</b>从青绿 <code>#14B8A6</code> 改为"单色"(黑 / 白),信号色为系统蓝;外观设置里仍可切换蓝 / 靛蓝 / 青 / 绿 / 石墨。</li>
+      <li><b>字体</b>:Windows 没有 SF Pro,原型用 Google Fonts 的 Inter + JetBrains Mono 作为替身(中文仍走 PingFang / 微软雅黑)。落地需要把 Inter 打包进来(woff2 自托管,约 100KB)或直接用系统字体栈不引 Inter —— 这是新增资源,请确认。</li>
+      <li><b>布局</b>:原型只画了竖向侧栏模式;其余 5 种布局模式沿用同一套令牌,不改结构。侧栏加了搜索框(复用现有 MenuSearch),顶栏去掉了全局搜索与面包屑以外的装饰。</li>
+      <li><b>登录页</b>:三套皮肤(skins)建议保留一套 Apple 式居中卡片为默认,另两套只换令牌。</li>
+      <li>工作台趋势图是静态示意,实现仍用现有 <code>Chart</code> 组件,只改配色。</li>
+      <li>头像、卡片里的彩色圆角图标底块(类 SF Symbols 设置图标)是纯 CSS 样式,不是新组件。</li>
+    </ol>
+  </n-card>
+</template>
+
+        </div>
+      </n-scrollbar>
+    </section>
+  </div>
+
+  <n-dropdown placement="bottom-start" trigger="manual" :x="ctx.x" :y="ctx.y" :options="ctxOptions" :show="ctx.show" :on-clickoutside="() => (ctx.show = false)" @select="onCtxSelect" />
+
+  <!-- ═══════════ 全局浮层 ═══════════ -->
+  <n-drawer v-model:show="userDrawer" width="min(480px, 100vw)" placement="right">
+    <n-drawer-content title="新建用户" closable :native-scrollbar="false">
+      <n-form label-placement="top" require-mark-placement="right-hanging">
+        <div class="section-title" style="margin-top:0">基本信息</div>
+        <div class="grid g-2" style="gap: 0 14px">
+          <n-form-item label="姓名" required><n-input placeholder="真实姓名" /></n-form-item>
+          <n-form-item label="账号" required><n-input placeholder="登录账号" /></n-form-item>
+          <n-form-item label="手机号"><n-input placeholder="11 位手机号" /></n-form-item>
+          <n-form-item label="邮箱"><n-input placeholder="name@company.com" /></n-form-item>
+        </div>
+        <div class="section-title">组织与角色</div>
+        <n-form-item label="所属机构" required><n-tree-select :options="orgTree" default-expand-all placeholder="选择机构" /></n-form-item>
+        <n-form-item label="岗位"><n-select :options="[{label:'前端工程师',value:1},{label:'产品经理',value:2}]" placeholder="选择岗位" /></n-form-item>
+        <n-form-item label="角色"><n-select multiple :options="roleOptions" :default-value="['ops']" placeholder="可多选" /></n-form-item>
+        <div class="section-title">账号设置</div>
+        <n-card embedded :bordered="false" size="small" content-style="padding: 2px 14px">
+          <n-list>
+            <n-list-item><div class="set-row-label"><b>启用账号</b></div><template #suffix><n-switch :default-value="true" /></template></n-list-item>
+            <n-list-item><div class="set-row-label"><b>首次登录修改密码</b></div><template #suffix><n-switch :default-value="true" /></template></n-list-item>
+          </n-list>
+        </n-card>
+      </n-form>
+      <template #footer>
+        <n-space><n-button secondary @click="userDrawer = false">取消</n-button><n-button class="cta" type="primary" @click="userDrawer = false; msg.success('用户已创建')">创建</n-button></n-space>
+      </template>
+    </n-drawer-content>
+  </n-drawer>
+
+  <n-modal v-model:show="menuModal" preset="card" title="新建菜单" style="width: min(560px, calc(100vw - 24px))" :bordered="false" :segmented="{ footer: 'soft' }">
+    <n-form label-placement="left" label-width="80" require-mark-placement="left">
+      <n-form-item label="类型"><n-radio-group :default-value="'page'"><n-radio-button value="dir">目录</n-radio-button><n-radio-button value="page">页面</n-radio-button><n-radio-button value="btn">按钮</n-radio-button></n-radio-group></n-form-item>
+      <n-form-item label="上级菜单"><n-tree-select :options="permTree" default-expand-all placeholder="顶级" /></n-form-item>
+      <n-form-item label="名称" required><n-input placeholder="如:用户管理" /></n-form-item>
+      <n-form-item label="图标"><n-input placeholder="ph:users"><template #prefix><iconify-icon icon="ph:users" width="16" /></template><template #suffix><n-button text size="small" type="primary">选择</n-button></template></n-input></n-form-item>
+      <n-form-item label="路由"><n-input placeholder="/system/user" class="mono" /></n-form-item>
+      <n-form-item label="排序"><n-input-number :default-value="10" style="width: 140px" /></n-form-item>
+      <n-form-item label="显示"><n-switch :default-value="true" /></n-form-item>
+    </n-form>
+    <template #footer><n-space justify="end"><n-button secondary @click="menuModal = false">取消</n-button><n-button class="cta" type="primary" @click="menuModal = false">保存</n-button></n-space></template>
+  </n-modal>
+
+  <n-drawer v-model:show="logDrawer" width="min(520px, 100vw)">
+    <n-drawer-content title="请求详情" closable :native-scrollbar="false">
+      <n-descriptions :column="1" label-placement="left" bordered size="small" label-style="width: 96px">
+        <n-descriptions-item label="操作人">{{ logSel.user }}</n-descriptions-item>
+        <n-descriptions-item label="操作">{{ logSel.op }}</n-descriptions-item>
+        <n-descriptions-item label="请求"><span class="mono">{{ logSel.method }} {{ logSel.path }}</span></n-descriptions-item>
+        <n-descriptions-item label="结果"><n-tag size="small" :bordered="false" :type="logSel.ok ? 'success' : 'error'">{{ logSel.ok ? '成功' : '失败' }}</n-tag></n-descriptions-item>
+        <n-descriptions-item label="耗时"><span class="num">{{ logSel.ms }} ms</span></n-descriptions-item>
+        <n-descriptions-item label="IP"><span class="mono">{{ logSel.ip }}</span></n-descriptions-item>
+        <n-descriptions-item label="时间"><span class="num">{{ logSel.time }}</span></n-descriptions-item>
+      </n-descriptions>
+      <div class="section-title">请求体</div>
+      <n-code :code="logBody" language="json" style="font-size: 13.5px; padding: 12px 14px; border-radius: 10px; background: var(--fill)" />
+    </n-drawer-content>
+  </n-drawer>
+
+  <n-drawer v-model:show="settingsOpen" width="min(360px, 100vw)">
+    <n-drawer-content title="外观" closable>
+      <div class="section-title" style="margin-top:0">外观模式</div>
+      <n-radio-group :value="prefs.mode" @update:value="setMode" style="display:flex">
+        <n-radio-button value="light" style="flex:1; text-align:center">浅色</n-radio-button>
+        <n-radio-button value="dark" style="flex:1; text-align:center">深色</n-radio-button>
+        <n-radio-button value="auto" style="flex:1; text-align:center">自动</n-radio-button>
+      </n-radio-group>
+      <div class="section-title">强调色</div>
+      <div style="display:flex; gap:14px; padding: 4px 4px 2px">
+        <n-tooltip v-for="(a, i) in ACCENTS" :key="a.name">
+          <template #trigger><button class="swatch" :class="{ on: accentIdx === i }" :style="{ background: isDark ? a.dark : a.light }" :aria-label="a.name" @click="accentIdx = i"></button></template>
+          {{ a.name }}
+        </n-tooltip>
+      </div>
+      <div class="section-title">界面</div>
+      <n-card embedded :bordered="false" size="small" content-style="padding: 2px 14px">
+        <n-list>
+          <n-list-item><div class="set-row-label"><b>多页签</b></div><template #suffix><n-switch v-model:value="prefs.tabs" /></template></n-list-item>
+          <n-list-item><div class="set-row-label"><b>隐藏导航栏</b></div><template #suffix><n-switch v-model:value="collapsed" /></template></n-list-item>
+          <n-list-item><div class="set-row-label"><b>水印</b></div><template #suffix><n-switch v-model:value="prefs.watermark" /></template></n-list-item>
+          <n-list-item><div class="set-row-label"><b>页面切换动画</b></div><template #suffix><n-switch :default-value="true" /></template></n-list-item>
+        </n-list>
+      </n-card>
+      <div class="section-title">布局</div>
+      <n-select value="vertical" :options="[{label:'侧栏导航',value:'vertical'},{label:'顶部导航',value:'horizontal'},{label:'双栏侧栏',value:'vertical-mix'}]" />
+      <div class="section-title">原型评审</div>
+      <n-space>
+        <n-button size="small" secondary @click="settingsOpen = false; route = 'login'">登录页</n-button>
+        <n-button size="small" secondary @click="settingsOpen = false; route = '404'">404 页</n-button>
+      </n-space>
+    </n-drawer-content>
+  </n-drawer>
+
+  <n-modal v-model:show="cmdk.show" :auto-focus="true" transform-origin="center">
+    <n-card style="width: min(560px, calc(100vw - 24px)); margin: 12vh auto auto" :bordered="false" content-style="padding: 10px" role="dialog" aria-label="搜索菜单">
+      <n-input v-model:value="cmdk.kw" size="large" placeholder="搜索页面、用户或设置…" :bordered="false" autofocus @keydown="cmdkKey">
+        <template #prefix><iconify-icon icon="ph:magnifying-glass" width="20" class="faint" /></template>
+        <template #suffix><kbd>esc</kbd></template>
+      </n-input>
+      <n-divider style="margin: 8px 0" />
+      <div style="max-height: 320px; overflow:auto">
+        <div class="faint" style="font-size: 13px; padding: 4px 10px 6px">页面</div>
+        <div v-for="(it, i) in cmdkResults" :key="it.key" class="cmdk-item" :class="{ on: cmdk.idx === i }" @mouseenter="cmdk.idx = i" @click="cmdkGo(it.key)">
+          <iconify-icon :icon="it.icon" width="17" />
+          <span style="flex:1">{{ it.label }}</span>
+          <span class="faint" style="font-size: 13px">{{ it.group }}</span>
+        </div>
+        <n-empty v-if="!cmdkResults.length" size="small" description="没有匹配的页面" style="padding: 20px 0" />
+      </div>
+      <div class="faint" style="display:flex; gap:14px; font-size: 13px; padding: 8px 10px 2px"><span><kbd>↑</kbd> <kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 打开</span></div>
+    </n-card>
+  </n-modal>
+
+  <n-watermark v-if="prefs.watermark && route !== 'login'" content="Andy Zhong · SmartAdmin" cross fullscreen :font-size="14" :line-height="16" :width="192" :height="128" :rotate="-16" :font-color="isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'" />
+
+</script>
+
+<script>
+const { createApp, defineComponent, ref, reactive, computed, watch, h, onMounted, onBeforeUnmount } = Vue
+const { darkTheme, zhCN, dateZhCN, useMessage, useDialog, useNotification, NTag, NButton, NAvatar, NSwitch, NSpace, NDropdown, NText, NProgress } = naive
+
+/* ─── 颜色工具(与 web/packages/admin/src/theme/mix.ts 同一套线性插值) ─── */
+const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255] }
+const rgb2hex = a => '#' + a.map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase()
+const mix = (a, b, t) => { const x = hex2rgb(a), y = hex2rgb(b); return rgb2hex(x.map((v, i) => v + (y[i] - v) * t)) }
+const rgba = (hex, a) => { const [r, g, b] = hex2rgb(hex); return `rgba(${r}, ${g}, ${b}, ${a})` }
+
+const luminance = hex => { const c = hex2rgb(hex).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
+
+/*
+ * 主色(UI 主调):默认"单色"——深色下白底黑字、浅色下黑底白字,是 Apple Pro 应用 / visionOS 的做法;
+ * 彩色从控件上撤下来,只留给"信号色"(数据线、聚焦环、开关、链接)。
+ * 选了彩色主色时,信号色跟随主色。浅色值均保证与字色 ≥ 4.5:1。
+ */
+const ACCENTS = [
+  { name: '单色(默认)', light: '#0F172A', dark: '#E2E8F0', mono: true },
+  { name: '蓝色', light: '#005FC0', dark: '#0A84FF' },
+  { name: '靛蓝', light: '#4F46E5', dark: '#7C83FF' },
+  { name: '青色', light: '#0E7490', dark: '#5AC8FA' },
+  { name: '绿色', light: '#248A3D', dark: '#30D158' },
+  { name: '石墨', light: '#6E6E73', dark: '#98989D' },
+]
+const SIGNAL = { light: '#005FC0', dark: '#3B9BFF' }
+
+/* ─── 角色令牌(定稿后替换 styles/tokens.css 的角色层) ─── */
+const PALETTE = {
+  light: {
+    // 冷调蓝白底 + 角落蓝/薄荷柔光 + 细线网格;文字与描边走 slate 蓝灰,避免"灰不溜秋"
+    app: '#F1F5FB', sidebar: 'rgba(255, 255, 255, 0.78)', header: 'rgba(255, 255, 255, 0.78)',
+    card: 'rgba(255, 255, 255, 0.76)', cardSolid: '#FFFFFF', elevated: 'rgba(255, 255, 255, 0.86)', elevatedA: 'rgba(255, 255, 255, 0.8)',
+    input: 'rgba(255, 255, 255, 0.92)', inputDisabled: 'rgba(100, 116, 139, 0.14)',
+    text1: '#0F172A', text2: '#475569', text3: '#56657A', text4: '#6B7A90',
+    border: 'rgba(15, 23, 42, 0.22)', separator: 'rgba(37, 99, 235, 0.11)',
+    hairline: 'rgba(37, 99, 235, 0.13)', hairlineStrong: 'rgba(37, 99, 235, 0.22)',
+    glass: 'rgba(255, 255, 255, 0.6)', glassStrong: 'rgba(15, 23, 42, 0.05)',
+    edgeTop: 'rgba(255, 255, 255, 1)', edgeMid: 'rgba(59, 130, 246, 0.1)', edgeBottom: 'rgba(59, 130, 246, 0)', edgeLight: 'rgba(255, 255, 255, 0.9)',
+    fill: 'rgba(15, 23, 42, 0.04)', fillStrong: 'rgba(15, 23, 42, 0.07)', hover: 'rgba(15, 23, 42, 0.035)', pressed: 'rgba(15, 23, 42, 0.07)',
+    mask: 'rgba(241, 245, 251, 0.55)',
+    success: '#047857', warning: '#A94E08', error: '#CA2323', info: '#0369A1',
+    shadow1: '0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -14px rgba(30, 64, 175, 0.12)',
+    shadow2: '0 22px 50px -16px rgba(30, 64, 175, 0.2), 0 0 0 1px rgba(15, 23, 42, 0.05)',
+    shadow3: '0 30px 90px -20px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(15, 23, 42, 0.06)',
+    segTrack: 'rgba(15, 23, 42, 0.05)', segThumb: '#FFFFFF', switchOff: 'rgba(15, 23, 42, 0.14)',
+    ambient1: 'rgba(59, 130, 246, 0.13)', ambient2: 'rgba(59, 130, 246, 0.08)', gridDot: 'rgba(15, 23, 42, 0.05)', gridLine: 'rgba(59, 130, 246, 0.07)',
+    wallpaper: 'linear-gradient(rgba(37, 99, 235, 0.075) 1px, transparent 1px) 0 0 / 44px 44px, linear-gradient(90deg, rgba(37, 99, 235, 0.075) 1px, transparent 1px) 0 0 / 44px 44px, radial-gradient(1300px 850px at 0% -10%, rgba(59, 130, 246, 0.55), transparent 60%), radial-gradient(1100px 800px at 100% 0%, rgba(139, 92, 246, 0.26), transparent 58%), radial-gradient(1200px 850px at 90% 115%, rgba(34, 211, 238, 0.5), transparent 60%), radial-gradient(900px 700px at 0% 100%, rgba(96, 165, 250, 0.5), transparent 60%), #E9F0FF',
+    glassPanel: 'rgba(246, 250, 255, 0.64)', glassBorder: 'rgba(255, 255, 255, 0.9)',
+    glassShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(15, 23, 42, 0.05), 0 28px 60px -26px rgba(37, 99, 235, 0.4)',
+    glassShadowSoft: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(15, 23, 42, 0.04), 0 20px 44px -24px rgba(37, 99, 235, 0.3)',
+    noise: '0.03', tabStrip: 'rgba(255, 255, 255, 0.85)', tabHover: 'rgba(15, 23, 42, 0.04)', tabActive: '#F1F5FB',
+  },
+  dark: {
+    // slate 海军蓝底 + 半透明玻璃卡(参考 ai.52moyu.net):深而不黑,层次靠透明度叠出来
+    app: '#020617', sidebar: 'rgba(15, 23, 42, 0.92)', header: 'rgba(30, 41, 59, 0.8)',
+    card: 'rgba(51, 65, 85, 0.55)', cardSolid: '#1B2842', elevated: 'rgba(15, 23, 42, 0.9)', elevatedA: 'rgba(30, 41, 59, 0.8)',
+    input: 'rgba(2, 6, 23, 0.55)', inputDisabled: 'rgba(148, 163, 184, 0.10)',
+    text1: '#F3F4F6', text2: '#D1D5DB', text3: '#A3B0C4', text4: '#8B99AF',
+    border: 'rgba(100, 116, 139, 0.9)', separator: 'rgba(51, 65, 85, 0.55)',
+    hairline: 'rgba(51, 65, 85, 0.55)', hairlineStrong: 'rgba(71, 85, 105, 0.7)',
+    glass: 'rgba(30, 41, 59, 0.5)', glassStrong: 'rgba(51, 65, 85, 0.45)',
+    edgeTop: 'rgba(255, 255, 255, 0.28)', edgeMid: 'rgba(255, 255, 255, 0.08)', edgeBottom: 'rgba(255, 255, 255, 0)', edgeLight: 'rgba(148, 163, 184, 0.12)',
+    fill: 'rgba(51, 65, 85, 0.35)', fillStrong: 'rgba(71, 85, 105, 0.5)', hover: 'rgba(51, 65, 85, 0.4)', pressed: 'rgba(71, 85, 105, 0.5)',
+    mask: 'rgba(2, 6, 23, 0.6)',
+    success: '#34D399', warning: '#FBBF24', error: '#F87171', info: '#38BDF8',
+    shadow1: '0 1px 3px rgba(0, 0, 0, 0.25), 0 10px 30px -18px rgba(0, 0, 0, 0.6)',
+    shadow2: '0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(71, 85, 105, 0.5)',
+    shadow3: '0 40px 100px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(71, 85, 105, 0.6)',
+    segTrack: 'rgba(15, 23, 42, 0.6)', segThumb: 'rgba(71, 85, 105, 0.6)', switchOff: 'rgba(71, 85, 105, 0.7)',
+    ambient1: 'rgba(56, 132, 255, 0.10)', ambient2: 'rgba(45, 212, 191, 0.04)', gridDot: 'rgba(148, 163, 184, 0.07)', gridLine: 'rgba(148, 163, 184, 0.08)',
+    wallpaper: 'linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px) 0 0 / 44px 44px, linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px) 0 0 / 44px 44px, radial-gradient(1400px 700px at 50% 18%, rgba(59, 130, 246, 0.2), transparent 65%), radial-gradient(1200px 800px at 5% -10%, rgba(37, 99, 235, 0.38), transparent 60%), radial-gradient(1000px 700px at 100% 5%, rgba(124, 58, 237, 0.26), transparent 58%), radial-gradient(1100px 800px at 80% 115%, rgba(13, 148, 136, 0.26), transparent 60%), radial-gradient(900px 700px at -5% 100%, rgba(30, 64, 175, 0.3), transparent 60%), #0A1226',
+    glassPanel: 'rgba(30, 41, 59, 0.62)', glassBorder: 'rgba(255, 255, 255, 0.14)',
+    glassShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 30px 70px -30px rgba(0, 0, 0, 0.8)',
+    glassShadowSoft: 'inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 20px 50px -28px rgba(0, 0, 0, 0.7)',
+    noise: '0.04', tabStrip: 'rgba(15, 23, 42, 0.92)', tabHover: 'rgba(51, 65, 85, 0.4)',
+  },
+}
+const FONT = `Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif`
+const MONO = `"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace`
+
+/* ─── Naive GlobalThemeOverrides:定稿后即 theme/naive-theme.ts 的新 buildThemeOverrides ─── */
+function buildOverrides(mode, acc, signal) {
+  const p = PALETTE[mode]
+  const dark = mode === 'dark'
+  const activeFg = dark ? mix(signal, '#FFFFFF', 0.35) : signal
+  const bright = luminance(acc) > 0.5
+  const onAcc = bright ? '#0A0A0B' : '#FFFFFF'
+  const hover = bright ? mix(acc, '#000000', 0.1) : mix(acc, '#FFFFFF', dark ? 0.14 : 0.16)
+  const pressed = bright ? mix(acc, '#000000', 0.18) : mix(acc, dark ? '#000000' : '#FFFFFF', 0.28)
+  const ring = `0 0 0 3px ${rgba(signal, dark ? 0.35 : 0.22)}`
+  const sem = b => ({ b, h: mix(b, '#FFFFFF', 0.12), p: mix(b, '#000000', 0.12) })
+  const ok = sem(p.success), warn = sem(p.warning), err = sem(p.error), info = sem(p.info)
+  const selection = {
+    borderRadius: '9px', color: p.input, colorActive: p.input, colorDisabled: p.inputDisabled,
+    border: `1px solid ${p.border}`,
+    borderHover: `1px solid ${dark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(15, 23, 42, 0.34)'}`, borderActive: `1px solid ${signal}`, borderFocus: `1px solid ${signal}`,
+    boxShadowActive: ring, boxShadowFocus: ring,
+  }
+  const checkbox = { borderRadius: '5px', boxShadowFocus: ring, checkMarkColor: '#FFFFFF', colorChecked: signal, borderChecked: `1px solid ${signal}`, colorIndeterminate: signal, borderIndeterminate: `1px solid ${signal}`, border: `1px solid ${p.border}`, color: p.input }
+  return {
+    common: {
+      primaryColor: acc, primaryColorHover: hover, primaryColorPressed: pressed, primaryColorSuppl: hover,
+      successColor: ok.b, successColorHover: ok.h, successColorPressed: ok.p, successColorSuppl: ok.h,
+      warningColor: warn.b, warningColorHover: warn.h, warningColorPressed: warn.p, warningColorSuppl: warn.h,
+      errorColor: err.b, errorColorHover: err.h, errorColorPressed: err.p, errorColorSuppl: err.h,
+      infoColor: info.b, infoColorHover: info.h, infoColorPressed: info.p, infoColorSuppl: info.h,
+      bodyColor: p.app, cardColor: p.card, tableColor: 'transparent', modalColor: p.elevated, popoverColor: p.elevated,
+      textColorBase: p.text1, textColor1: p.text1, textColor2: p.text2, textColor3: p.text3,
+      placeholderColor: p.text3, textColorDisabled: p.text4,
+      borderColor: p.border, dividerColor: p.separator,
+      inputColor: p.input, inputColorDisabled: p.inputDisabled,
+      actionColor: p.fill, tableHeaderColor: 'transparent', hoverColor: p.hover, pressedColor: p.pressed,
+      closeColorHover: p.hover, closeColorPressed: p.pressed, clearColor: p.text3,
+      borderRadius: '9px', borderRadiusSmall: '6px',
+      fontFamily: FONT, fontFamilyMono: MONO, fontWeightStrong: '600',
+      fontSizeMini: '12px', fontSizeTiny: '13px', fontSizeSmall: '14px', fontSizeMedium: '15px', fontSizeLarge: '16px', fontSizeHuge: '17px', fontSize: '15px',
+      heightMini: '22px', heightTiny: '24px', heightSmall: '28px', heightMedium: '32px', heightLarge: '42px', heightHuge: '46px',
+      boxShadow1: p.shadow1, boxShadow2: p.shadow2, boxShadow3: p.shadow3,
+      cubicBezierEaseInOut: 'cubic-bezier(.2, .8, .2, 1)',
+    },
+    Button: {
+      fontWeight: '500', borderRadiusMedium: '9px', borderRadiusSmall: '7px', borderRadiusLarge: '12px',
+      fontSizeLarge: '16px', paddingMedium: '0 14px', paddingSmall: '0 11px',
+      textColorPrimary: onAcc, textColorHoverPrimary: onAcc, textColorPressedPrimary: onAcc, textColorFocusPrimary: onAcc, textColorDisabledPrimary: onAcc,
+      colorSecondary: p.fill, colorSecondaryHover: p.fillStrong, colorSecondaryPressed: p.pressed,
+      textColorTextPrimary: dark ? p.text1 : acc, textColorTextHoverPrimary: signal, textColorGhostPrimary: acc,
+    },
+    Input: {
+      borderRadius: '9px', color: p.input, colorDisabled: p.inputDisabled, colorFocus: p.input,
+      border: `1px solid ${p.border}`, borderHover: `1px solid ${dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.24)'}`, borderFocus: `1px solid ${signal}`,
+      boxShadowFocus: ring, heightLarge: '42px', fontSizeLarge: '16px', caretColor: signal,
+    },
+    Select: { peers: { InternalSelection: selection, InternalSelectMenu: { borderRadius: '12px', optionHeightMedium: '30px', color: p.elevated, optionCheckColor: signal } } },
+    TreeSelect: { peers: { InternalSelection: selection } },
+    DatePicker: { peers: { Input: { borderRadius: '9px', color: p.input, borderFocus: `1px solid ${signal}`, boxShadowFocus: ring } } },
+    InputNumber: { peers: { Input: { color: p.input, borderFocus: `1px solid ${signal}`, boxShadowFocus: ring } } },
+    Card: {
+      color: p.card, colorEmbedded: p.fill, borderColor: 'transparent', borderRadius: '14px',
+      titleFontSizeMedium: '15px', titleFontSizeSmall: '15px', titleFontWeight: '600',
+      paddingMedium: '12px 14px 14px', paddingSmall: '10px 12px',
+      colorModal: p.elevated, actionColor: p.fill,
+    },
+    DataTable: {
+      thColor: dark ? '#1F2C47' : '#F4F7FB', thColorHover: dark ? '#243556' : '#EDF2F9', thColorSorting: dark ? '#243556' : '#EDF2F9',
+      tdColor: p.cardSolid, tdColorHover: dark ? '#223252' : '#EFF4FB', tdColorStriped: p.cardSolid, tdColorSorting: p.cardSolid,
+      thTextColor: p.text2, thFontWeight: '600', thIconColor: p.text3,
+      borderColor: p.separator, borderRadius: '10px',
+      thPaddingMedium: '7px 12px', tdPaddingMedium: '5px 12px', fontSizeMedium: '14px',
+      thPaddingSmall: '6px 10px', tdPaddingSmall: '4px 10px', fontSizeSmall: '13px',
+      peers: { Checkbox: checkbox },
+    },
+    Menu: {
+      borderRadius: '9px', itemHeight: '34px', fontSize: '15px',
+      itemColorHover: p.hover, itemColorActive: rgba(signal, dark ? 0.16 : 0.09), itemColorActiveHover: rgba(signal, dark ? 0.2 : 0.12), itemColorActiveCollapsed: rgba(signal, dark ? 0.16 : 0.09),
+      itemTextColor: p.text2, itemTextColorHover: p.text1,
+      itemIconColor: p.text3, itemIconColorHover: p.text1, itemIconColorCollapsed: p.text2,
+      itemTextColorActive: activeFg, itemIconColorActive: activeFg,
+      itemTextColorActiveHover: activeFg, itemIconColorActiveHover: activeFg,
+      itemTextColorChildActive: p.text1, itemIconColorChildActive: p.text1,
+      itemTextColorChildActiveHover: p.text1, itemIconColorChildActiveHover: p.text1,
+      arrowColor: p.text3, arrowColorHover: p.text2, arrowColorActive: activeFg, arrowColorActiveHover: activeFg,
+      arrowColorChildActive: p.text2, arrowColorChildActiveHover: p.text1,
+      groupTextColor: p.text3,
+    },
+    Tabs: {
+      colorSegment: p.segTrack, tabColorSegment: p.segThumb, tabBorderRadius: '8px',
+      tabTextColorSegment: p.text2, tabTextColorActiveSegment: p.text1, tabTextColorHoverSegment: p.text1,
+      tabFontWeightActive: '500',
+      tabColor: 'transparent', tabBorderColor: 'transparent', tabTextColorCard: p.text3, tabTextColorActiveCard: activeFg,
+      tabTextColorHoverCard: p.text1,
+      tabTextColorActiveLine: p.text1, tabTextColorHoverLine: p.text1, barColor: acc,
+    },
+    Radio: {
+      buttonBorderRadius: '8px', buttonColor: p.segTrack, buttonColorActive: p.segThumb,
+      buttonBorderColor: 'transparent', buttonBorderColorActive: 'transparent', buttonBorderColorHover: 'transparent',
+      buttonTextColor: p.text2, buttonTextColorActive: p.text1, buttonTextColorHover: p.text1,
+      buttonBoxShadow: 'none', buttonBoxShadowHover: 'none', buttonBoxShadowFocus: ring,
+      dotColorActive: acc, boxShadowActive: `inset 0 0 0 1px ${acc}`, boxShadowFocus: ring,
+    },
+    Checkbox: checkbox,
+    Tree: { nodeBorderRadius: '8px', nodeColorHover: p.hover, nodeColorActive: p.glassStrong, nodeHeight: '30px', peers: { Checkbox: checkbox } },
+    Switch: { railColor: p.switchOff, railColorActive: signal, boxShadowFocus: ring, railHeightMedium: '24px', railWidthMedium: '42px', buttonHeightMedium: '20px', buttonWidthMedium: '20px', buttonWidthPressedMedium: '26px' },
+    Tag: { heightTiny: '20px', heightSmall: '22px', heightMedium: '24px', fontSizeTiny: '12px', fontSizeSmall: '13px', fontSizeMedium: '14px', borderRadius: '6px', color: p.fill, textColor: p.text2, fontWeightStrong: '500',
+      colorPrimary: p.glassStrong, textColorPrimary: p.text1, borderPrimary: `1px solid ${p.hairlineStrong}` },
+    List: { color: 'transparent', colorHover: p.hover, borderColor: p.separator },
+    Dialog: { borderRadius: '18px', color: p.elevated, padding: '24px 26px 22px', titleFontSize: '17px', titleFontWeight: '600' },
+    Modal: { color: p.elevated, boxShadow: p.shadow3 },
+    Drawer: { color: p.elevated, headerPadding: '18px 24px', bodyPadding: '20px 24px', footerPadding: '14px 24px', titleFontSize: '17px', titleFontWeight: '600', headerBorderBottom: `1px solid ${p.separator}`, footerBorderTop: `1px solid ${p.separator}` },
+    Popover: { color: p.elevated, borderRadius: '14px', boxShadow: p.shadow2 },
+    Dropdown: { color: p.elevated, borderRadius: '12px', padding: '5px', optionHeightMedium: '30px', optionColorHover: p.hover, dividerColor: p.separator },
+    Tooltip: { color: dark ? 'rgba(44, 44, 48, 0.94)' : 'rgba(17, 17, 19, 0.92)', textColor: '#FFFFFF', borderRadius: '8px', padding: '5px 9px' },
+    Message: { borderRadius: '12px', color: p.elevated, padding: '10px 16px', boxShadow: p.shadow2 },
+    Notification: { borderRadius: '16px', color: p.elevated, boxShadow: p.shadow2 },
+    Alert: { borderRadius: '10px', colorInfo: p.fill, borderInfo: `1px solid ${p.hairline}`, iconColorInfo: p.text2, titleTextColorInfo: p.text1, contentTextColorInfo: p.text2 },
+    Pagination: { itemBorderRadius: '8px', itemColorActive: p.glassStrong, itemTextColorActive: p.text1, itemBorderActive: `1px solid ${p.hairlineStrong}`, itemColorActiveHover: p.glassStrong },
+    Statistic: { valueFontSize: '26px', valueFontWeight: '500', labelFontSize: '13px', labelTextColor: p.text2 },
+    Descriptions: { thColor: p.fill, borderColor: p.separator, thTextColor: p.text3, tdColor: 'transparent' },
+    Progress: { railColor: p.fill, fillColor: signal },
+    Breadcrumb: { itemTextColor: p.text3, itemTextColorActive: p.text1, separatorColor: p.text4 },
+    Slider: { fillColor: signal, fillColorHover: signal, railColor: p.fillStrong, railColorHover: p.fillStrong, dotBorderActive: `2px solid ${signal}` },
+    Steps: { indicatorColorProcess: acc, indicatorTextColorProcess: onAcc, indicatorBorderColorProcess: acc, indicatorColorFinish: 'transparent', indicatorBorderColorFinish: p.border, indicatorTextColorFinish: p.text2, splitorColorFinish: p.text3, splitorColorProcess: p.separator, splitorColorWait: p.separator },
+    Empty: { textColor: p.text3, iconColor: p.text4 },
+    Divider: { color: p.separator },
+    Timeline: { circleBorder: `2px solid ${p.border}`, titleFontWeight: '500', lineColor: p.separator },
+    Badge: { color: dark ? '#FF453A' : '#FF3B30' },
+    Scrollbar: { color: p.fillStrong, colorHover: p.border },
+    Code: { textColor: p.text1 },
+  }
+}
+
+const icon = name => () => h('iconify-icon', { icon: name, width: 18, height: 18, style: 'display:block' })
+
+/* ─── 菜单 ─── */
+const leaf = (label, key, icon) => ({ label, key, icon })
+const WB = leaf('工作台', 'workbench', 'ph:squares-four')
+/* 多应用门户:每个模块(应用)有自己的菜单树;切换模块 = 换菜单 + 清页签 + 回该模块首页 */
+const MODULES = [
+  { id: 'sys', title: '系统管理', code: 'SYS', icon: 'ph:gear-six', menu: [WB,
+    { label: '系统管理', key: 'g-sys', icon: 'ph:gear-six', children: [
+      { label: '用户与权限', key: 'g-auth', children: [leaf('用户', 'user', 'ph:users'), leaf('角色', 'role', 'ph:shield-check'), leaf('菜单', 'menu', 'ph:list-dashes')] },
+      { label: '基础数据', key: 'g-base', children: [leaf('字典', 'dict', 'ph:book-open'), leaf('系统配置', 'config', 'ph:gear-six')] },
+    ] },
+    { label: '运维中心', key: 'g-ops', icon: 'ph:wrench', children: [leaf('操作日志', 'log', 'ph:clock-counter-clockwise'), leaf('服务监控', 'monitor', 'ph:gauge'), leaf('回收站', 'recycle', 'ph:trash')] },
+    leaf('组件规范', 'components', 'ph:swatches')] },
+  { id: 'biz', title: '业务中心', code: 'BIZ', icon: 'ph:briefcase', menu: [WB,
+    { label: '生产管理', key: 'g-prod', icon: 'ph:factory', children: [
+      { label: '计划排产', key: 'g-plan', children: [leaf('生产工单', 'mes', 'ph:factory'), leaf('排产计划', 'plan', 'ph:calendar-dots'), leaf('工序报工', 'report', 'ph:clipboard-text')] },
+      { label: '物料管理', key: 'g-mat', children: [leaf('物料清单', 'bom', 'ph:stack'), leaf('领料出库', 'issue', 'ph:package')] },
+      leaf('质量检验', 'qc', 'ph:seal-check'),
+    ] }] },
+]
+// 叶子页面展平:path = 面包屑路径,parents = 需要展开的父级 key,mod = 所属模块(工作台每个模块都有,归第一个)
+const FLAT = []
+MODULES.forEach(m => {
+  ;(function walk(nodes, path, parents) {
+    nodes.forEach(n => {
+      if (n.children) walk(n.children, [...path, n.label], [...parents, n.key])
+      else if (!FLAT.some(x => x.key === n.key)) FLAT.push({ ...n, path: [...path, n.label], parents, group: path.join(' / '), mod: m.id })
+    })
+  })(m.menu, [], [])
+})
+FLAT.push({ ...leaf('个人中心', 'profile', 'ph:user-circle'), path: ['个人中心'], parents: [], group: '' })
+const leavesOf = menu => menu.flatMap(n => (n.children ? leavesOf(n.children) : [n]))
+
+const Shell = defineComponent({
+  template: '#shell-tpl',
+  props: { isDark: Boolean, accent: String, p: Object },
+  emits: ['toggle-dark', 'set-mode'],
+  setup(props, { emit }) {
+    const msg = useMessage()
+    const dialog = useDialog()
+    const notification = useNotification()
+    const root = Vue.inject('root')
+
+    const route = ref('workbench')
+    const mq = window.matchMedia('(max-width: 1100px)')
+    const isNarrow = ref(mq.matches)
+    const collapsed = ref(mq.matches)
+    mq.addEventListener('change', e => { isNarrow.value = e.matches; collapsed.value = e.matches })
+    const fitRoutes = ['workbench', 'user', 'role', 'menu', 'dict', 'config', 'mes', 'log', 'monitor', 'profile', 'recycle']
+    const tblRoutes = ['user', 'log', 'menu', 'mes']
+    const settingsOpen = ref(false)
+    const userDrawer = ref(false)
+    const menuModal = ref(false)
+    const logDrawer = ref(false)
+    const openTabs = ref(['workbench', 'mes'])
+    const curModuleId = ref('biz')
+    const defaultModuleId = ref('biz')
+    const prevRoute = ref('workbench')
+    const curModule = computed(() => MODULES.find(m => m.id === curModuleId.value))
+    const curLeaves = computed(() => new Set(leavesOf(curModule.value.menu).map(l => l.key)))
+    const prefs = root.prefs
+
+    const toOpt = (n, depth = 0) => n.children
+      ? { label: n.label, key: n.key, icon: depth === 0 ? icon(n.icon) : undefined, children: n.children.map(c => toOpt(c, depth + 1)) }
+      : { label: n.label, key: n.key, icon: depth === 0 ? icon(n.icon) : undefined }
+    const menuOptions = computed(() => curModule.value.menu.map(n => toOpt(n)))
+    const expandedKeys = ref([])
+    watch(route, r => {
+      const f = FLAT.find(x => x.key === r)
+      if (f) expandedKeys.value = [...new Set([...expandedKeys.value, ...f.parents])]
+    }, { immediate: true })
+    const crumbs = computed(() => FLAT.find(f => f.key === route.value)?.path ?? [])
+    const titleOf = k => FLAT.find(f => f.key === k)?.label ?? k
+    const iconOf = k => FLAT.find(f => f.key === k)?.icon ?? 'ph:file'
+    const tabMenu = [
+      { label: '重新加载', key: 'reload', icon: icon('ph:arrow-clockwise') },
+      { label: '关闭其他页签', key: 'others', icon: icon('ph:x-square') },
+      { label: '关闭全部', key: 'all', icon: icon('ph:x-circle') },
+    ]
+    /* 页签右键菜单(参照 SmartAdmin TabsBar:刷新 / 关闭 / 关闭左侧 / 关闭右侧 / 关闭其他 / 关闭全部) */
+    const ctx = reactive({ show: false, x: 0, y: 0, key: '' })
+    const reloadKey = ref(0)
+    const closable = t => t !== 'workbench'
+    function onTabCtx(e, k) {
+      ctx.show = false
+      Vue.nextTick(() => { ctx.x = e.clientX; ctx.y = e.clientY; ctx.key = k; ctx.show = true })
+    }
+    const ctxOptions = computed(() => {
+      const tabs = openTabs.value, i = tabs.indexOf(ctx.key)
+      return [
+        { label: '刷新', key: 'reload', icon: icon('ph:arrow-clockwise') },
+        { label: '关闭', key: 'close', icon: icon('ph:x'), disabled: !closable(ctx.key) },
+        { type: 'divider', key: 'd1' },
+        { label: '关闭左侧', key: 'left', icon: icon('ph:arrow-line-left'), disabled: !tabs.slice(0, i).some(closable) },
+        { label: '关闭右侧', key: 'right', icon: icon('ph:arrow-line-right'), disabled: !tabs.slice(i + 1).some(closable) },
+        { label: '关闭其他', key: 'others', icon: icon('ph:x-square'), disabled: !tabs.some(t => closable(t) && t !== ctx.key) },
+        { label: '关闭全部', key: 'all', icon: icon('ph:x-circle'), disabled: !tabs.some(closable) },
+      ]
+    })
+    function onCtxSelect(k) {
+      ctx.show = false
+      const tabs = openTabs.value, i = tabs.indexOf(ctx.key)
+      if (k === 'reload') { go(ctx.key); reloadKey.value++ }
+      else if (k === 'close') closeTab(ctx.key)
+      else {
+        openTabs.value = k === 'left' ? tabs.filter((t, j) => j >= i || !closable(t))
+          : k === 'right' ? tabs.filter((t, j) => j <= i || !closable(t))
+          : k === 'others' ? tabs.filter(t => t === ctx.key || !closable(t))
+          : tabs.filter(t => !closable(t))
+        if (!openTabs.value.includes(route.value)) route.value = openTabs.value.includes(ctx.key) ? ctx.key : 'workbench'
+      }
+    }
+    function onTabMenu(k) {
+      if (k === 'reload') reloadKey.value++
+      else if (k === 'others') openTabs.value = openTabs.value.filter(t => t === 'workbench' || t === route.value)
+      else if (k === 'all') { openTabs.value = ['workbench']; route.value = 'workbench' }
+    }
+    const currentTitle = computed(() => titleOf(route.value))
+    
+    function go(k) {
+      const f = FLAT.find(x => x.key === k)
+      // 目标页属于别的模块(例如从快捷入口跳转):先切到它所在的模块
+      if (f && f.mod && !curLeaves.value.has(k)) { curModuleId.value = f.mod; openTabs.value = ['workbench']; expandedKeys.value = [] }
+      route.value = k
+      if (f && !openTabs.value.includes(k)) openTabs.value.push(k)
+    }
+    function openModule() { prevRoute.value = route.value; route.value = 'module' }
+    function switchModule(id) {
+      curModuleId.value = id; openTabs.value = ['workbench']; expandedKeys.value = []; route.value = 'workbench'
+      msg.success('已切换到「' + curModule.value.title + '」')
+    }
+    function setDefault(id) { defaultModuleId.value = id; msg.success('已设为默认应用') }
+    function closeTab(k) {
+      const i = openTabs.value.indexOf(k)
+      openTabs.value.splice(i, 1)
+      if (route.value === k) route.value = openTabs.value[Math.max(0, i - 1)]
+    }
+
+    /* 登录 */
+    const login = reactive({ user: 'admin', pass: '123456', captcha: '', remember: true, loading: false })
+    function doLogin() { login.loading = true; setTimeout(() => { login.loading = false; route.value = 'workbench'; msg.success('欢迎回来,Andy') }, 700) }
+
+    const userMenu = [
+      { key: 'header', type: 'render', render: () => h('div', { class: 'udrop' }, [h('b', 'Andy Zhong'), h('span', '超级管理员 · andy@smartadmin.dev')]) },
+      { type: 'divider', key: 'd0' },
+      { label: '个人中心', key: 'profile', icon: icon('ph:user-circle') },
+      { label: '外观设置', key: 'settings', icon: icon('ph:sliders-horizontal') },
+      { type: 'divider', key: 'd' },
+      { label: '退出登录', key: 'logout', icon: icon('ph:sign-out') },
+    ]
+    function onUserMenu(k) {
+      if (k === 'logout') route.value = 'login'
+      else if (k === 'settings') settingsOpen.value = true
+      else go(k)
+    }
+
+    /* 工作台 */
+    const stats = [
+      { label: '用户总数', en: 'Users', value: '1,284', delta: '12%', up: true, icon: 'ph:users', spark: [4, 5, 5, 6, 7, 7, 8, 9, 10, 12] },
+      { label: '今日活跃', en: 'Active', value: '326', delta: '4.1%', up: true, icon: 'ph:pulse', spark: [6, 8, 5, 9, 7, 10, 8, 11, 9, 12] },
+      { label: '角色 / 权限点', en: 'Access', value: '24', unit: '/ 186', delta: '2', up: true, icon: 'ph:shield-check', spark: [5, 5, 6, 6, 6, 7, 7, 7, 8, 8] },
+      { label: '今日异常', en: 'Incidents', value: '3', delta: '1', up: false, icon: 'ph:warning', spark: [2, 1, 3, 2, 1, 2, 4, 2, 3, 5] },
+    ]
+    const miniPath = a => { const mx = Math.max(...a), mn = Math.min(...a); return a.map((v, i) => (i ? 'L' : 'M') + (i * 96 / (a.length - 1)).toFixed(1) + ' ' + (26 - (v - mn) / (mx - mn || 1) * 22).toFixed(1)).join(' ') }
+    const trendRange = ref('30')
+    const trend = computed(() => {
+      const a = [60, 72, 66, 90, 84, 102, 96, 120, 112, 130, 124, 150, 142, 160]
+      const b = [50, 58, 62, 70, 66, 78, 82, 86, 90, 96, 94, 104, 110, 112]
+      const pts = arr => arr.map((v, i) => [i * (600 / (arr.length - 1)), 190 - v])
+      const line = arr => pts(arr).map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1]).join(' ')
+      return { line: line(a), line2: line(b), area: line(a) + ' L600 190 L0 190 Z' }
+    })
+    const quick = computed(() => leavesOf(curModule.value.menu).filter(l => l.key !== 'workbench').slice(0, 6).map(l => ({ t: l.label, i: l.icon, to: l.key })))
+    const todos = reactive([
+      { t: '审批 3 个角色变更申请', due: '今天 18:00', lv: 'error', lvT: '紧急', done: false },
+      { t: '复核财务审计角色的数据范围', due: '明天', lv: 'default', lvT: '重要', done: false },
+      { t: '清理 90 天未登录账号', due: '本周五', lv: 'default', lvT: '普通', done: true },
+      { t: '更新密码策略说明', due: '下周一', lv: 'default', lvT: '普通', done: false },
+    ])
+    const logins = [
+      { dev: 'Chrome · macOS', where: '上海 · 116.228.x.x', time: '09:12', i: 'ph:desktop' },
+      { dev: 'Safari · iPhone', where: '上海 · 4G', time: '昨天', i: 'ph:device-mobile' },
+      { dev: 'Edge · Windows', where: '杭州 · 60.191.x.x', time: '9 月 22 日', i: 'ph:desktop-tower' },
+    ]
+    const notices = [
+      { t: '王磊 申请「财务审计」角色', time: '5 分钟前', i: 'ph:user-plus', c: '#0A84FF' },
+      { t: '定时任务「清理日志」执行失败', time: '1 小时前', i: 'ph:warning-fill', c: '#FF3B30' },
+      { t: 'v10.15.0 已发布', time: '昨天', i: 'ph:rocket-launch-fill', c: '#34C759' },
+    ]
+
+    /* 用户 */
+    const orgKw = ref('')
+    const orgTree = [
+      { label: 'SmartAdmin 科技', key: '1', children: [
+        { label: '研发中心', key: '11', children: [{ label: '前端组', key: '111' }, { label: '后端组', key: '112' }] },
+        { label: '产品部', key: '12' }, { label: '运营部', key: '13' }, { label: '财务部', key: '14' },
+      ] },
+    ]
+    const roleOptions = [
+      { label: '超级管理员', value: 'admin' }, { label: '系统管理员', value: 'sys' },
+      { label: '运营专员', value: 'ops' }, { label: '财务审计', value: 'fin' }, { label: '访客', value: 'guest' },
+    ]
+    const names = ['林晓', '王磊', '陈静', '张伟', '刘洋', '赵敏', '孙浩', '周婷', '吴昊', '郑爽', '冯雪', '何军']
+    const orgs = ['前端组', '后端组', '产品部', '运营部', '财务部']
+    const rl = [['超级管理员'], ['系统管理员'], ['运营专员'], ['财务审计', '访客'], ['运营专员']]
+    const avatarColors = ['#0A84FF', '#5856D6', '#FF9500', '#34C759', '#FF2D55', '#30B0C7']
+    const surn = ['林', '王', '陈', '张', '刘', '赵', '孙', '周', '吴', '郑', '冯', '何', '徐', '马', '朱']
+    const giv = ['晓', '磊', '静', '伟', '洋', '敏', '浩', '婷', '昊', '爽', '雪', '军', '宇', '琳', '鑫', '涛']
+    const users = ref(Array.from({ length: 86 }, (_, i) => ({
+      id: i + 1, name: surn[i % 15] + giv[(i * 7 + 3) % 16], account: 'u' + String(1001 + i),
+      org: orgs[i % 5], roles: rl[i % 5], phone: '138' + String(10000000 + i * 7331).slice(0, 8),
+      on: i % 6 !== 4, last: i === 0 ? '刚刚' : i < 4 ? `${i * 7} 分钟前` : `9 月 ${1 + (i % 25)} 日`, color: avatarColors[i % 6],
+    })))
+    const checked = ref([])
+    const userColumns = computed(() => [
+      { type: 'selection', width: 44, fixed: 'left' },
+      { title: '用户', key: 'name', width: 200, fixed: 'left', render: r => h('div', { class: 'user-cell' }, [
+        h(NAvatar, { round: true, size: 24, style: { fontSize: '13px' } }, () => r.name[0]),
+        h('div', { class: 'ucell-t' }, [h('b', r.name), h('span', r.account)]),
+      ]) },
+      { title: '机构', key: 'org', width: 140 },
+      { title: '角色', key: 'roles', minWidth: 200, render: r => h(NSpace, { size: 4 }, () => r.roles.map(x => h(NTag, { size: 'small', bordered: false, type: x === '超级管理员' ? 'primary' : 'default' }, () => x))) },
+      { title: '手机号', key: 'phone', width: 130, render: r => h('span', { class: 'num' }, r.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')) },
+      { title: '状态', key: 'on', width: 90, render: r => h(NSwitch, { size: 'small', value: r.on, 'onUpdate:value': v => { r.on = v; msg.success(v ? `已启用 ${r.name}` : `已停用 ${r.name}`) } }) },
+      { title: '最近登录', key: 'last', width: 110, render: r => h('span', { class: 'muted num' }, r.last) },
+      { title: '操作', key: 'op', width: 110, align: 'right', fixed: 'right', render: r => h(NSpace, { size: 2, justify: 'end', wrap: false }, () => [
+        h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => (userDrawer.value = true) }, () => '编辑'),
+        h(NDropdown, { options: [{ label: '重置密码', key: 'r' }, { label: '强制下线', key: 'o' }, { type: 'divider', key: 'd' }, { label: '删除', key: 'x', props: { style: `color:${props.p.error}` } }], onSelect: k => k === 'x' && confirmDelete() },
+          () => h(NButton, { size: 'small', quaternary: true, circle: true, 'aria-label': '更多' }, { icon: icon('ph:dots-three') })),
+      ]) },
+    ])
+    function confirmDelete() {
+      dialog.warning({
+        title: '删除所选用户?',
+        content: '删除后会移入回收站,30 天内可恢复。',
+        positiveText: '删除', negativeText: '取消',
+        positiveButtonProps: { type: 'error' }, negativeButtonProps: { secondary: true, type: 'default' },
+        onPositiveClick: () => msg.success('已移入回收站'),
+      })
+    }
+    function notify() {
+      notification.info({ title: '导入完成', content: '共 1,280 条,成功 1,276 条,失败 4 条', meta: '刚刚', duration: 4000 })
+    }
+
+    /* 角色 */
+    const roles = [
+      { name: '超级管理员', code: 'super_admin', members: 2, c: '#FF3B30', i: 'ph:crown-simple', on: true, desc: '拥有全部权限,不受数据范围限制' },
+      { name: '系统管理员', code: 'sys_admin', members: 5, c: '#0A84FF', i: 'ph:shield-check', on: true, desc: '维护用户、角色、菜单与系统配置' },
+      { name: '运营专员', code: 'operator', members: 18, c: '#FF9500', i: 'ph:megaphone', on: true, desc: '处理日常运营数据,只能看本部门' },
+      { name: '财务审计', code: 'auditor', members: 4, c: '#34C759', i: 'ph:calculator', on: true, desc: '只读访问财务与日志' },
+      { name: '访客', code: 'guest', members: 31, c: '#8E8E93', i: 'ph:user', on: false, desc: '仅能查看工作台' },
+    ]
+    const roleIdx = ref(1)
+    const role = computed(() => roles[roleIdx.value])
+    const roleTab = ref('menu')
+    const permKw = ref('')
+    const btn = (k, l, code) => ({ key: k, label: l, code })
+    const permTree = [
+      { key: 'sys', label: '系统管理', children: [
+        { key: 'u', label: '用户', children: [btn('u1', '查询', 'GET:/api/users'), btn('u2', '新增', 'POST:/api/users'), btn('u3', '更新', 'PUT:/api/users/{id}'), btn('u4', '删除', 'DELETE:/api/users/{id}'), btn('u5', '重置密码', 'POST:/api/users/{id}/reset-password')] },
+        { key: 'r', label: '角色', children: [btn('r1', '查询', 'GET:/api/roles'), btn('r2', '新增', 'POST:/api/roles'), btn('r3', '更新', 'PUT:/api/roles/{id}'), btn('r4', '删除', 'DELETE:/api/roles/{id}')] },
+        { key: 'm', label: '菜单', children: [btn('m1', '查询', 'GET:/api/menus'), btn('m2', '新增', 'POST:/api/menus'), btn('m3', '更新', 'PUT:/api/menus/{id}'), btn('m4', '删除', 'DELETE:/api/menus/{id}')] },
+      ] },
+      { key: 'ops', label: '运维', children: [
+        { key: 'l', label: '操作日志', children: [btn('l1', '查询', 'GET:/api/logs/op'), btn('l2', '导出', 'GET:/api/logs/op/export')] },
+        { key: 'mo', label: '服务监控', children: [btn('mo1', '查询', 'GET:/api/monitor')] },
+      ] },
+    ]
+    const permChecked = ref(['u1', 'u2', 'u3', 'r1', 'm1', 'l1', 'l2', 'mo1'])
+    const permSuffix = ({ option }) => option.code ? h('span', { class: 'mono faint', style: 'font-size: 12.5px; padding-right:8px' }, option.code) : null
+    const scope = ref('dept_below')
+    const scopes = [
+      { v: 'all', t: '全部数据', d: '不受机构限制' },
+      { v: 'dept', t: '本机构', d: '只能访问所属机构的数据' },
+      { v: 'dept_below', t: '本机构及以下', d: '所属机构及其全部下级' },
+      { v: 'self', t: '仅本人', d: '只能访问自己创建的数据' },
+      { v: 'custom', t: '自定义', d: '手动勾选可访问的机构' },
+    ]
+    const memberColumns = [
+      { title: '用户', key: 'name', render: r => h('div', { class: 'user-cell' }, [h(NAvatar, { round: true, size: 24, style: { fontSize: '13px' } }, () => r.name[0]), h('div', { class: 'ucell-t' }, [h('b', r.name), h('span', r.account)])]) },
+      { title: '机构', key: 'org' },
+      { title: '', key: 'op', align: 'right', render: () => h(NButton, { size: 'small', quaternary: true, type: 'error' }, () => '移除') },
+    ]
+
+    /* 菜单 */
+    const menuApp = ref('admin')
+    const typeTag = t => h(NTag, { size: 'small', bordered: false, type: 'default' }, () => t)
+    const menuRows = [
+      { id: 1, name: '系统管理', icon: 'ph:gear-six', type: '目录', route: '/system', perm: '', sort: 10, show: true, children: [
+        { id: 11, name: '用户', icon: 'ph:users', type: '页面', route: '/system/user', perm: '', sort: 1, show: true, children: [
+          { id: 111, name: '查询', type: '按钮', perm: 'GET:/api/users', sort: 1, show: true },
+          { id: 112, name: '新增', type: '按钮', perm: 'POST:/api/users', sort: 2, show: true },
+        ] },
+        { id: 12, name: '角色', icon: 'ph:shield-check', type: '页面', route: '/system/role', perm: '', sort: 2, show: true },
+        { id: 13, name: '菜单', icon: 'ph:list-dashes', type: '页面', route: '/system/menu', perm: '', sort: 3, show: true },
+      ] },
+      { id: 2, name: '运维', icon: 'ph:wrench', type: '目录', route: '/ops', perm: '', sort: 20, show: true, children: [
+        { id: 21, name: '操作日志', icon: 'ph:clock-counter-clockwise', type: '页面', route: '/ops/log', perm: '', sort: 1, show: true },
+        { id: 22, name: '接口文档', icon: 'ph:code', type: '页面', route: '/ops/api-docs', perm: '', sort: 2, show: false },
+      ] },
+    ]
+    const menuColumns = [
+      { title: '名称', key: 'name', minWidth: 200, render: r => h('span', { style: 'display:inline-flex; align-items:center; gap:8px; font-weight:' + (r.type === '按钮' ? 400 : 500) }, [r.icon ? h('iconify-icon', { icon: r.icon, width: 16, class: 'faint' }) : null, r.name]) },
+      { title: '类型', key: 'type', width: 80, render: r => typeTag(r.type) },
+      { title: '路由 / 权限码', key: 'route', minWidth: 220, render: r => h('span', { class: 'mono muted' }, r.route || r.perm) },
+      { title: '排序', key: 'sort', width: 70, render: r => h('span', { class: 'num muted' }, r.sort) },
+      { title: '显示', key: 'show', width: 80, render: r => h(NSwitch, { size: 'small', defaultValue: r.show }) },
+      { title: '', key: 'op', width: 150, align: 'right', render: r => h(NSpace, { size: 2, justify: 'end', wrap: false }, () => [
+        r.type !== '按钮' ? h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => (menuModal.value = true) }, () => '新增下级') : null,
+        h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => (menuModal.value = true) }, () => '编辑'),
+      ]) },
+    ]
+
+    /* 字典 */
+    const dicts = [
+      { name: '用户状态', code: 'sys_user_status', n: 2 }, { name: '性别', code: 'sys_gender', n: 3 },
+      { name: '通知类型', code: 'sys_notice_type', n: 4 }, { name: '任务状态', code: 'sys_job_status', n: 5 },
+    ]
+    const dictIdx = ref(3)
+    const dictItems = [
+      { label: '等待中', value: 'pending', color: 'default', sort: 1, on: true },
+      { label: '运行中', value: 'running', color: 'info', sort: 2, on: true },
+      { label: '成功', value: 'success', color: 'success', sort: 3, on: true },
+      { label: '失败', value: 'failed', color: 'error', sort: 4, on: true },
+      { label: '已取消', value: 'canceled', color: 'warning', sort: 5, on: false },
+    ]
+    const dictColumns = [
+      { title: '标签', key: 'label', render: r => h(NTag, { size: 'small', bordered: false, type: r.color }, () => r.label) },
+      { title: '值', key: 'value', render: r => h('span', { class: 'mono' }, r.value) },
+      { title: '排序', key: 'sort', width: 70 },
+      { title: '启用', key: 'on', width: 80, render: r => h(NSwitch, { size: 'small', defaultValue: r.on }) },
+      { title: '', key: 'op', width: 110, align: 'right', render: () => h(NSpace, { size: 2, justify: 'end', wrap: false }, () => [h(NButton, { size: 'small', quaternary: true, type: 'primary' }, () => '编辑'), h(NButton, { size: 'small', quaternary: true, type: 'error' }, () => '删除')]) },
+    ]
+
+    /* 配置 */
+    const cfgTab = ref('basic')
+
+    /* 生产工单(MES 示例:大数据量主表 + 明细页签) */
+    const mesLines = ['SMT-01', 'SMT-02', 'ASM-01', 'ASM-02', 'PRS-01', 'TST-01']
+    const mesStatus = { '待开工': 'default', '生产中': 'primary', '暂停': 'warning', '已完工': 'success', '异常': 'error' }
+    const mesProducts = ['电机定子 S12', '控制主板 C300', '线束总成 W-88', '壳体压铸 H-20', '传感器模组 T5', '电池包 B-72', '逆变器 IV-9', '减速器齿轮 G-15']
+    const mesProcs = ['贴片', '插件', '焊接', '装配', '压铸', '老化测试', '终检', '包装']
+    const p2 = n => String(n).padStart(2, '0')
+    const workOrders = Array.from({ length: 168 }, (_, i) => {
+      const st = ['生产中', '已完工', '待开工', '生产中', '暂停', '已完工', '生产中', '异常'][i % 8]
+      const plan = 200 + (i * 37) % 1800
+      const done = st === '待开工' ? 0 : st === '已完工' ? plan : Math.round(plan * (0.2 + ((i * 13) % 70) / 100))
+      const start = new Date(2026, 8, 26 - (i % 20), 8 + (i % 10), (i * 7) % 60)
+      const due = new Date(start.getTime() + (2 + (i % 5)) * 86400000)
+      return {
+        no: 'WO-2609' + String(1000 + i).slice(1) + '-' + p2(i % 100), product: mesProducts[i % 8], line: mesLines[i % 6], proc: mesProcs[(i * 3) % 8],
+        plan, done, pct: Math.round(done / plan * 100), yld: st === '待开工' ? null : +(93 + ((i * 7) % 70) / 10).toFixed(1), status: st,
+        prio: ['普通', '加急', '普通', '普通', '紧急'][i % 5], start: `${start.getMonth() + 1}-${p2(start.getDate())} ${p2(start.getHours())}:${p2(start.getMinutes())}`,
+        due: `${due.getMonth() + 1}-${p2(due.getDate())} ${p2(due.getHours())}:${p2(due.getMinutes())}`, team: ['甲班', '乙班', '丙班'][i % 3], owner: surn[(i * 3) % 15] + giv[(i * 5) % 16],
+      }
+    })
+    const selWo = ref(workOrders[0])
+    const detailTab = ref('op')
+    const mesRowProps = r => ({ style: 'cursor:pointer', onClick: () => { selWo.value = r } })
+    const mesColumns = computed(() => [
+      { type: 'selection', width: 44, fixed: 'left' },
+      { title: '工单号', key: 'no', width: 150, fixed: 'left', sorter: 'default', render: r => h('span', { class: 'mono', style: { fontWeight: 500 } }, r.no) },
+      { title: '产品', key: 'product', width: 150 },
+      { title: '产线', key: 'line', width: 90, render: r => h('span', { class: 'mono' }, r.line) },
+      { title: '工序', key: 'proc', width: 100 },
+      { title: '计划数', key: 'plan', width: 90, align: 'right', sorter: (a, b) => a.plan - b.plan, render: r => h('span', { class: 'num' }, r.plan.toLocaleString()) },
+      { title: '完成数', key: 'done', width: 90, align: 'right', sorter: (a, b) => a.done - b.done, render: r => h('span', { class: 'num' }, r.done.toLocaleString()) },
+      { title: '进度', key: 'pct', width: 170, render: r => h('div', { style: 'display:flex; align-items:center; gap:8px' }, [h(NProgress, { type: 'line', percentage: r.pct, height: 6, showIndicator: false, color: props.p.signal, style: 'flex:1' }), h('span', { class: 'num muted', style: 'width:46px; text-align:right; white-space:nowrap' }, r.pct + '%')]) },
+      { title: '良率', key: 'yld', width: 80, align: 'right', sorter: (a, b) => (a.yld ?? 0) - (b.yld ?? 0), render: r => r.yld == null ? h('span', { class: 'faint' }, '—') : h('span', { class: 'num', style: { color: r.yld < 95 ? props.p.error : props.p.text1, fontWeight: r.yld < 95 ? 600 : 400 } }, r.yld + '%') },
+      { title: '状态', key: 'status', width: 96, render: r => h(NTag, { size: 'small', bordered: false, type: mesStatus[r.status] }, () => r.status) },
+      { title: '优先级', key: 'prio', width: 84, render: r => h('span', { style: { color: r.prio === '紧急' ? props.p.error : r.prio === '加急' ? props.p.warning : props.p.text2, fontWeight: r.prio === '普通' ? 400 : 600 } }, r.prio) },
+      { title: '计划开始', key: 'start', width: 130, render: r => h('span', { class: 'num muted' }, r.start) },
+      { title: '交期', key: 'due', width: 130, sorter: 'default', render: r => h('span', { class: 'num muted' }, r.due) },
+      { title: '班组', key: 'team', width: 80 },
+      { title: '负责人', key: 'owner', width: 90 },
+      { title: '操作', key: 'op', width: 120, align: 'right', fixed: 'right', render: () => h(NSpace, { size: 2, justify: 'end', wrap: false }, () => [h(NButton, { size: 'small', quaternary: true, type: 'primary' }, () => '详情'), h(NButton, { size: 'small', quaternary: true, type: 'primary' }, () => '报工')]) },
+    ])
+    const mesSummary = rows => {
+      const sum = k => rows.reduce((a, r) => a + r[k], 0)
+      const b = t => ({ value: h('b', { class: 'num' }, t) })
+      return { no: b('本页合计'), plan: b(sum('plan').toLocaleString()), done: b(sum('done').toLocaleString()), pct: b(Math.round(sum('done') / sum('plan') * 100) + '%') }
+    }
+    const num = k => r => h('span', { class: 'num' }, Number(r[k]).toLocaleString())
+    const opRows = computed(() => mesProcs.map((pn, i) => ({ seq: (i + 1) * 10, proc: pn, station: 'ST-' + p2(i + 1), device: 'EQ-' + (2000 + i * 17), plan: selWo.value.plan, done: Math.max(0, Math.round(selWo.value.done * (1 - i * 0.09))), status: i < 3 ? '已完工' : i < 5 ? '生产中' : '待开工' })))
+    const opColumns = [
+      { title: '序号', key: 'seq', width: 70, render: r => h('span', { class: 'num muted' }, r.seq) }, { title: '工序', key: 'proc', width: 110 },
+      { title: '工位', key: 'station', width: 100, render: r => h('span', { class: 'mono' }, r.station) }, { title: '设备', key: 'device', width: 110, render: r => h('span', { class: 'mono' }, r.device) },
+      { title: '计划数', key: 'plan', width: 100, align: 'right', render: num('plan') }, { title: '完成数', key: 'done', width: 100, align: 'right', render: num('done') },
+      { title: '状态', key: 'status', width: 100, render: r => h(NTag, { size: 'small', bordered: false, type: mesStatus[r.status] }, () => r.status) },
+    ]
+    const bomNames = ['铜线', '磁钢', '轴承', '壳体', 'PCB', '电容', '电阻', '连接器', '螺丝', '密封圈', '散热片', '标签']
+    const bomRows = computed(() => bomNames.map((nm, i) => { const need = selWo.value.plan * (1 + i % 4); const issued = Math.round(need * (0.6 + (i % 5) / 10)); return { code: 'M' + (100200 + i * 37), name: nm, spec: 'Φ' + (2 + i) + '×' + (10 + i * 3), unit: i % 3 === 0 ? 'kg' : 'pcs', per: 1 + i % 4, need, issued, short: Math.max(0, need - issued) } }))
+    const bomColumns = [
+      { title: '物料编码', key: 'code', width: 120, render: r => h('span', { class: 'mono' }, r.code) }, { title: '名称', key: 'name', width: 110 }, { title: '规格', key: 'spec', width: 120 },
+      { title: '单位', key: 'unit', width: 70 }, { title: '单机用量', key: 'per', width: 100, align: 'right' },
+      { title: '需求量', key: 'need', width: 110, align: 'right', render: num('need') }, { title: '已领', key: 'issued', width: 110, align: 'right', render: num('issued') },
+      { title: '缺料', key: 'short', width: 110, align: 'right', render: r => h('span', { class: 'num', style: { color: r.short > 0 ? props.p.error : props.p.text3, fontWeight: r.short > 0 ? 600 : 400 } }, r.short > 0 ? r.short.toLocaleString() : '—') },
+    ]
+    const recRows = computed(() => Array.from({ length: 20 }, (_, i) => ({ time: '09-26 ' + p2(17 - Math.floor(i / 3)) + ':' + p2((59 - i * 11 + 600) % 60), station: 'ST-' + p2(1 + i % 6), operator: surn[(i * 2) % 15] + giv[(i * 3) % 16], qty: 20 + (i * 7) % 60, ng: i % 7 === 0 ? 2 : 0, note: i % 7 === 0 ? '焊点不良返修' : '' })))
+    const recColumns = [
+      { title: '报工时间', key: 'time', width: 130, render: r => h('span', { class: 'num muted' }, r.time) }, { title: '工位', key: 'station', width: 100, render: r => h('span', { class: 'mono' }, r.station) },
+      { title: '操作员', key: 'operator', width: 100 }, { title: '合格数', key: 'qty', width: 100, align: 'right' },
+      { title: '不良数', key: 'ng', width: 100, align: 'right', render: r => h('span', { class: 'num', style: { color: r.ng ? props.p.error : props.p.text3, fontWeight: r.ng ? 600 : 400 } }, r.ng || '—') }, { title: '备注', key: 'note', minWidth: 200 },
+    ]
+
+    /* 日志 */
+    const ops = [['新增用户', 'POST', '/api/users'], ['修改角色权限', 'PUT', '/api/roles/3/menus'], ['登录', 'POST', '/api/auth/login'], ['删除菜单', 'DELETE', '/api/menus/42'], ['导出日志', 'GET', '/api/logs/op/export'], ['修改配置', 'PUT', '/api/configs']]
+    const logs = Array.from({ length: 200 }, (_, i) => {
+      const o = ops[i % ops.length]
+      return { id: i, user: names[i % names.length], op: o[0], method: o[1], path: o[2], ok: i % 7 !== 3, ms: [42, 118, 36, 260, 1340, 88][i % 6], ip: `10.0.${i % 4}.${20 + i}`, time: `2026-09-${String(26 - Math.floor(i / 24)).padStart(2, '0')} ${String(23 - (i % 24)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}:${String((i * 13) % 60).padStart(2, '0')}` }
+    })
+    const methodColor = { GET: 'default', POST: 'default', PUT: 'default', DELETE: 'error' }
+    const logColumns = computed(() => [
+      { title: '操作人', key: 'user', width: 100 },
+      { title: '操作', key: 'op', minWidth: 120 },
+      { title: '请求', key: 'path', minWidth: 300, render: r => h('span', { style: 'display:inline-flex; gap:8px; align-items:center' }, [h(NTag, { size: 'small', bordered: false, type: methodColor[r.method], class: 'mono', style: 'min-width:58px; justify-content:center' }, () => r.method), h('span', { class: 'mono muted' }, r.path)]) },
+      { title: '结果', key: 'ok', width: 80, render: r => h('span', { style: { color: r.ok ? props.p.success : props.p.error, fontWeight: 500 } }, [h('span', { class: 'dot', style: { background: r.ok ? props.p.success : props.p.error } }), r.ok ? '成功' : '失败']) },
+      { title: '耗时', key: 'ms', width: 90, align: 'right', render: r => h('span', { class: 'num', style: { color: r.ms > 1000 ? props.p.warning : props.p.text2 } }, r.ms + ' ms') },
+      { title: 'IP', key: 'ip', width: 120, render: r => h('span', { class: 'mono muted' }, r.ip) },
+      { title: '时间', key: 'time', width: 170, render: r => h('span', { class: 'num muted' }, r.time) },
+    ])
+    const logSel = ref(logs[0])
+    const logRowProps = r => ({ style: 'cursor:pointer', onClick: () => { logSel.value = r; logDrawer.value = true } })
+    const logBody = computed(() => JSON.stringify({ roleId: 3, menuIds: [11, 111, 112, 12], dataScope: 'dept_below' }, null, 2))
+
+    /* 监控 */
+    const meters = computed(() => [
+      { t: 'CPU', v: 23, d: '8 核 · 负载 1.84', c: props.p.signal },
+      { t: '内存', v: 61, d: '9.8 / 16 GB', c: props.p.signal },
+      { t: '磁盘', v: 78, d: '390 / 500 GB', c: props.p.warning },
+      { t: '数据库连接', v: 12, d: '24 / 200', c: props.p.signal },
+    ])
+    const nodes = [
+      { n: 'sa-prod-01', d: '10.0.1.11 · 调度器主节点', ok: true, s: '正常' },
+      { n: 'sa-prod-02', d: '10.0.1.12 · 备用', ok: true, s: '正常' },
+      { n: 'sa-prod-03', d: '10.0.1.13 · 延迟 380ms', ok: false, s: '偏慢' },
+    ]
+
+    /* 个人 */
+    const profileRows = [
+      { t: '姓名', v: 'Andy Zhong', i: 'ph:user-fill', c: '#0A84FF' },
+      { t: '邮箱', v: 'andy@smartadmin.dev', i: 'ph:envelope-simple-fill', c: '#30B0C7' },
+      { t: '手机号', v: '138****8888', i: 'ph:phone-fill', c: '#34C759' },
+      { t: '第三方绑定', v: 'GitHub', i: 'ph:link-bold', c: '#8E8E93' },
+    ]
+    const notifyPrefs = reactive([
+      { t: '权限申请', d: '有人申请角色或权限时通知我', on: true },
+      { t: '安全告警', d: '异地登录、连续失败登录', on: true },
+      { t: '任务失败', d: '定时任务执行失败', on: true },
+      { t: '每周摘要', d: '每周一早上发送邮件', on: false },
+    ])
+
+    /* 令牌展示 */
+    const tokenList = computed(() => {
+      const p = props.p
+      return [
+        ['--bg-app', p.app, '画布'], ['--bg-card', p.card, '卡片'], ['--bg-elevated', p.elevated, '弹层'],
+        ['--fill', p.fill, '填充 / 灰按钮'], ['--text-1', p.text1, '主文字'], ['--text-2', p.text2, '次文字'],
+        ['--text-3', p.text3, '辅助 / 占位'], ['--border', p.border, '输入描边'], ['--separator', p.separator, '分隔线'],
+        ['--accent', props.accent, '主色'], ['--success', p.success, '成功'], ['--warning', p.warning, '警告'],
+        ['--error', p.error, '危险'], ['--info', p.info, '信息'],
+      ]
+    })
+
+    /* ⌘K */
+    const cmdk = reactive({ show: false, kw: '', idx: 0 })
+    const cmdkResults = computed(() => FLAT.filter(f => curLeaves.value.has(f.key) && (!cmdk.kw || f.label.includes(cmdk.kw) || f.key.includes(cmdk.kw.toLowerCase()))))
+    watch(() => cmdk.kw, () => (cmdk.idx = 0))
+    watch(() => cmdk.show, v => { if (!v) cmdk.kw = '' })
+    function cmdkGo(k) { cmdk.show = false; go(k) }
+    function cmdkKey(e) {
+      const n = cmdkResults.value.length
+      if (e.key === 'ArrowDown') { cmdk.idx = (cmdk.idx + 1) % n; e.preventDefault() }
+      else if (e.key === 'ArrowUp') { cmdk.idx = (cmdk.idx - 1 + n) % n; e.preventDefault() }
+      else if (e.key === 'Enter' && n) cmdkGo(cmdkResults.value[cmdk.idx].key)
+    }
+    const isFs = ref(!!document.fullscreenElement)
+    const onFs = () => { isFs.value = !!document.fullscreenElement }
+    document.addEventListener('fullscreenchange', onFs)
+    onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFs))
+    function toggleFs() {
+      if (document.fullscreenElement) document.exitFullscreen()
+      else document.documentElement.requestFullscreen().catch(() => msg.warning('浏览器未允许全屏'))
+    }
+    const onKey = e => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const k = e.key.toLowerCase()
+      if (k === 'k') { e.preventDefault(); cmdk.show = true }
+      else if (k === 'b') { e.preventDefault(); collapsed.value = !collapsed.value }
+    }
+    onMounted(() => window.addEventListener('keydown', onKey))
+    onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+    return {
+      msg, route, collapsed, settingsOpen, userDrawer, menuModal, logDrawer, openTabs, prefs,
+      ctx, ctxOptions, onCtxSelect, onTabCtx, reloadKey, isFs, toggleFs, menuOptions, expandedKeys, crumbs, MODULES, curModuleId, defaultModuleId, curModule, prevRoute, openModule, switchModule, setDefault, titleOf, iconOf, tabMenu, onTabMenu, fitRoutes, tblRoutes, isNarrow, currentTitle, go, closeTab, login, doLogin, userMenu, onUserMenu,
+      stats, miniPath, trendRange, trend, quick, todos, logins, notices,
+      orgKw, orgTree, roleOptions, users, checked, userColumns, confirmDelete, notify,
+      roles, roleIdx, role, roleTab, permKw, permTree, permChecked, permSuffix, scope, scopes, memberColumns,
+      menuApp, menuRows, menuColumns, dicts, dictIdx, dictItems, dictColumns, cfgTab,
+      logs, logColumns, logSel, workOrders, mesColumns, mesSummary, mesLines, mesStatus, selWo, detailTab, mesRowProps, opRows, opColumns, bomRows, bomColumns, recRows, recColumns, logRowProps, logBody, meters, nodes, profileRows, notifyPrefs, tokenList,
+      cmdk, cmdkResults, cmdkGo, cmdkKey,
+      ACCENTS, accentIdx: root.accentIdx,
+      toggleDark: () => emit('toggle-dark'), setMode: m => emit('set-mode', m),
+    }
+  },
+})
+
+const App = defineComponent({
+  components: { Shell },
+  setup() {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const sysDark = ref(media.matches)
+    media.addEventListener('change', e => (sysDark.value = e.matches))
+    const prefs = reactive({ mode: 'light', tabs: true, watermark: false })
+    const accentIdx = ref(0)
+    const isDark = computed(() => prefs.mode === 'auto' ? sysDark.value : prefs.mode === 'dark')
+    const mode = computed(() => isDark.value ? 'dark' : 'light')
+    const accent = computed(() => isDark.value ? ACCENTS[accentIdx.value].dark : ACCENTS[accentIdx.value].light)
+    const signal = computed(() => ACCENTS[accentIdx.value].mono ? SIGNAL[mode.value] : accent.value)
+    const p = computed(() => ({ ...PALETTE[mode.value], signal: signal.value }))
+    const overrides = computed(() => buildOverrides(mode.value, accent.value, signal.value))
+    Vue.provide('root', { prefs, accentIdx })
+
+    // 壳 CSS 变量(对应 tokens.css 的角色层)
+    watch([p, accent, signal], () => {
+      const s = document.documentElement.style, v = p.value
+      const set = (k, val) => s.setProperty(k, val)
+      set('--font', FONT); set('--font-mono', MONO)
+      set('--bg-app', v.app); set('--bg-sidebar', v.sidebar); set('--bg-header', v.header); set('--bg-elevated-a', v.elevatedA)
+      set('--text-1', v.text1); set('--text-2', v.text2); set('--text-3', v.text3)
+      set('--border', v.border); set('--separator', v.separator); set('--fill', v.fill); set('--hover', v.hover)
+      set('--hairline', v.hairline); set('--hairline-strong', v.hairlineStrong); set('--glass', v.glass); set('--glass-strong', v.glassStrong)
+      set('--edge-top', v.edgeTop); set('--edge-mid', v.edgeMid); set('--edge-bottom', v.edgeBottom); set('--edge-light', v.edgeLight)
+      set('--ambient-1', v.ambient1); set('--ambient-2', v.ambient2); set('--grid-dot', v.gridDot); set('--grid-line', v.gridLine); set('--noise-opacity', v.noise)
+      set('--accent', accent.value); set('--signal', signal.value); set('--signal-glow', rgba(signal.value, isDark.value ? 0.55 : 0.35))
+      set('--mark-bg', isDark.value ? 'linear-gradient(180deg,#F8FAFC,#CBD5E1)' : 'linear-gradient(180deg,#2A2A2E,#0B0B0C)'); set('--mark-fg', isDark.value ? '#0A0A0B' : '#FFFFFF')
+      set('--tab-strip', v.tabStrip); set('--tab-active', v.app); set('--tab-active-bg', rgba(signal.value, isDark.value ? 0.18 : 0.08)); set('--tab-on-bg', isDark.value ? 'rgba(59, 155, 255, 0.20)' : rgba(signal.value, 0.10)); set('--tab-on-fg', isDark.value ? '#FFFFFF' : signal.value); set('--tab-on-ring', isDark.value ? 'rgba(130, 190, 255, 0.65)' : rgba(signal.value, 0.5)); set('--mask', v.mask); set('--num-a', isDark.value ? '#FFFFFF' : '#0A2A6B'); set('--num-b', isDark.value ? '#8CC4FF' : '#0A7BE8'); set('--glass-solid', isDark.value ? 'rgba(23, 35, 61, 0.96)' : 'rgba(248, 250, 252, 0.96)'); set('--tab-active-fg', isDark.value ? mix(signal.value, '#FFFFFF', 0.35) : signal.value); set('--tab-hover', v.tabHover)
+      set('--wallpaper', v.wallpaper); set('--glass-panel', v.glassPanel); set('--glass-border', v.glassBorder)
+      set('--glass-shadow', v.glassShadow); set('--glass-shadow-soft', v.glassShadowSoft); set('--tab-active-ring', rgba(signal.value, isDark.value ? 0.35 : 0.22))
+      set('--ok', v.success); set('--err', v.error)
+      set('--shadow-1', v.shadow1); set('--shadow-2', v.shadow2)
+      document.documentElement.dataset.theme = mode.value
+      document.documentElement.style.colorScheme = mode.value
+    }, { immediate: true })
+
+    return {
+      prefs, accentIdx, isDark, accent, p, overrides, darkTheme, zhCN, dateZhCN,
+      toggleDark: () => (prefs.mode = isDark.value ? 'light' : 'dark'),
+      setMode: m => (prefs.mode = m),
+    }
+  },
+  template: `
+    <n-config-provider :theme="isDark ? darkTheme : null" :theme-overrides="overrides" :locale="zhCN" :date-locale="dateZhCN">
+      <n-message-provider placement="top"><n-dialog-provider><n-notification-provider placement="top-right">
+        <shell :is-dark="isDark" :accent="accent" :p="p" @toggle-dark="toggleDark" @set-mode="setMode" />
+      </n-notification-provider></n-dialog-provider></n-message-provider>
+    </n-config-provider>`,
+})
+
+const app = createApp(App)
+app.config.compilerOptions.isCustomElement = tag => tag === 'iconify-icon'
+app.use(naive)
+app.mount('#app')
+</script>
+</body>
+</html>
