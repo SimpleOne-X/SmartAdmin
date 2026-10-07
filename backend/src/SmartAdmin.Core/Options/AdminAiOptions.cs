@@ -1,7 +1,7 @@
 namespace SmartAdmin.Core;
 
 /// <summary>
-/// AI 网关配置(对应 <c>SmartAdmin:Ai</c> 节)。厂商、Key、模型走后台「AI 管理」维护(落库),
+/// AI 网关配置(对应 <c>SmartAdmin:Ai</c> 节)。厂商、Key、模型走后台「AI 网关管理」维护(落库),
 /// 这里只放部署级参数——运维改配置文件、不进数据库。
 /// </summary>
 public class AdminAiOptions

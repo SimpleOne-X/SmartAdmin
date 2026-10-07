@@ -5,8 +5,8 @@
    smart-naive-table 3.x 自带表头(排序箭头 / 漏斗悬停才显示)、列宽拖拽把手、卡片内边距、当前行高亮(background-image 叠色)的样式,
    下面这些情形不需要再写覆盖:
    - 斑马纹:不加(HIG 建议多列表格用,但 ERP 宽表叠上选中色、悬停色会显得花,保持细分隔线);
-   - 列分隔竖线 + 表格外框:smart-naive-table 3.x 内部写死 single-line:false(竖线默认开)且不在可注入的全局默认里,
-     所以只能在下面「只留横向发丝线」那段用 CSS 去掉(macOS 的列表 / 访达只有横线);
+   - 列分隔竖线 + 表格外框:用 Naive 原生的(smart-naive-table 3.x 内部是 single-line:false,bordered 走默认的 true),
+     线色取主题 DataTable.borderColor(= --hairline-strong),这里不覆盖。要给某张表去线,传 single-line / :bordered="false";
    - 固定列 / 固定表头的实底:DataTable 的 tdColor / thColor 本身就是不透明实色,固定列 sticky 叠在别的列上不会透底,
      不必逐态覆盖;
    - SmartTable 当前行(activeRowKey)的固定列补丁:库自己对整行 td 叠 background-image,固定列同样被覆盖,不需要补丁。 */
@@ -39,23 +39,20 @@
   white-space: nowrap;
 }
 
-/* 只留横向发丝线:去掉单元格竖线和表格自己的外框。
-   竖线来自 .n-data-table:not(.n-data-table--single-line) 下的 th / td 的 border-right,特异度比普通后代选择器高,
-   所以这里用同样的 :not() 写法加 !important 压过;外框是 --bordered 修饰类下 wrapper 的 border。
-   表格已经坐在卡片里,再套一圈框就是「卡片 > 表格框」两层线;外框去掉后,圆角留给 wrapper 裁剪表头底色。 */
-.n-data-table:not(.n-data-table--single-line) .n-data-table-th,
-.n-data-table:not(.n-data-table--single-line) .n-data-table-td {
-  border-right: 0 !important;
+/* fill-height 表格的外框拉到容器底,行少时末行和外框之间是一片空白,末行不画线就像这张表没有横线,所以补上。
+   不撑满的表格(外框紧贴末行)保持 Naive 默认的末行无底线,否则末行线和外框叠成两道。 */
+.n-data-table.n-data-table--flex-height .n-data-table-td.n-data-table-td--last-row {
+  border-bottom: 1px solid var(--n-merged-border-color);
 }
 
-.n-data-table.n-data-table--bordered .n-data-table-wrapper {
-  border: 0 !important;
-  border-radius: var(--radius-md, 9px) !important;
-}
-
-/* 末行不画底线:卡片底边(分页行上方)不出现多余横线。 */
-.n-data-table .n-data-table-td.n-data-table-td--last-row {
-  border-bottom: 0 !important;
+/* 勾选后工具条换成批量栏(已选 N 项 / 批量删除 / 取消选择),库把批量栏左半和右半图标组的高度写死 34px,
+   而正常态的工具条由 30px 的控件撑出来(--control-h),切换时整条高 4px,下面的表格被顶下去一下。
+   让批量栏跟控件同高;窄屏档(--batch-narrow)是上下两层的另一套排法,不动。 */
+.smart-table-toolbar.smart-table-toolbar--batch:not(.smart-table-toolbar--batch-narrow)
+  .smart-table-batch-info,
+.smart-table-toolbar.smart-table-toolbar--batch:not(.smart-table-toolbar--batch-narrow)
+  .smart-table-toolbar-icons {
+  height: var(--control-h, 30px);
 }
 
 /* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/

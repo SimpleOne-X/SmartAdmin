@@ -151,7 +151,7 @@ public class ModulePortalTests
         var c = f.CreateClient();
         WithToken(c, await c.LoginToken("superAdmin", "Test@123456"));
 
-        // 内置 system 模块下:工作台(根级页面)+ 6 个顶级目录(组织管理/系统运维/任务调度/日志审计/文件管理/AI 管理);按钮不入导航,故为 7 个根节点
+        // 内置 system 模块下:工作台(根级页面)+ 6 个顶级目录(组织管理/系统运维/任务调度/日志审计/文件管理/AI 网关管理);按钮不入导航,故为 7 个根节点
         var tree = (await (await c.GetAsync("/api/v1/personal/menu?moduleId=1")).ReadEnvelope()).GetProperty("data");
         Assert.Equal(7, tree.GetArrayLength());
 

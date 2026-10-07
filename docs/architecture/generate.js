@@ -96,15 +96,21 @@ function defs() {
   <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${S.dots}" fill-opacity="${S.dotsOp}"/></pattern>
   <filter id="shadow" x="-10%" y="-10%" width="120%" height="135%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="${S.shadow}" flood-opacity="${S.shadowOp}"/></filter>
   <filter id="neon" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  <linearGradient id="gTile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C83FF"/><stop offset="1" stop-color="#4B52E6"/></linearGradient>
   ${markers}
 </defs>`;
 }
 
-const mark = (x, y, scale) => `<g transform="translate(${x},${y}) scale(${scale})"><rect width="120" height="120" rx="27" fill="url(#gTile)"/><polygon points="60,20 94.6,40 94.6,80 60,100 25.4,80 25.4,40" fill="none" stroke="#fff" stroke-width="11" stroke-linejoin="round"/><path d="M60 60L60 39M60 60L78.2 49.5M60 60L78.2 70.5M60 60L60 81M60 60L41.8 70.5M60 60L41.8 49.5" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="60" cy="39" r="5" fill="#fff"/><circle cx="78.2" cy="49.5" r="5" fill="#fff"/><circle cx="78.2" cy="70.5" r="5" fill="#fff"/><circle cx="60" cy="81" r="5" fill="#fff"/><circle cx="41.8" cy="70.5" r="5" fill="#fff"/><circle cx="41.8" cy="49.5" r="5" fill="#fff"/><circle cx="60" cy="60" r="8.5" fill="#A5F3FC"/></g>`;
+// 品牌图标直接取前端包里的正式 logo，换 logo 后重跑即可。
+// logo 自带的 id（bg / b1 …）会和本图的 id 冲突，内嵌时统一加 lg- 前缀。
+const LOGO_SRC = path.join(__dirname, '../../web/packages/admin/src/assets/smart-logo.svg');
+const LOGO_BODY = fs.readFileSync(LOGO_SRC, 'utf8')
+  .replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+  .replace(/\sid="([^"]+)"/g, ' id="lg-$1"')
+  .replace(/url\(#([^)]+)\)/g, 'url(#lg-$1)');
+const mark = (x, y, size) => `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 300 300">${LOGO_BODY}</svg>`;
 
 function header(t) {
-  let s = mark(100, 38, 0.46);
+  let s = mark(100, 38, 55);
   s += `<text x="170" y="70" font-family="${FONT}" font-size="30" font-weight="700" fill="${S.text}">${esc(t.title)}</text>`;
   s += `<text x="170" y="98" font-family="${FONT}" font-size="15" fill="${S.text3}">${esc(t.subtitle)}</text>`;
   let chipX = W - 100;

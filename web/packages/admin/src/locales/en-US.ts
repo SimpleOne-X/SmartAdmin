@@ -317,7 +317,7 @@ export default {
       ops: 'System Operations',
       schedule: 'Job Scheduling',
       audit: 'Audit Logs',
-      ai: 'AI Management',
+      ai: 'AI Gateway',
     },
     page: {
       workbench: 'Workbench',

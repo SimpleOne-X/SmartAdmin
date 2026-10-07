@@ -24,7 +24,7 @@ namespace SmartAdmin.Services;
 /// 目录就是它们的权限组(如 301 探针挂在系统运维下):不生成路由、不进侧栏,角色授权界面把它们渲染成
 /// 该目录组里「接口权限(无页面)」一行,照常勾选;只被授了这类权限的用户不会在门户看到该应用。</para>
 /// <para><b>Id 编号</b>:百位是分区,1xx 工作台、2xx 组织管理、3xx 系统运维、4xx 任务调度、5xx 日志审计、6xx 文件管理、
-/// 7xx AI 管理,8xx–9xx 留给新目录。整百是目录本身,目录下无页面的接口按钮取 01–09(如 301 探针);页面取整十,一页独占一个十位段;
+/// 7xx AI 网关管理,8xx–9xx 留给新目录。整百是目录本身,目录下无页面的接口按钮取 01–09(如 301 探针);页面取整十,一页独占一个十位段;
 /// 根级页面(各应用的工作台)在 1xx 各占一个十位段。按钮的个位有固定语义:<b>1 查询、2 新增、3 更新、4 删除</b>,
 /// 5–9 是本页特有操作;页面没有的标准按钮空着位,不往前挪。规则由 <c>MenuSeedIdLayoutTests</c> 锁定;
 /// 撞号、越界由启动检查(<c>DatabaseInitializer</c>)与 <c>SeedIdRangeTests</c> 当场拒绝。</para>
@@ -230,8 +230,8 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 614, ParentId = 610, Type = MenuType.Button, Title = "文件-删除", Permission = Codes("DELETE:/api/v1/sys/file/{id}", "POST:/api/v1/sys/file/batch-delete"), Sort = 4, Enabled = true },
         new SysMenu { Id = 615, ParentId = 610, Type = MenuType.Button, Title = "文件-下载", Permission = "GET:/api/v1/sys/file/{id}/download", Sort = 3, Enabled = true },
 
-        // ═══ 7xx AI 管理 ═══════════════════════════════════════════
-        new SysMenu { Id = 700, ParentId = 0,   Type = MenuType.Catalog, Title = "AI 管理",  Permission = "", Icon = "ph:robot-duotone", Sort = 6, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
+        // ═══ 7xx AI 网关管理 ═══════════════════════════════════════════
+        new SysMenu { Id = 700, ParentId = 0,   Type = MenuType.Catalog, Title = "AI 网关管理",  Permission = "", Icon = "ph:sparkle-duotone", Sort = 6, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
 
         // AI 模型页(AiProviderController):厂商 CRUD + 模型清单 + 测试连接。
         new SysMenu { Id = 710, ParentId = 700, Type = MenuType.Menu,    Title = "AI 模型",  Permission = "", Path = "/system/ai-model", Component = "system/ai-model/index", Icon = "ph:brain-duotone", Sort = 1, Enabled = true, Visible = true },

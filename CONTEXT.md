@@ -21,7 +21,7 @@
 | 串行跳过(SerialSkip) | 默认并发模式:上次触发未结束则本次跳过并记 Skipped 记录;另一模式为并行(Parallel),无排队。 |
 | 执行一次(Run-now) | 手动触发:在收到请求的副本本机执行,不经选主、不做领取、不动 `NextRunTime`。 |
 
-## AI 管理(AI Management)
+## AI 网关管理(AI Gateway)
 
 | 术语 | 定义 |
 |---|---|

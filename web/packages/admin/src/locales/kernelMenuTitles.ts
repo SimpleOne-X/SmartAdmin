@@ -10,7 +10,7 @@ export const KERNEL_MENU_TITLES: Record<string, string> = {
   系统运维: 'menuTitle.catalog.ops',
   任务调度: 'menuTitle.catalog.schedule',
   日志审计: 'menuTitle.catalog.audit',
-  'AI 管理': 'menuTitle.catalog.ai',
+  'AI 网关管理': 'menuTitle.catalog.ai',
   工作台: 'menuTitle.page.workbench',
   机构管理: 'menuTitle.page.org',
   岗位管理: 'menuTitle.page.position',

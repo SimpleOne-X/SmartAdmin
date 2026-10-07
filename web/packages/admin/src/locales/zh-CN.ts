@@ -314,7 +314,7 @@ export default {
       ops: '系统运维',
       schedule: '任务调度',
       audit: '日志审计',
-      ai: 'AI 管理',
+      ai: 'AI 网关管理',
     },
     page: {
       workbench: '工作台',
