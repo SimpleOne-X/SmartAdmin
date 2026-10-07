@@ -1,0 +1,619 @@
+namespace SmartAdmin.Core;
+
+/// <summary>
+/// 业务错误码。
+/// <para>
+/// 核心纪律:<b>后端只抛码、不写文案</b>。每个码携带一个语义 msgKey(如 <c>error.auth.passwordWrong</c>),
+/// 前端用 msgKey 查本地语言包渲染提示;后端返回的 Message 字段仅作非浏览器调用方的兜底降级。
+/// 这样文案单源在前端,切语言零后端参与。
+/// </para>
+/// <para>分段规划(新增错误码时按段落位,勿跨段挪用):</para>
+/// <list type="table">
+///   <item><term>0</term><description>成功</description></item>
+///   <item><term>40000–40999</term><description>认证与登录</description></item>
+///   <item><term>41000–41999</term><description>权限与数据范围</description></item>
+///   <item><term>42000–42999</term><description>用户 / 组织 / 角色 / 菜单</description></item>
+///   <item><term>43000–43999</term><description>字典 / 配置</description></item>
+///   <item><term>44000–44999</term><description>文件上传</description></item>
+///   <item><term>45000–45999</term><description>消息通知</description></item>
+///   <item><term>46000–46999</term><description>导入 / 导出</description></item>
+///   <item><term>47000–47999</term><description>定时任务</description></item>
+///   <item><term>48000–48999</term><description>请求参数</description></item>
+///   <item><term>49000–49999</term><description>AI 模型</description></item>
+///   <item><term>50000–50999</term><description>系统内部错误</description></item>
+/// </list>
+/// </summary>
+public enum ErrorCode
+{
+    /// <summary>成功(统一返回的默认码)</summary>
+    [MsgKey("common.success")]
+    Success = 0,
+
+    // ── 40xxx 认证与登录 ─────────────────────────────────────────────
+
+    /// <summary>账号或密码错误。故意不区分"账号不存在/密码错",避免账号枚举攻击。</summary>
+    [MsgKey("error.auth.passwordWrong")]
+    PasswordWrong = 40001,
+
+    /// <summary>验证码已过期(需刷新重取)</summary>
+    [MsgKey("error.auth.captchaExpired")]
+    CaptchaExpired = 40002,
+
+    /// <summary>验证码不正确</summary>
+    [MsgKey("error.auth.captchaWrong")]
+    CaptchaWrong = 40003,
+
+    /// <summary>账号因连续登录失败被临时锁定;args 可携带 lockMinutes</summary>
+    [MsgKey("error.auth.accountLocked")]
+    AccountLocked = 40004,
+
+    /// <summary>账号已被停用(管理员操作)</summary>
+    [MsgKey("error.auth.accountDisabled")]
+    AccountDisabled = 40005,
+
+    /// <summary>访问令牌无效或已过期(会话被强退也归此类)</summary>
+    [MsgKey("error.auth.tokenInvalid")]
+    TokenInvalid = 40006,
+
+    /// <summary>刷新令牌无效 / 已轮换吊销 / 检测到重放</summary>
+    [MsgKey("error.auth.refreshTokenInvalid")]
+    RefreshTokenInvalid = 40007,
+
+    /// <summary>请求过于频繁,已触发限流(RateLimiter);args 可携带 retryAfterSeconds。短信发送冷却/日上限也复用此码。</summary>
+    [MsgKey("error.auth.tooManyRequests")]
+    TooManyRequests = 40008,
+
+    /// <summary>
+    /// 密码校验已通过,需短信二次验证(全局 MFA 开且用户绑了手机号)。
+    /// <b>信令而非失败</b>:args 携带 challengeId/phoneMask/expiresSeconds/resendSeconds,
+    /// 前端据此切到验证码输入页,凭 challengeId + 短信码调 <c>POST /auth/login/sms</c> 完成登录。
+    /// </summary>
+    [MsgKey("error.auth.smsCodeRequired")]
+    SmsCodeRequired = 40009,
+
+    /// <summary>短信验证码不正确;args 携带 attemptsLeft(剩余尝试次数)</summary>
+    [MsgKey("error.auth.smsCodeWrong")]
+    SmsCodeWrong = 40010,
+
+    /// <summary>
+    /// 短信验证码已失效(缺失/过期/已消费/尝试次数耗尽/挑战无效统一归此,防探测)。
+    /// 免密登录(手机号+码换令牌)还把错码(本应是 <see cref="SmsCodeWrong"/>)也归一到此码且不带
+    /// attemptsLeft——否则"错码回 40010"与"未知手机号回 40011"本身就泄露了手机号是否已注册。
+    /// </summary>
+    [MsgKey("error.auth.smsCodeExpired")]
+    SmsCodeExpired = 40011,
+
+    /// <summary>短信验证码登录未启用(全局开关 <c>sys.security.smsLogin.enabled</c> 关闭)</summary>
+    [MsgKey("error.auth.smsLoginDisabled")]
+    SmsLoginDisabled = 40012,
+
+    /// <summary>外部登录 provider 未启用或不存在(code 未配置 / 运营开关 <c>sys.externalauth.{code}.enabled</c> 关闭)</summary>
+    [MsgKey("error.auth.oauthProviderDisabled")]
+    OAuthProviderDisabled = 40013,
+
+    /// <summary>外部登录回调 state 无效(缺失 / 过期 / 已消费——CSRF 防护;统一归此,防探测)</summary>
+    [MsgKey("error.auth.oauthStateInvalid")]
+    OAuthStateInvalid = 40014,
+
+    /// <summary>外部登录令牌交换失败(授权码无效 / IdP 拒绝 / id_token 签名或声明校验不过)</summary>
+    [MsgKey("error.auth.oauthExchangeFailed")]
+    OAuthExchangeFailed = 40015,
+
+    /// <summary>该外部身份尚未绑定任何本地账号(默认未绑定策略=拒绝;需先登录后在个人中心绑定,或该 provider 开启自动开户)</summary>
+    [MsgKey("error.auth.oauthAccountNotBound")]
+    OAuthAccountNotBound = 40016,
+
+    /// <summary>外部身份绑定冲突:该外部身份已绑定其他账号,或当前账号已绑定同一 provider(绑定唯一)</summary>
+    [MsgKey("error.auth.oauthAlreadyBound")]
+    OAuthAlreadyBound = 40017,
+
+    /// <summary>密码已通过,需 TOTP 二次验证(args 可携带 challenge 信息)</summary>
+    [MsgKey("error.auth.totpRequired")]
+    TotpRequired = 40018,
+
+    /// <summary>TOTP 动态口令不正确</summary>
+    [MsgKey("error.auth.totpWrong")]
+    TotpWrong = 40019,
+
+    /// <summary>账号尚未绑定 TOTP(强制 MFA 时须先完成自助绑定)</summary>
+    [MsgKey("error.auth.totpNotBound")]
+    TotpNotBound = 40020,
+
+    /// <summary>
+    /// TOTP 绑定无效:挑战缺失/过期/已消费、账号已绑定等(统一归此,防探测)。
+    /// <see cref="BindInviteInvalid"/> 是本码的同值别名。
+    /// </summary>
+    [MsgKey("error.auth.mfaBindInvalid")]
+    MfaBindInvalid = 40021,
+
+    /// <summary><see cref="MfaBindInvalid"/> 的同值别名(按这个名字引用的代码照常编译)。</summary>
+    BindInviteInvalid = MfaBindInvalid,
+
+    /// <summary>恢复码不正确或已使用</summary>
+    [MsgKey("error.auth.recoveryCodeInvalid")]
+    RecoveryCodeInvalid = 40022,
+
+    /// <summary>CSRF 校验失败(双提交 Cookie 与请求头不一致/缺失)</summary>
+    [MsgKey("error.auth.csrfInvalid")]
+    CsrfInvalid = 40023,
+
+    /// <summary>高风险操作需要短时再次认证(约 5 分钟窗口内的 reauth grant 缺失或已过期)</summary>
+    [MsgKey("error.auth.reauthRequired")]
+    ReauthRequired = 40024,
+
+    /// <summary>绑定 TOTP 时必须先验证目标用户当前密码</summary>
+    [MsgKey("error.auth.mfaBindPasswordRequired")]
+    MfaBindPasswordRequired = 40026,
+
+    /// <summary>API Key 缺失或无效(机器端接入:<c>[ApiKey]</c> 端点未带 X-Api-Key 或 key 不认识)</summary>
+    [MsgKey("error.auth.apiKeyInvalid")]
+    ApiKeyInvalid = 40027,
+
+    /// <summary>外部登录配置:类型码未知,或对应可选包未安装(管理页只能配已装的类型)</summary>
+    [MsgKey("error.auth.externalAuthTypeNotFound")]
+    ExternalAuthTypeNotFound = 40030,
+
+    /// <summary>外部登录配置:Code 已被占用(含代码注册的 provider)</summary>
+    [MsgKey("error.auth.externalAuthCodeExists")]
+    ExternalAuthCodeExists = 40031,
+
+    /// <summary>外部登录配置:Code 格式不合法,或与官方类型保留码冲突</summary>
+    [MsgKey("error.auth.externalAuthCodeInvalid")]
+    ExternalAuthCodeInvalid = 40032,
+
+    /// <summary>外部登录配置:必填字段缺失;机密字段首次保存必填;改了决定请求去向的字段(如 OIDC Authority)须重新输入机密。args 带 <c>field</c></summary>
+    [MsgKey("error.auth.externalAuthFieldMissing")]
+    ExternalAuthFieldMissing = 40033,
+
+    /// <summary>当前数据保护密钥是进程内临时密钥(重启即失效),拒绝保存会随重启解不开的第三方密钥</summary>
+    [MsgKey("error.auth.externalAuthDataProtectionKeyMissing")]
+    ExternalAuthDataProtectionKeyMissing = 40034,
+
+    /// <summary>外部登录配置不存在(清除配置时按 Code 找不到)</summary>
+    [MsgKey("error.auth.externalAuthProviderNotFound")]
+    ExternalAuthProviderNotFound = 40035,
+
+    /// <summary>OIDC Authority 被 SSRF 围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单);保存与测试都先过围栏</summary>
+    [MsgKey("error.auth.externalAuthEndpointBlocked")]
+    ExternalAuthEndpointBlocked = 40036,
+
+    // ── 41xxx 权限与数据范围 ─────────────────────────────────────────
+
+    /// <summary>无接口访问权限(权限码不在当前用户 PermissionCodeList 内)</summary>
+    [MsgKey("error.perm.denied")]
+    NoPermission = 41001,
+
+    /// <summary>演示模式下禁止写操作</summary>
+    [MsgKey("error.perm.demoReadOnly")]
+    DemoModeReadOnly = 41002,
+
+    /// <summary>该操作仅限超级管理员执行(角色定义/授权菜单/数据范围配置等);超出路由权限之外的强约束</summary>
+    [MsgKey("error.perm.superAdminRequired")]
+    SuperAdminRequired = 41003,
+
+    /// <summary>目标角色不可转授(未启用/已删除/未标记 IsDelegatable):非超管只能授予"启用+未删除+可转授"的角色</summary>
+    [MsgKey("error.role.notDelegatable")]
+    RoleNotDelegatable = 41004,
+
+    /// <summary>目标用户超出当前用户的数据范围,不能为其授予角色</summary>
+    [MsgKey("error.user.outOfDataScope")]
+    UserOutOfDataScope = 41005,
+
+    // ── 42xxx 用户 / 组织 / 角色 / 菜单 ──────────────────────────────
+
+    /// <summary>目标用户不存在;args 可携带 name</summary>
+    [MsgKey("error.user.notFound")]
+    UserNotFound = 42001,
+
+    /// <summary>目标角色不存在</summary>
+    [MsgKey("error.role.notFound")]
+    RoleNotFound = 42002,
+
+    /// <summary>目标机构不存在</summary>
+    [MsgKey("error.org.notFound")]
+    OrgNotFound = 42003,
+
+    /// <summary>机构下仍有子机构,不能删除(先移除或迁移子机构)</summary>
+    [MsgKey("error.org.hasChildren")]
+    OrgHasChildren = 42004,
+
+    /// <summary>目标职位不存在</summary>
+    [MsgKey("error.position.notFound")]
+    PositionNotFound = 42005,
+
+    /// <summary>登录账号已存在(账号唯一)</summary>
+    [MsgKey("error.user.accountExists")]
+    AccountExists = 42006,
+
+    /// <summary>超级管理员受保护:不可删除/停用(防自锁死、防提权面被破坏)</summary>
+    [MsgKey("error.user.superAdminProtected")]
+    SuperAdminProtected = 42007,
+
+    /// <summary>非法父机构:父节点不能是自身(也不应是自身子孙)</summary>
+    [MsgKey("error.org.invalidParent")]
+    OrgInvalidParent = 42008,
+
+    /// <summary>机构编码已存在(编码唯一)</summary>
+    [MsgKey("error.org.codeExists")]
+    OrgCodeExists = 42009,
+
+    /// <summary>职位编码已存在(编码唯一)</summary>
+    [MsgKey("error.position.codeExists")]
+    PositionCodeExists = 42010,
+
+    /// <summary>目标模块/应用不存在</summary>
+    [MsgKey("error.module.notFound")]
+    ModuleNotFound = 42011,
+
+    /// <summary>模块编码已存在(编码唯一)</summary>
+    [MsgKey("error.module.codeExists")]
+    ModuleCodeExists = 42012,
+
+    /// <summary>内置模块受保护:不可删除(如 system 模块)</summary>
+    [MsgKey("error.module.protected")]
+    ModuleProtected = 42013,
+
+    /// <summary>无该模块访问权(未被授权该模块下任何菜单;设默认应用时校验)</summary>
+    [MsgKey("error.module.accessDenied")]
+    ModuleAccessDenied = 42014,
+
+    /// <summary>目标菜单不存在</summary>
+    [MsgKey("error.menu.notFound")]
+    MenuNotFound = 42015,
+
+    /// <summary>菜单下仍有子节点,不能删除(先移除或迁移子节点)</summary>
+    [MsgKey("error.menu.hasChildren")]
+    MenuHasChildren = 42016,
+
+    /// <summary>非法父菜单:父节点不存在,或指向自身/自身子孙(会成环导致子树在树上消失)</summary>
+    [MsgKey("error.menu.invalidParent")]
+    MenuInvalidParent = 42017,
+
+    /// <summary>角色编码已存在(编码唯一)</summary>
+    [MsgKey("error.role.codeExists")]
+    RoleCodeExists = 42018,
+
+    /// <summary>新口令不满足密码复杂度策略;args 携带 minLength/requireUpper/requireLower/requireDigit/requireSpecial</summary>
+    [MsgKey("error.user.passwordTooWeak")]
+    PasswordTooWeak = 42019,
+
+    /// <summary>回收站中未找到该已删记录</summary>
+    [MsgKey("error.recycle.notFound")]
+    RecycleNotFound = 42020,
+
+    /// <summary>恢复时唯一字段冲突(编码/账号已被新记录占用)</summary>
+    [MsgKey("error.recycle.uniqueConflict")]
+    RecycleUniqueConflict = 42021,
+
+    /// <summary>不支持的回收站实体类型</summary>
+    [MsgKey("error.recycle.invalidType")]
+    RecycleInvalidType = 42022,
+
+    /// <summary>模块下仍有挂靠菜单,不能删除(先迁移或删除其顶级目录)</summary>
+    [MsgKey("error.module.hasMenus")]
+    ModuleHasMenus = 42023,
+
+    /// <summary>会话不存在或已下线("我的会话"自助下线;含"不是你的会话"——不区分,防探测他人会话)</summary>
+    [MsgKey("error.session.notFound")]
+    SessionNotFound = 42024,
+
+    /// <summary>新口令与当前或最近使用过的口令重复(密码历史防重用策略,开关 sys.security.password.historyCount)</summary>
+    [MsgKey("error.user.passwordReused")]
+    PasswordReused = 42025,
+
+    /// <summary>头像 URL 不合法:仅允许空/空白 或 IFileUrlSigner 签出的本地直链,拒绝外部/未签名地址(防注入)</summary>
+    [MsgKey("error.user.avatarUrlInvalid")]
+    AvatarUrlInvalid = 42026,
+
+    /// <summary>机构下仍有在职用户,不能删除(先移除或迁移用户)</summary>
+    [MsgKey("error.org.hasUsers")]
+    OrgHasUsers = 42027,
+
+    /// <summary>职位下仍有在职用户,不能删除(先移除或迁移用户)</summary>
+    [MsgKey("error.position.hasUsers")]
+    PositionHasUsers = 42028,
+
+    /// <summary>不能对自己执行此操作(防管理员自行停用/删除/修改自己)</summary>
+    [MsgKey("error.user.cannotOperateSelf")]
+    CannotOperateSelf = 42029,
+
+    /// <summary>目标机构不在当前用户的数据范围内(机构/用户管理越权写入)</summary>
+    [MsgKey("error.org.outOfScope")]
+    OrgOutOfScope = 42030,
+
+    // ── 43xxx 字典 / 配置 ────────────────────────────────────────────
+
+    /// <summary>字典类型不存在</summary>
+    [MsgKey("error.dict.typeNotFound")]
+    DictTypeNotFound = 43001,
+
+    /// <summary>字典类型编码已存在(编码唯一)</summary>
+    [MsgKey("error.dict.typeCodeExists")]
+    DictTypeCodeExists = 43002,
+
+    /// <summary>字典项不存在</summary>
+    [MsgKey("error.dict.itemNotFound")]
+    DictItemNotFound = 43003,
+
+    /// <summary>系统配置不存在</summary>
+    [MsgKey("error.config.notFound")]
+    ConfigNotFound = 43004,
+
+    /// <summary>配置键已存在(键唯一)</summary>
+    [MsgKey("error.config.keyExists")]
+    ConfigKeyExists = 43005,
+
+    /// <summary>种子数据受保护(Id &lt; 1000):不可删除,须通过数据库直接操作</summary>
+    [MsgKey("error.dict.seedProtected")]
+    SeedDataProtected = 43010,
+
+    /// <summary>字典项 Value 在该类型下已存在(含软删行;唯一约束)</summary>
+    [MsgKey("error.dict.itemValueExists")]
+    DictItemValueExists = 43011,
+
+    // ── 44xxx 文件上传 ───────────────────────────────────────────────
+
+    /// <summary>空文件(未选择文件或文件长度为 0)</summary>
+    [MsgKey("error.file.empty")]
+    FileEmpty = 44001,
+
+    /// <summary>文件超过大小上限;args 可携带 maxSizeMb</summary>
+    [MsgKey("error.file.tooLarge")]
+    FileTooLarge = 44002,
+
+    /// <summary>文件后缀不在白名单;args 可携带 ext</summary>
+    [MsgKey("error.file.extNotAllowed")]
+    FileExtNotAllowed = 44003,
+
+    /// <summary>文件记录不存在(或物理文件已丢失)</summary>
+    [MsgKey("error.file.notFound")]
+    FileNotFound = 44004,
+
+    /// <summary>分片上传缺少分片(合并时发现空缺);args 可携带 index</summary>
+    [MsgKey("error.file.chunkMissing")]
+    ChunkMissing = 44005,
+
+    /// <summary>分片合并后内容哈希与客户端声明不一致(传输损坏/漏片)</summary>
+    [MsgKey("error.file.chunkHashMismatch")]
+    ChunkHashMismatch = 44006,
+
+    // ── 45xxx 消息通知 ───────────────────────────────────────────────
+
+    /// <summary>通知不存在(或已被删除)</summary>
+    [MsgKey("error.notice.notFound")]
+    NoticeNotFound = 45001,
+
+    /// <summary>定向发布(按角色/按用户)必须至少指定一个接收目标</summary>
+    [MsgKey("error.notice.receiverRequired")]
+    NoticeReceiverRequired = 45002,
+
+    /// <summary>定向发布的接收目标(角色/用户)不存在或已停用/已删除(发布前整体拒绝、不落库)</summary>
+    [MsgKey("error.notice.receiverNotFound")]
+    NoticeReceiverNotFound = 45003,
+
+    /// <summary>通知动作列表不合法(文案为空 / 方法不是 GET、POST / url 不是单个 "/" 开头的站内路径 / 条数或长度超限);args 携带 index</summary>
+    [MsgKey("error.notice.actionInvalid")]
+    NoticeActionInvalid = 45004,
+
+    // ── 46xxx 导入 / 导出 ────────────────────────────────────────────
+
+    /// <summary>未安装 SmartAdmin.Excel(或未在 AddSmartAdmin() 之前调 AddSmartAdminExcel())</summary>
+    [MsgKey("error.excel.providerMissing")]
+    ExcelProviderMissing = 46001,
+    /// <summary>导入文件为空</summary>
+    [MsgKey("error.import.fileEmpty")]
+    ImportFileEmpty = 46002,
+    /// <summary>导入行数超过 SmartAdmin:Excel:MaxImportRows</summary>
+    [MsgKey("error.import.rowLimitExceeded")]
+    ImportRowLimitExceeded = 46003,
+    /// <summary>必填列没有被任何表头映射上(列级,不属于任何一行)</summary>
+    [MsgKey("error.import.columnMissing")]
+    ImportColumnMissing = 46004,
+    /// <summary>单元格必填但为空</summary>
+    [MsgKey("error.import.cellRequired")]
+    ImportCellRequired = 46005,
+    /// <summary>字典列的值不在该字典的启用项里</summary>
+    [MsgKey("error.import.cellDictInvalid")]
+    ImportCellDictInvalid = 46006,
+    /// <summary>按名查外键失败(机构名/岗位名/角色名/主管姓名在库里找不到)</summary>
+    [MsgKey("error.import.cellRefNotFound")]
+    ImportCellRefNotFound = 46007,
+    /// <summary>单元格格式不合法(日期/数字/邮箱/手机号)</summary>
+    [MsgKey("error.import.cellFormatInvalid")]
+    ImportCellFormatInvalid = 46008,
+    /// <summary>业务键在本文件内重复</summary>
+    [MsgKey("error.import.duplicateInFile")]
+    ImportDuplicateInFile = 46009,
+    /// <summary>业务键在库中已存在(Error 策略下才算错误)</summary>
+    [MsgKey("error.import.duplicateInDb")]
+    ImportDuplicateInDb = 46010,
+    /// <summary>导入行指定的机构不在当前用户的数据范围内(越权写入)</summary>
+    [MsgKey("error.import.orgOutOfScope")]
+    ImportOrgOutOfScope = 46011,
+    /// <summary>导出结果超过 SmartAdmin:Excel:MaxExportRows,请先收窄筛选条件</summary>
+    [MsgKey("error.export.tooManyRows")]
+    ExportRowLimitExceeded = 46012,
+    /// <summary>请求导出的列不在该档案的可导列里</summary>
+    [MsgKey("error.export.columnInvalid")]
+    ExportColumnInvalid = 46013,
+
+    // ── 47xxx 定时任务 ───────────────────────────────────────────────
+
+    /// <summary>任务不存在</summary>
+    [MsgKey("error.job.notFound")]
+    JobNotFound = 47001,
+
+    /// <summary>任务编码已存在(编码唯一)</summary>
+    [MsgKey("error.job.codeExists")]
+    JobCodeExists = 47002,
+
+    /// <summary>cron 表达式不合法;args 携带 reason(段位与原因,来自 CronExpression 的 FormatException)</summary>
+    [MsgKey("error.job.cronInvalid")]
+    JobCronInvalid = 47003,
+
+    /// <summary>触发配置不合法(间隔 &lt; 5 秒 / 一次性时刻已过 / 必填字段缺失)</summary>
+    [MsgKey("error.job.triggerInvalid")]
+    JobTriggerInvalid = 47004,
+
+    /// <summary>编译处理器未注册(HandlerName 在 DI 集合里无匹配);args 携带 handlerName</summary>
+    [MsgKey("error.job.handlerNotFound")]
+    JobHandlerNotFound = 47005,
+
+    /// <summary>串行任务上次执行未结束(SerialSkip 语义;「执行一次」时校验)</summary>
+    [MsgKey("error.job.alreadyRunning")]
+    JobAlreadyRunning = 47006,
+
+    /// <summary>目标执行记录不在运行中(终止无从谈起)</summary>
+    [MsgKey("error.job.runNotAlive")]
+    JobRunNotAlive = 47007,
+
+    /// <summary>SQL 任务未启用(SmartAdmin:Jobs:Sql:Enabled 总闸,默认关)</summary>
+    [MsgKey("error.job.sqlDisabled")]
+    JobSqlDisabled = 47008,
+
+    /// <summary>HTTP 任务 URL 被围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单)</summary>
+    [MsgKey("error.job.httpUrlBlocked")]
+    JobHttpUrlBlocked = 47009,
+
+    /// <summary>状态流转非法(如 enable 后重算仍无未来时刻)</summary>
+    [MsgKey("error.job.statusConflict")]
+    JobStatusConflict = 47010,
+
+    /// <summary>属性包缺键或畸形;args 携带 key</summary>
+    [MsgKey("error.job.propsInvalid")]
+    JobPropsInvalid = 47011,
+
+    /// <summary>执行记录不存在</summary>
+    [MsgKey("error.job.logNotFound")]
+    JobLogNotFound = 47012,
+
+    /// <summary>在飞执行数已达 MaxConcurrentRuns 上限</summary>
+    [MsgKey("error.job.runLimitReached")]
+    JobRunLimitReached = 47013,
+
+    /// <summary>内置任务(IsSystem)禁删</summary>
+    [MsgKey("error.job.protected")]
+    JobProtected = 47014,
+
+    // ── 48xxx 请求参数 ───────────────────────────────────────────────
+
+    /// <summary>每页条数超过 SmartAdmin:Api:MaxPageSize 上限(args: size / max)</summary>
+    [MsgKey("error.request.pageSizeExceeded")]
+    PageSizeExceeded = 48001,
+
+    // ── 49xxx AI 模型 ────────────────────────────────────────────────
+
+    /// <summary>AI 厂商不存在</summary>
+    [MsgKey("error.ai.providerNotFound")]
+    AiProviderNotFound = 49001,
+
+    /// <summary>AI 厂商编码已存在(编码唯一,含软删行)</summary>
+    [MsgKey("error.ai.providerCodeExists")]
+    AiProviderCodeExists = 49002,
+
+    /// <summary>AI 厂商已停用</summary>
+    [MsgKey("error.ai.providerDisabled")]
+    AiProviderDisabled = 49003,
+
+    /// <summary>AI 厂商未配置 API Key(AuthScheme != none 时,启用与调用前都必须先配置)</summary>
+    [MsgKey("error.ai.apiKeyMissing")]
+    AiApiKeyMissing = 49004,
+
+    /// <summary>Base URL 被 SSRF 围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单);保存与每次调用前都过</summary>
+    [MsgKey("error.ai.baseUrlBlocked")]
+    AiBaseUrlBlocked = 49005,
+
+    /// <summary>指定的厂商预设不存在</summary>
+    [MsgKey("error.ai.presetNotFound")]
+    AiPresetNotFound = 49006,
+
+    /// <summary>厂商预设与协议保存后不可改</summary>
+    [MsgKey("error.ai.presetImmutable")]
+    AiPresetImmutable = 49007,
+
+    /// <summary>AI 模型不存在</summary>
+    [MsgKey("error.ai.modelNotFound")]
+    AiModelNotFound = 49010,
+
+    /// <summary>未设置全局默认模型,且请求未显式指定厂商/模型</summary>
+    [MsgKey("error.ai.noDefaultModel")]
+    AiNoDefaultModel = 49011,
+
+    /// <summary>AI 模型已停用</summary>
+    [MsgKey("error.ai.modelDisabled")]
+    AiModelDisabled = 49012,
+
+    /// <summary>同一厂商下模型名已存在(含软删行)</summary>
+    [MsgKey("error.ai.modelNameExists")]
+    AiModelNameExists = 49013,
+
+    /// <summary>上游返回非 2xx 且不属于下列细分类型的通用错误;ErrorMessage 记状态码与响应前 512 字</summary>
+    [MsgKey("error.ai.upstreamError")]
+    AiUpstreamError = 49020,
+
+    /// <summary>调用上游超时(SmartAdmin:Ai:TimeoutSeconds)或客户端 TaskCanceledException(非调用方主动取消)</summary>
+    [MsgKey("error.ai.upstreamTimeout")]
+    AiUpstreamTimeout = 49021,
+
+    /// <summary>上游限流(HTTP 429)</summary>
+    [MsgKey("error.ai.upstreamRateLimited")]
+    AiUpstreamRateLimited = 49022,
+
+    /// <summary>上游鉴权失败(HTTP 401/403,通常是 Key 失效或权限不足)</summary>
+    [MsgKey("error.ai.upstreamAuthFailed")]
+    AiUpstreamAuthFailed = 49023,
+
+    /// <summary>上游响应无法解析,或找不到匹配 Protocol 的适配器</summary>
+    [MsgKey("error.ai.upstreamBadResponse")]
+    AiUpstreamBadResponse = 49024,
+
+    /// <summary>当前数据保护密钥是进程内临时密钥(重启即失效),拒绝保存会随重启解不开的 Key(IDataProtectionKeyProvider.IsEphemeral)</summary>
+    [MsgKey("error.ai.dataProtectionKeyMissing")]
+    AiDataProtectionKeyMissing = 49030,
+
+    /// <summary>调用请求未携带 Scene(用量统计按它拆账,禁止匿名场景)</summary>
+    [MsgKey("error.ai.sceneRequired")]
+    AiSceneRequired = 49031,
+
+    /// <summary>System 角色消息不支持多段内容(图片等);两个协议的 system 字段都只接受纯文本</summary>
+    [MsgKey("error.ai.multimodalSystemUnsupported")]
+    AiMultimodalSystemUnsupported = 49032,
+
+    /// <summary>请求携带 ResponseSchema,但目标厂商预设标记为不支持 OpenAI 的 json_schema 严格结构化输出;
+    /// 这类厂商即便收到该字段也不会报错,只会静默忽略约束按自由文本作答,网关在发起上游调用前直接拒绝,不做静默降级或估算解析</summary>
+    [MsgKey("error.ai.structuredOutputUnsupported")]
+    AiStructuredOutputUnsupported = 49033,
+
+    // ── 50xxx 系统内部 ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 未知系统错误。用于操作日志里记录未捕获异常的结果码(详情只进日志不出接口)。
+    /// 注:框架级 400(模型校验/ProblemDetails)与未捕获 500 目前<b>不</b>套本信封——
+    /// 程序缺陷该大声失败(见 AdminExceptionFilter)。要让 400/500 也走统一信封,需自写
+    /// InvalidModelStateResponseFactory + UseExceptionHandler;内核不做,面向非浏览器调用方需要统一形状时由消费方自行接入。
+    /// </summary>
+    [MsgKey("error.system.internal")]
+    SystemError = 50000,
+}
+
+/// <summary>
+/// 为 <see cref="ErrorCode"/> 成员标注语义 msgKey(前端 i18n 语言包的键)。
+/// 显式标注而非命名约定推导,保证"码 → 键"的映射一目了然、重命名枚举不破坏契约。
+/// </summary>
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
+public sealed class MsgKeyAttribute(string key) : Attribute
+{
+    /// <summary>语义键,形如 <c>error.auth.passwordWrong</c></summary>
+    public string Key { get; } = key;
+}
+
+/// <summary><see cref="ErrorCode"/> 的辅助扩展</summary>
+public static class ErrorCodeExtensions
+{
+    /// <summary>
+    /// 取错误码的语义 msgKey;未标注的成员回退为 <c>error.code.{数值}</c>(可用但不该出现,新增码务必标注)。
+    /// <para>走 <see cref="ErrorCodeRegistry"/>,故消费者强转进来的自有错误码(<c>(ErrorCode)MyCodes.X</c>)
+    /// 只要登记过,同样能解析到它自己的 <see cref="MsgKeyAttribute"/>。</para>
+    /// </summary>
+    public static string GetMsgKey(this ErrorCode code) => ErrorCodeRegistry.GetMsgKey((int)code);
+}

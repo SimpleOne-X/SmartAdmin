@@ -1,0 +1,270 @@
+using SqlSugar;
+using SmartAdmin.Core;
+using SmartAdmin.SqlSugar;
+
+namespace SmartAdmin.Services;
+
+/// <summary>
+/// <see cref="IConfigService"/> 默认实现。<see cref="GetValueByKeyAsync"/> 走读穿透缓存:
+/// 命中直接返回;未命中查库,把值(<c>null</c> 归一为空串,使"缓存过空值"与"未缓存"可区分)写入缓存后返回;
+/// 键根本不存在则不缓存,避免把"配置项不存在"这一状态长期钉死在缓存里。
+/// </summary>
+public class ConfigService(
+    IRepository<SysConfig> configs,
+    ICacheProvider cache,
+    AdminCacheOptions cacheOptions,
+    IEventBus events,
+    IFileUrlSigner? fileUrls = null) : IConfigService   // 可选:签名器只在 AspNetCore 层注册,纯 Services 宿主里为 null(Logo 直链不续签)
+{
+    /// <inheritdoc />
+    public virtual async Task<PagedList<SysConfig>> PageAsync(ConfigPageInput input)
+    {
+        var excludedGroups = input.ExcludedGroupCodes?
+            .Where(static group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray() ?? [];
+        var excludedKeys = input.ExcludedKeys?
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray() ?? [];
+        var query = configs.AsQueryable()
+            .WhereIF(!string.IsNullOrEmpty(input.Name), c => c.Name.Contains(input.Name!))
+            .WhereIF(!string.IsNullOrEmpty(input.ConfigKey), c => c.ConfigKey.Contains(input.ConfigKey!))
+            .WhereIF(!string.IsNullOrEmpty(input.GroupCode), c => c.GroupCode == input.GroupCode);
+
+        // 空分组也是消费方可管理的自定义配置,不能因 SQL 的 NULL NOT IN 语义被误滤掉。
+        if (excludedGroups.Length > 0)
+            query = query.Where(c => c.GroupCode == null || !excludedGroups.Contains(c.GroupCode!));
+        // 配置中心「高级」页:结构化表单已认领的键不重复列出;在库里过滤,分页总数才准。
+        if (excludedKeys.Length > 0)
+            query = query.Where(c => !excludedKeys.Contains(c.ConfigKey));
+
+        return await query.OrderBy(c => c.Sort).ToPagedListAsync(input.Current, input.Size);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<SysConfig> GetAsync(long id)
+    {
+        var config = await configs.GetByIdAsync(id);
+        AdminException.ThrowIf(config is null, ErrorCode.ConfigNotFound);
+        return config!;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<string?> GetValueByKeyAsync(string key)
+    {
+        var cacheKey = CacheKeys.Config(key);
+        var cached = await cache.GetAsync<string>(cacheKey);
+        if (cached is not null) return cached;
+
+        var config = await configs.GetFirstAsync(c => c.ConfigKey == key);
+        if (config is null) return null; // 键不存在,不缓存
+
+        var value = config.ConfigValue ?? "";
+        var ttl = cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : (TimeSpan?)null;
+        await cache.SetAsync(cacheKey, value, ttl);
+        return value;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<SiteInfoOutput> GetSiteInfoAsync()
+    {
+        // 整体缓存一份:这是匿名端点,每次打开登录页都要读,拆成七个键就是七次串行往返
+        var info = await cache.GetAsync<SiteInfoOutput>(CacheKeys.SiteInfo);
+        if (info is null)
+        {
+            info = await LoadSiteInfoAsync();
+            var ttl = cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : (TimeSpan?)null;
+            await cache.SetAsync(CacheKeys.SiteInfo, info, ttl);
+        }
+        // 续签放在缓存之外:缓存寿命可能长过直链寿命,缓存里那份链接不能原样下发
+        return info with { Logo = LocalFileUrl.Refresh(info.Logo, fileUrls) };
+    }
+
+    /// <summary>逐键装配站点信息(仅缓存未命中时执行)。</summary>
+    protected virtual async Task<SiteInfoOutput> LoadSiteInfoAsync()
+    {
+        var zhHeadline = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HEADLINE_ZH_KEY);
+        var zhHighlight = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HIGHLIGHT_ZH_KEY);
+        var zhFeatures = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_FEATURES_ZH_KEY);
+        var enHeadline = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HEADLINE_EN_KEY);
+        var enHighlight = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_HIGHLIGHT_EN_KEY);
+        var enFeatures = await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_FEATURES_EN_KEY);
+
+        return new()
+        {
+            Title = await GetValueByKeyAsync(ConfigSeed.SITE_TITLE_KEY),
+            Subtitle = await GetValueByKeyAsync(ConfigSeed.SITE_SUBTITLE_KEY),
+            Copyright = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_KEY),
+            CopyrightUrl = await GetValueByKeyAsync(ConfigSeed.SITE_COPYRIGHT_URL_KEY),
+            Logo = await GetValueByKeyAsync(ConfigSeed.SITE_LOGO_KEY),
+            LoginHero = new Dictionary<string, LoginHeroOutput>(StringComparer.Ordinal)
+            {
+                ["zh-CN"] = new() { Headline = zhHeadline, Highlight = zhHighlight, Features = SplitFeatures(zhFeatures) },
+                ["en-US"] = new() { Headline = enHeadline, Highlight = enHighlight, Features = SplitFeatures(enFeatures) },
+            },
+            ShowFeatures = !bool.TryParse(await GetValueByKeyAsync(ConfigSeed.LOGIN_HERO_SHOW_FEATURES_KEY), out var show) || show,
+            // 匿名暴露验证码开关(不含类型等内部细节),供登录页决定是否渲染验证码;缺失即视为关。
+            CaptchaEnabled = bool.TryParse(await GetValueByKeyAsync(CaptchaService.KEY_ENABLED), out var e) && e,
+            // 匿名暴露短信免密登录开关,供登录页决定是否渲染短信登录入口;缺失即视为关。MFA 不在此暴露(由登录 40009 信令带内下发)。
+            SmsLoginEnabled = bool.TryParse(await GetValueByKeyAsync(SmsOtpService.KEY_LOGIN_ENABLED), out var s) && s,
+            Watermark = await LoadWatermarkAsync(),
+        };
+    }
+
+    private static readonly string[] WatermarkFieldOrder = ["name", "account", "org", "phone", "time", "text"];
+    private static readonly string[] WatermarkTimeFormats = ["YYYY-MM-DD", "YYYY-MM-DD HH:mm", "YYYY-MM-DD HH:mm:ss", "MM-DD HH:mm"];
+
+    /// <summary>读水印设置;任何一项缺失、写错或越界都收口成默认值 / 边界,不让一个坏值把整个站点信息拖垮。</summary>
+    private async Task<WatermarkOutput> LoadWatermarkAsync()
+    {
+        var def = new WatermarkOutput();
+        var fieldsRaw = await GetValueByKeyAsync(ConfigSeed.WATERMARK_FIELDS_KEY);
+        // 键不存在(老库没种子)才用默认内容项;键在但是空串,是管理员一项都没勾,尊重它
+        var fields = fieldsRaw is null
+            ? def.Fields
+            : WatermarkFieldOrder.Where(f => fieldsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(f)).ToArray();
+        var text = (await GetValueByKeyAsync(ConfigSeed.WATERMARK_TEXT_KEY) ?? "").Trim();
+        var timeFormat = await GetValueByKeyAsync(ConfigSeed.WATERMARK_TIME_FORMAT_KEY) ?? "";
+        var layout = await GetValueByKeyAsync(ConfigSeed.WATERMARK_LAYOUT_KEY);
+        var density = await GetValueByKeyAsync(ConfigSeed.WATERMARK_DENSITY_KEY);
+        return new()
+        {
+            Enabled = bool.TryParse(await GetValueByKeyAsync(ConfigSeed.WATERMARK_ENABLED_KEY), out var on) && on,
+            Fields = fields,
+            Text = text.Length > 40 ? text[..40] : text,
+            TimeFormat = WatermarkTimeFormats.Contains(timeFormat) ? timeFormat : def.TimeFormat,
+            Layout = layout is "single" or "multi" ? layout : def.Layout,
+            FontSize = ClampInt(await GetValueByKeyAsync(ConfigSeed.WATERMARK_FONT_SIZE_KEY), def.FontSize, 12, 28),
+            Opacity = ClampInt(await GetValueByKeyAsync(ConfigSeed.WATERMARK_OPACITY_KEY), def.Opacity, 2, 30),
+            Rotate = ClampInt(await GetValueByKeyAsync(ConfigSeed.WATERMARK_ROTATE_KEY), def.Rotate, -45, 45),
+            Density = density is "sparse" or "normal" or "dense" ? density : def.Density,
+            Cross = !bool.TryParse(await GetValueByKeyAsync(ConfigSeed.WATERMARK_CROSS_KEY), out var cross) || cross,
+        };
+    }
+
+    private static int ClampInt(string? raw, int fallback, int min, int max) =>
+        int.TryParse(raw, out var n) ? Math.Clamp(n, min, max) : fallback;
+
+    /// <summary>亮点一行一条;去空行并限制 5 条,和前端输入约束保持一致。</summary>
+    internal static IReadOnlyList<string> SplitFeatures(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Take(5)
+                .ToArray();
+
+    /// <inheritdoc />
+    // ponytail: 少量键逐条查改足够;键集变大再合并成 IN 查询 + 批量更新。
+    public virtual async Task SaveValuesAsync(IReadOnlyCollection<ConfigBatchItem> items)
+    {
+        foreach (var item in items)
+        {
+            var entity = await configs.GetFirstAsync(c => c.ConfigKey == item.ConfigKey);
+            if (entity is null)
+            {
+                // 第三方登录运营键:配置中心 Tab 可能对「已注册但尚未种子」的 code 写 enabled,
+                // 允许按键自动落库(GroupCode=externalauth);其它未知键仍忽略。
+                if (!item.ConfigKey.StartsWith("sys.externalauth.", StringComparison.Ordinal))
+                    continue;
+                // 并发首配:两请求都查不到 → 双插撞 ConfigKey 唯一索引;冲突后改为重读并更新。
+                try
+                {
+                    await configs.InsertAsync(new SysConfig
+                    {
+                        ConfigKey = item.ConfigKey,
+                        ConfigValue = item.ConfigValue,
+                        Name = item.ConfigKey,
+                        GroupCode = "externalauth",
+                        Sort = 80,
+                        Remark = "第三方登录运营项(配置中心写入)",
+                    });
+                }
+                catch (Exception ex) when (LooksLikeUniqueKeyViolation(ex))
+                {
+                    entity = await configs.GetFirstAsync(c => c.ConfigKey == item.ConfigKey);
+                    if (entity is null) throw;
+                    entity.ConfigValue = item.ConfigValue;
+                    await configs.UpdateAsync(entity);
+                }
+                await InvalidateAsync(item.ConfigKey);
+                continue;
+            }
+            entity.ConfigValue = item.ConfigValue;
+            await configs.UpdateAsync(entity);
+            await InvalidateAsync(entity.ConfigKey);
+        }
+    }
+
+    /// <summary>跨 SQLite/MySQL/SqlServer/PG 的唯一键冲突粗判(消息/SqlState 启发式)。</summary>
+    public static bool LooksLikeUniqueKeyViolation(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            var m = e.Message ?? "";
+            if (m.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("unique constraint", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("2627") // SQL Server unique constraint
+                || m.Contains("2601") // SQL Server unique index
+                || m.Contains("23505")) // PostgreSQL unique_violation
+                return true;
+        }
+        return false;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<long> AddAsync(ConfigInput input)
+    {
+        // 查重纳入软删行:唯一索引覆盖已软删行,漏检会撞库唯一约束抛原生 500。已软删的键视为永久保留。
+        AdminException.ThrowIf(
+            await configs.AsQueryable().ClearFilter<ISoftDelete>().AnyAsync(c => c.ConfigKey == input.ConfigKey),
+            ErrorCode.ConfigKeyExists);
+
+        var entity = new SysConfig
+        {
+            ConfigKey = input.ConfigKey,
+            ConfigValue = input.ConfigValue,
+            Name = input.Name,
+            GroupCode = input.GroupCode,
+            Sort = input.Sort,
+            Remark = input.Remark,
+        };
+        await configs.InsertAsync(entity);
+        await InvalidateAsync(entity.ConfigKey);
+        return entity.Id;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task UpdateAsync(long id, ConfigInput input)
+    {
+        var entity = await GetAsync(id);
+        entity.ConfigValue = input.ConfigValue;
+        entity.Name = input.Name;
+        entity.GroupCode = input.GroupCode;
+        entity.Sort = input.Sort;
+        entity.Remark = input.Remark;
+        await configs.UpdateAsync(entity);
+        await InvalidateAsync(entity.ConfigKey);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task DeleteAsync(long id)
+    {
+        var config = await GetAsync(id);
+        AdminException.ThrowIf(config.Id < 1000, ErrorCode.SeedDataProtected);
+        await configs.DeleteAsync(id);
+        await InvalidateAsync(config.ConfigKey);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task InvalidateAsync(string key)
+    {
+        // 站点信息是若干个配置键的合成值,分不清改的是不是其中之一就一律清掉——
+        // 它极低频改动,而漏清一次就是登录页挂着旧标题不放。
+        await cache.RemoveManyAsync([CacheKeys.Config(key), CacheKeys.SiteInfo]);
+        await events.PublishAsync(new ConfigChangedEvent(key));
+    }
+}

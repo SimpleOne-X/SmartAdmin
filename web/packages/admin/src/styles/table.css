@@ -1,0 +1,99 @@
+/* 表格全局外观:选中行 / 操作列 / 末行底线 / 放大 / 行拖拽排序 / 条件搜索栏的查询按钮。
+   这些是站内约定,放全局生效,页面不必各自写 :deep 链;类名即约定,新页面套类名即可。
+
+   皮肤的大头在 theme/naive-theme.ts 的 DataTable 覆盖里(行底实色、表头色、行 hover、内边距),这里只放主题覆盖够不着的几条。
+   smart-naive-table 3.x 自带表头(排序箭头 / 漏斗悬停才显示)、列宽拖拽把手、卡片内边距、当前行高亮(background-image 叠色)的样式,
+   下面这些情形不需要再写覆盖:
+   - 斑马纹:不加(HIG 建议多列表格用,但 ERP 宽表叠上选中色、悬停色会显得花,保持细分隔线);
+   - 列分隔竖线 + 表格外框:smart-naive-table 3.x 内部写死 single-line:false(竖线默认开)且不在可注入的全局默认里,
+     所以只能在下面「只留横向发丝线」那段用 CSS 去掉(macOS 的列表 / 访达只有横线);
+   - 固定列 / 固定表头的实底:DataTable 的 tdColor / thColor 本身就是不透明实色,固定列 sticky 叠在别的列上不会透底,
+     不必逐态覆盖;
+   - SmartTable 当前行(activeRowKey)的固定列补丁:库自己对整行 td 叠 background-image,固定列同样被覆盖,不需要补丁。 */
+
+/* 选中态底色:强调色淡底,叠在行原有的不透明底色之上(用 background-image 叠,不覆盖 background-color,
+   这样固定列、hover 色都不受影响)。库的当前行高亮(activeRowKey)由 createSmartAdmin 里的 activeRowBg 指向同一个令牌。 */
+.n-data-table {
+  --table-selected-bg: var(--sel-bg);
+}
+
+/* 勾选行: 只认勾选列(td--selection)的勾选态,否则单元格内嵌的业务复选框会误把整行刷成选中色。 */
+.n-data-table
+  .n-data-table-tr:has(
+    > .n-data-table-td--selection .n-checkbox--checked,
+    > .n-data-table-td--selection .n-radio--checked
+  )
+  > .n-data-table-td {
+  background-image: linear-gradient(var(--table-selected-bg), var(--table-selected-bg));
+}
+
+/* 点击选中的当前行(主从联动的主表):row-class-name 返回 .row-selected。放全局是因为页面 scoped 的
+   :deep(.xxx td) 压不过 Naive 自己的行底色规则。 */
+.n-data-table .n-data-table-tr.row-selected > .n-data-table-td {
+  background-image: linear-gradient(var(--table-selected-bg), var(--table-selected-bg));
+}
+
+/* 单元格不换行(列宽由列定义 / 内容决定,长文本走列自己的 ellipsis)。 */
+.n-data-table .n-data-table-th,
+.n-data-table .n-data-table-td {
+  white-space: nowrap;
+}
+
+/* 只留横向发丝线:去掉单元格竖线和表格自己的外框。
+   竖线来自 .n-data-table:not(.n-data-table--single-line) 下的 th / td 的 border-right,特异度比普通后代选择器高,
+   所以这里用同样的 :not() 写法加 !important 压过;外框是 --bordered 修饰类下 wrapper 的 border。
+   表格已经坐在卡片里,再套一圈框就是「卡片 > 表格框」两层线;外框去掉后,圆角留给 wrapper 裁剪表头底色。 */
+.n-data-table:not(.n-data-table--single-line) .n-data-table-th,
+.n-data-table:not(.n-data-table--single-line) .n-data-table-td {
+  border-right: 0 !important;
+}
+
+.n-data-table.n-data-table--bordered .n-data-table-wrapper {
+  border: 0 !important;
+  border-radius: var(--radius-md, 9px) !important;
+}
+
+/* 末行不画底线:卡片底边(分页行上方)不出现多余横线。 */
+.n-data-table .n-data-table-td.n-data-table-td--last-row {
+  border-bottom: 0 !important;
+}
+
+/* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/
+.n-data-table .n-data-table-td--last-col .n-space {
+  gap: 0 !important;
+}
+
+/* 操作列英文按钮更长，统一禁止按钮组换行，避免 Edit/Delete 在窄列里自动竖排。 */
+.n-data-table .n-data-table-td .n-space:has(.n-button) {
+  flex-wrap: nowrap !important;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.n-data-table .n-data-table-td .n-space:has(.n-button) > .n-space-item,
+.n-data-table .n-data-table-td .n-button {
+  white-space: nowrap;
+}
+
+/* 表格放大:铺满视口的遮罩层,配合 composables/useTableZoom.ts 使用。
+   z-index 取 50 —— 高于布局顶栏(10)盖住整页,又低于 Naive 浮层(2000+),
+   放大态下表格里的下拉/气泡照常显示在遮罩之上。 */
+.table-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg-app);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+/* 放大态下表格自己吃满剩余高度,不受原位置的定高约束。 */
+.table-zoom > .n-data-table,
+.table-zoom > .route-table,
+.table-zoom > .table-zoom-body {
+  flex: 1;
+  min-height: 0;
+}

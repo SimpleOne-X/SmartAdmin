@@ -1,0 +1,383 @@
+/**
+ * SmartAdmin 设计 tokens —— 唯一色源(single source of truth)
+ * 页面里直接写 var(--text-3) 这类令牌名取色,不写死色值。
+ *
+ * 分层:
+ *   1) 基础令牌 —— 随主题翻转的画布 / 卡片 / 文字 / 线条 / 玻璃 / 阴影 / 语义色:
+ *      亮色在 :root,暗色在 :root[data-theme='dark'] 覆盖。
+ *   2) 强调色令牌 —— --accent / --signal / --acc-solid / --on-acc / --sel-* / --tab-* / --ambient-* / --desk-* 等,
+ *      由 useTheme 按当前强调色在运行时算好、写到 <html> 的 style 上(推导规则见 theme/mix.ts、theme/accentTokens.ts)。
+ *      这里的值是「默认蓝 #0A84FF」的初始展示值:首帧(JS 未执行前)和单测里的裸 CSS 看到的是它。
+ *   3) 度量 —— 字号 / 间距 / 圆角 / 控件高 / 过渡,与主题无关,仅在 :root。
+ *   4) 兼容别名 —— --color-* 等旧命名,全部引用基础令牌,保证仍在用旧名的页面不断裂;新代码不要再写旧名。
+ *
+ * 明暗切换:在 <html> 上打 data-theme="dark"(不打即亮色)。
+ * 整站不画网格:--wallpaper / 画布里没有网格线,不要加网格类令牌。
+ */
+
+:root {
+  /* ── 字体:只用系统字体栈,不引入 Google Fonts 等外部字体 ── */
+  --font:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC', 'Helvetica Neue',
+    'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* ── 画布 / 卡片 / 弹层(亮色)────────────────────────────────── */
+  --bg-app: #eef3fc; /* 画布底色(Naive bodyColor);body 实际背景是下面的 --wallpaper */
+  --bg-sidebar: rgba(250, 252, 255, 0.76); /* 侧栏玻璃 */
+  --bg-header: rgba(250, 252, 255, 0.78); /* 顶栏玻璃 */
+  --bg-card: #ffffff; /* 内容卡片:不透明实底(内容层不用玻璃) */
+  --bg-card-glass: rgba(
+    255,
+    255,
+    255,
+    0.76
+  ); /* 半透明卡片色(Naive cardColor 的底,页面卡片实际用 --bg-card) */
+  --bg-elevated: rgba(252, 253, 255, 0.88); /* 弹层 / 下拉 / 抽屉(配 backdrop-filter) */
+  --bg-elevated-a: rgba(252, 253, 255, 0.82);
+  --input: rgba(255, 255, 255, 0.92); /* 可编辑输入框底 */
+  --input-disabled: rgba(100, 116, 150, 0.12); /* 禁用 / 只读输入框底 */
+
+  /* ── 文字三级 + 禁用 ───────────────────────────────────────── */
+  --text-1: #101828; /* 主文字 / 标题 */
+  --text-2: #3f4a5e; /* 次级文字(配白底卡片;压在饱和色场上不够 4.5:1,色场上的正文用 --text-1) */
+  --text-3: #586479; /* 辅助 / 占位 */
+  --text-4: #8793a6; /* 禁用 */
+
+  /* ── 线条与填充 ───────────────────────────────────────────── */
+  --border: rgba(40, 60, 100, 0.36); /* 输入描边 */
+  --separator: rgba(55, 75, 115, 0.16); /* 分隔线 */
+  --hairline: rgba(55, 75, 115, 0.14); /* 发丝线 */
+  --hairline-strong: rgba(55, 75, 115, 0.26);
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-strong: rgba(40, 60, 110, 0.07); /* 图标底块 / 头像 / 当前页码 */
+  --edge-top: rgba(30, 50, 90, 0.12); /* 卡片发丝描边:上 → 下渐变 */
+  --edge-mid: rgba(30, 50, 90, 0.09);
+  --edge-bottom: rgba(30, 50, 90, 0.07);
+  --edge-light: rgba(255, 255, 255, 0.6); /* 内顶边高光 */
+  --fill: rgba(70, 90, 130, 0.08); /* 灰按钮 / 嵌入底 */
+  --fill-strong: rgba(70, 90, 130, 0.14);
+  --hover: rgba(60, 80, 120, 0.06);
+  --pressed: rgba(60, 80, 120, 0.11);
+  --mask: rgba(241, 245, 251, 0.55); /* 遮罩 / 弹窗背景 */
+  --seg-track: rgba(70, 90, 130, 0.12); /* 分段控件:轨道 / 滑块 */
+  --seg-thumb: #ffffff;
+  --switch-off: rgba(70, 90, 130, 0.28);
+
+  /* ── 语义色 ──────────────────────────────────────────────── */
+  --ok: #047857;
+  --warn: #a94e08;
+  --err: #ca2323;
+  --info: #0369a1;
+  --ok-bg: color-mix(in srgb, var(--ok) 12%, transparent);
+  --warn-bg: color-mix(in srgb, var(--warn) 12%, transparent);
+  --err-bg: color-mix(in srgb, var(--err) 12%, transparent);
+  --info-bg: color-mix(in srgb, var(--info) 12%, transparent);
+  /* --success、--warning、--error 是 --ok、--warn、--err 的同义别名 */
+  --success: var(--ok);
+  --warning: var(--warn);
+  --error: var(--err);
+
+  /* ── 阴影(亮色)───────────────────────────────────────────── */
+  --shadow-1:
+    0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px -14px rgba(30, 64, 175, 0.16); /* 卡片 */
+  --shadow-2:
+    0 22px 50px -16px rgba(30, 64, 175, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.05); /* 弹层 / hover 上浮 */
+  --shadow-3:
+    0 30px 90px -20px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(15, 23, 42, 0.06); /* 悬浮 overlay / 抽屉 / 弹窗 */
+
+  /* ── 玻璃(只用于侧栏 / 顶栏 / 弹层 / 登录卡;内容卡片不用)───────── */
+  --glass-panel: rgba(246, 250, 255, 0.66);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 2px rgba(15, 23, 42, 0.05),
+    0 28px 60px -26px rgba(37, 99, 235, 0.4);
+  --glass-shadow-soft:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 20px 44px -24px rgba(37, 99, 235, 0.3);
+  --glass-solid: rgba(
+    248,
+    250,
+    253,
+    0.96
+  ); /* 不支持 backdrop-filter 时的降级底;也是「几乎不透明的浮层底」 */
+
+  /* ── 壁纸 / 噪点 / 标签条 / 品牌标 ──────────────────────────── */
+  --wallpaper:
+    radial-gradient(1300px 850px at 0% -10%, var(--desk-1), transparent 60%),
+    radial-gradient(1100px 800px at 100% 0%, var(--desk-4), transparent 58%),
+    radial-gradient(1200px 850px at 90% 115%, var(--desk-3), transparent 60%),
+    radial-gradient(900px 700px at 0% 100%, var(--desk-2), transparent 60%), #e9f0fd;
+  --noise-opacity: 0.03;
+  --tab-strip: rgba(255, 255, 255, 0.6);
+  --tab-hover: rgba(60, 80, 120, 0.06);
+  --tab-active: #f1f5fb;
+  --mark-bg: linear-gradient(180deg, #2a2a2e, #0b0b0c); /* 品牌标底:浅色深底白标 */
+  --mark-fg: #ffffff;
+  --num-a: #0a2a6b; /* 渐变数字 */
+  --num-b: #0a7be8;
+  --desk-base: #f4f7fd; /* 登录页色场底 */
+  --desk-op: 0.62;
+
+  /* ── 表格 / 浮层小件(Naive DataTable 表头 / 行 hover、Tooltip、徽标)── */
+  --th-bg: #f4f7fb;
+  --th-bg-hover: #edf2f9;
+  --td-bg-hover: #eff4fb;
+  --tooltip-bg: rgba(17, 17, 19, 0.92);
+  --badge-bg: #ff3b30;
+  --input-border-hover: rgba(20, 40, 90, 0.34);
+  --select-border-hover: rgba(40, 60, 100, 0.5);
+
+  /* ── 强调色令牌:默认蓝 #0A84FF 的初始展示值(运行时由 useTheme 重算并写回 <html>)── */
+  --accent: #0a84ff; /* 原始强调色 */
+  --signal: #0a84ff; /* 信号色 = 强调色:图标 / 聚焦环 / 数据线 */
+  --signal-glow: rgba(10, 132, 255, 0.35);
+  --acc-solid: #0974e0; /* 实心控件底色(主按钮 / 开关 / 勾选 / 进度):solid() 压暗到白字 ≥ 4.5:1,明暗同值 */
+  --on-acc: #ffffff; /* 压在 --acc-solid 上的字色 */
+  --acc-hover: #2282e3;
+  --acc-pressed: #0866c5;
+  /* 选中态:强调色淡底 + 1px 描边 + 3px 光晕;「当前项」(模块卡片 / 表格选中行 / 侧栏列表)统一用 */
+  --sel-bg: rgba(10, 132, 255, 0.06);
+  --sel-ring: rgba(10, 132, 255, 0.5);
+  --sel-halo: rgba(10, 132, 255, 0.1);
+  --sel-fg: #0974e0; /* 强调色当文字用的可读版(浅色:压暗到对白底 ≥ 4.5:1;深色:提亮) */
+  --tab-active-bg: rgba(10, 132, 255, 0.08);
+  --tab-active-fg: #0974e0;
+  --tab-active-ring: rgba(10, 132, 255, 0.22);
+  --tab-on-bg: rgba(10, 132, 255, 0.1);
+  --tab-on-fg: #0974e0;
+  --tab-on-ring: rgba(10, 132, 255, 0.5);
+  /* 色场四团光(应用内 --ambient-* 与登录页 --desk-* 同源,都由 fieldOf(强调色) 推导) */
+  --ambient-1: rgba(10, 132, 255, 0.2);
+  --ambient-2: rgba(76, 113, 250, 0.15);
+  --ambient-3: rgba(23, 175, 247, 0.13);
+  --ambient-4: rgba(111, 98, 248, 0.14);
+  --desk-1: rgba(10, 132, 255, 0.55);
+  --desk-2: rgba(76, 113, 250, 0.45);
+  --desk-3: rgba(23, 175, 247, 0.5);
+  --desk-4: rgba(111, 98, 248, 0.34);
+  /* 图表数据色:强调色的邻近色相(见 theme/mix.ts 的 chartPalette),折线 / 柱 / 饼的系列色与工作台统计卡图标色共用;
+     不复用 --ok、--warn、--err 这组状态语义色,画数据会暗示「正常 / 警告 / 出错」 */
+  --chart-1: #0974e0;
+  --chart-2: #511ccd;
+  --chart-3: #14a390;
+  --chart-4: #aa3f9f;
+  --chart-5: #26a545;
+  --chart-6: #5ba62f;
+  --login-accent-2: #4c71fa; /* 登录页主按钮渐变 / 标语高亮的第二色(石墨时仍走石墨本色) */
+
+  /* ── 字号阶梯(px / 行高px / 字重),正文 15/24 ───────────────────── */
+  --font-size-xs: 13px;
+  --line-height-xs: 20px; /* 角标 / 表格次要信息  w400 */
+  --font-size-sm: 14px;
+  --line-height-sm: 22px; /* 次级说明 / 密集表格  w400 */
+  --font-size-base: 15px;
+  --line-height-base: 24px; /* 正文(默认)         w400 */
+  --font-size-md: 16px;
+  --line-height-md: 24px; /* 强调正文 / 卡片标题  w500 */
+  --font-size-lg: 20px;
+  --line-height-lg: 28px; /* 小标题 / 弹窗标题    w600 */
+  --font-size-xl: 24px;
+  --line-height-xl: 32px; /* 页面主标题          w600 */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* ── 控件高度(默认 30,小 24,迷你 20;Large 42 只留给登录页与触屏窄档)── */
+  --control-h-mini: 20px;
+  --control-h-tiny: 22px;
+  --control-h-sm: 24px;
+  --control-h: 30px;
+  --control-h-lg: 42px;
+  --control-h-huge: 46px;
+  --sidebar-row-h: 32px; /* 侧栏菜单行高 */
+  --table-row-h: 32px; /* 表格行高约 32(td 纵向内边距 4px) */
+
+  /* ── 间距:4px 基准网格 ────────────────────────────────────── */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+
+  /* ── 圆角 ────────────────────────────────────────────────── */
+  --radius-xs: 5px; /* 复选框 */
+  --radius-sm: 6px; /* 标签 / 小控件 */
+  --radius-md: 9px; /* 按钮 / 输入 / 菜单项 */
+  --radius-lg: 14px; /* 卡片 / 面板 / 气泡 */
+  --radius-xl: 18px; /* 对话框 */
+  --radius-2xl: 22px; /* 登录卡 / 大面板 */
+
+  /* ── 过渡 ──────────────────────────────────────────────── */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 面板滑动(侧栏收起展开):起步果断、尾端长而柔,macOS 面板的手感 */
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ══ 兼容别名(--color-* 等旧命名)═══════════════════════════
+     旧名一律引用上面的基础令牌(而不是另存一份值),所以改一处全站同步。
+     只为仍在用旧名的页面保底,新代码请直接写基础令牌名。 */
+
+  /* 原语中性灰阶:固定值,不随主题翻转 */
+  --color-gray-900: #181a2a;
+  --color-gray-800: #2f313f;
+  --color-gray-700: #5d5f6a;
+  --color-gray-600: #7b7c85;
+  --color-gray-500: #85868e;
+  --color-gray-400: #bababf;
+  --color-gray-300: #d1d1d1;
+  --color-gray-200: #e3e3e3;
+  --color-gray-100: #f1f1f1;
+  --color-gray-50: #f0f0f0;
+  --color-white: #ffffff;
+
+  --color-primary: var(--acc-solid);
+  --color-primary-hover: var(--acc-hover);
+  --color-primary-pressed: var(--acc-pressed);
+  --color-primary-light: var(--sel-bg);
+
+  --color-success: var(--ok);
+  --color-success-bg: var(--ok-bg);
+  --color-warning: var(--warn);
+  --color-warning-bg: var(--warn-bg);
+  --color-danger: var(--err);
+  --color-danger-bg: var(--err-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+
+  --color-bg-body: var(--bg-app);
+  --color-bg-app: var(--wallpaper);
+  --color-bg-container: var(--bg-card);
+  --color-bg-container-solid: var(--bg-card);
+  --color-bg-elevated: var(--glass-solid);
+  --color-bg-input: var(--input);
+  --color-text-primary: var(--text-1);
+  --color-text-secondary: var(--text-2);
+  --color-text-tertiary: var(--text-3);
+  --color-text-disabled: var(--text-4);
+  --color-border: var(--separator);
+  --color-border-strong: var(--border);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-strong);
+  --color-fill-disabled: var(--input-disabled);
+  --color-mask: var(--mask);
+  --color-header-bg: var(--bg-header);
+
+  --font-family-base: var(--font);
+  --font-family-mono: var(--font-mono);
+}
+
+/* ══════════════════════════════════════════════════════════
+   暗色主题:只覆盖会翻转的令牌(画布 / 文字 / 线条 / 玻璃 / 阴影 / 语义色 / 强调色初始值)。
+   度量(字号 / 间距 / 圆角 / 控件高)与兼容别名不用重复——别名引用的是基础令牌,自然跟着翻。
+   ══════════════════════════════════════════════════════════ */
+:root[data-theme='dark'] {
+  --bg-app: #04070f;
+  --bg-sidebar: rgba(8, 13, 28, 0.74);
+  --bg-header: rgba(10, 16, 34, 0.72);
+  --bg-card: #101828;
+  --bg-card-glass: rgba(30, 45, 80, 0.5);
+  --bg-elevated: rgba(14, 22, 42, 0.9);
+  --bg-elevated-a: rgba(14, 22, 42, 0.82);
+  --input: rgba(150, 180, 255, 0.07);
+  --input-disabled: rgba(140, 170, 255, 0.05);
+
+  --text-1: #eef3ff;
+  --text-2: #c3cde3;
+  --text-3: #98a6c4;
+  --text-4: #66738f;
+
+  --border: rgba(130, 160, 230, 0.5);
+  --separator: rgba(120, 150, 230, 0.22);
+  --hairline: rgba(120, 150, 230, 0.2);
+  --hairline-strong: rgba(130, 165, 240, 0.36);
+  --glass: rgba(20, 30, 58, 0.5);
+  --glass-strong: rgba(150, 180, 255, 0.09);
+  --edge-top: rgba(170, 200, 255, 0.24);
+  --edge-mid: rgba(150, 180, 255, 0.1);
+  --edge-bottom: rgba(150, 180, 255, 0.03);
+  --edge-light: rgba(170, 200, 255, 0.12);
+  --fill: rgba(130, 160, 255, 0.12);
+  --fill-strong: rgba(130, 160, 255, 0.2);
+  --hover: rgba(140, 170, 255, 0.09);
+  --pressed: rgba(140, 170, 255, 0.15);
+  --mask: rgba(2, 5, 14, 0.58);
+  --seg-track: rgba(6, 10, 24, 0.6);
+  --seg-thumb: rgba(70, 92, 150, 0.7);
+  --switch-off: rgba(120, 145, 210, 0.4);
+
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --info: #38bdf8;
+  --ok-bg: color-mix(in srgb, var(--ok) 14%, transparent);
+  --warn-bg: color-mix(in srgb, var(--warn) 14%, transparent);
+  --err-bg: color-mix(in srgb, var(--err) 16%, transparent);
+  --info-bg: color-mix(in srgb, var(--info) 14%, transparent);
+
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+  --shadow-2: 0 24px 60px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(120, 160, 255, 0.18);
+  --shadow-3: 0 40px 100px -20px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(120, 160, 255, 0.22);
+
+  --glass-panel: rgba(14, 22, 42, 0.62);
+  --glass-border: rgba(140, 175, 255, 0.2);
+  --glass-shadow: inset 0 1px 0 rgba(180, 205, 255, 0.14), 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+  --glass-shadow-soft:
+    inset 0 1px 0 rgba(180, 205, 255, 0.16), 0 20px 50px -28px rgba(0, 0, 0, 0.75);
+  --glass-solid: rgba(14, 22, 42, 0.96);
+
+  --wallpaper:
+    radial-gradient(1400px 600px at 50% 16%, rgba(56, 189, 248, 0.1), transparent 65%),
+    radial-gradient(1200px 800px at 8% -8%, rgba(10, 132, 255, 0.42), transparent 60%),
+    radial-gradient(1000px 700px at 100% 2%, rgba(124, 58, 237, 0.34), transparent 58%),
+    radial-gradient(1100px 800px at 85% 118%, rgba(6, 182, 212, 0.3), transparent 60%),
+    radial-gradient(900px 700px at -4% 100%, rgba(37, 99, 235, 0.34), transparent 60%), #060a16;
+  --noise-opacity: 0.04;
+  --tab-strip: rgba(8, 13, 28, 0.6);
+  --tab-hover: rgba(140, 170, 255, 0.1);
+  --tab-active: #0a1020;
+  --mark-bg: linear-gradient(180deg, #f8fafc, #cbd5e1); /* 深色:浅底黑标 */
+  --mark-fg: #0a0a0b;
+  --num-a: #ffffff;
+  --num-b: #8cc4ff;
+  --desk-base: #070c1a;
+  --desk-op: 0.5;
+
+  --th-bg: #1a2540;
+  --th-bg-hover: #222f4e;
+  --td-bg-hover: #17223a;
+  --tooltip-bg: rgba(24, 34, 60, 0.96);
+  --badge-bg: #ff453a;
+  --input-border-hover: rgba(160, 190, 255, 0.42);
+  --select-border-hover: rgba(160, 190, 255, 0.52);
+
+  /* 强调色令牌在暗色下与亮色不同的几项(初始展示值,仍是默认蓝) */
+  --signal-glow: rgba(10, 132, 255, 0.55);
+  --sel-bg: rgba(10, 132, 255, 0.14);
+  --sel-ring: rgba(10, 132, 255, 0.6);
+  --sel-halo: rgba(10, 132, 255, 0.16);
+  --sel-fg: #60afff;
+  --tab-active-bg: rgba(10, 132, 255, 0.18);
+  --tab-active-fg: #60afff;
+  --tab-active-ring: rgba(10, 132, 255, 0.35);
+  --tab-on-bg: rgba(59, 155, 255, 0.2);
+  --tab-on-fg: #ffffff;
+  --tab-on-ring: rgba(130, 190, 255, 0.65);
+  --ambient-1: rgba(10, 132, 255, 0.17);
+  --ambient-2: rgba(76, 113, 250, 0.13);
+  --ambient-3: rgba(23, 175, 247, 0.11);
+  --ambient-4: rgba(111, 98, 248, 0.12);
+  --desk-1: rgba(10, 132, 255, 0.85);
+  --desk-2: rgba(76, 113, 250, 0.7);
+  --desk-3: rgba(23, 175, 247, 0.6);
+  --desk-4: rgba(111, 98, 248, 0.55);
+  /* 数据色在深色卡片底上整体提亮到对比度 ≥ 3:1(--chart-1 与浅色同值) */
+  --chart-2: #8252e7;
+  --chart-3: #19d0b8;
+  --chart-4: #b845ad;
+  --chart-5: #2cbd4e;
+  --chart-6: #63b633;
+}
