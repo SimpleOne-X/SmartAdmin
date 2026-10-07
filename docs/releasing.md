@@ -103,6 +103,7 @@ git push origin vX.Y.Z
 
   发完到 npmjs.com → `smart-admin-web` → Settings → Trusted Publisher,选 GitHub Actions:Organization or user `SimpleOne-X`,Repository `SmartAdmin`,Workflow filename `release.yml`(只填文件名),Environment 留空,**Allowed actions 勾上直接 `npm publish`**(新建的配置默认只允许 `npm stage publish`,不勾的话 `release.yml` 的发布会被拒)。字段区分大小写,npm 保存时不校验,填错要到发版那一步才报错;建好的配置不能改,只能删了重建。再到 Settings → Publishing access 选 "Require two-factor authentication and disallow tokens":之后任何 token 都发不了版,能发的只有 `release.yml`(OIDC)和维护者本人过 2FA 的交互式 `npm publish`。
   - 信任关系还核对 `web/packages/admin/package.json` 的 `repository.url`(`git+https://github.com/SimpleOne-X/SmartAdmin.git`,区分大小写),仓库搬家或改名时两边一起改。
+  - **⚠ 删掉 GitHub 仓库重建(哪怕同名)同样会废掉 npm 这边的配置,必须在 npmjs.com 上删除后重建。** npm 官方文档写明:第一次成功发布会校验配置并把它绑定到仓库的不可变身份,所以重建出的新仓库(新的仓库 id)与已绑定的配置对不上,发版会在 npm 那一步被拒,而此时 NuGet 往往已经推出去了。重建后、推 tag 之前,先把这条配置删掉再按上面的字段新建。
   - Trusted Publishing 只支持 GitHub 托管的 runner,npm CLI 要 11.5.1 以上;`release.yml` 的 npm 那步用 Node 24 并在发布前断言 npm 版本。
 - 仓库公开,GitHub Actions 不计分钟数,`ci` 的 SqlServer 全量定时腿每晚照跑。若哪天转回私有,每月只有 2000 分钟免费额度,那条定时腿会按可见性自动停。
 
