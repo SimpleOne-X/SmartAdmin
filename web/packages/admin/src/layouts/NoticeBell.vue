@@ -148,7 +148,9 @@ fetchUnread()
     @update:show="onShow"
   >
     <template #trigger>
-      <n-badge :value="unread" :max="99" :show="unread > 0">
+      <!-- offset 的 y 把徽标整体下移:默认它以按钮右上角为中心、一半在按钮顶边之上,
+           顶栏面板 overflow:hidden,两三位数(99+)的胶囊顶边会被切平 -->
+      <n-badge :value="unread" :max="99" :show="unread > 0" :offset="[0, 5]">
         <n-button quaternary circle :aria-label="t('app.notice.title')">
           <Icon icon="ph:bell" :width="19" />
         </n-button>
