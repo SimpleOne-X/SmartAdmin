@@ -4,7 +4,7 @@ An operator fills in one API key on the "AI Models" admin page, and business cod
 
 ## Configure a provider
 
-Go to System → AI Models → AI Models, click "Add Provider," pick a preset (protocol, base URL, and auth scheme come along with it), fill in the key, save. Once created, a provider's code and preset can't be changed — delete and recreate instead.
+Go to System → AI Gateway → AI Models, click "Add Provider," pick a preset (protocol, base URL, and auth scheme come along with it), fill in the key, save. Once created, a provider's code and preset can't be changed — delete and recreate instead.
 
 A newly added provider starts disabled; that's simply what "no key yet" looks like. It can only be enabled once a key is saved, or when its auth scheme is `none` (Ollama, for instance). Before enabling, click "Test Connection" to send a minimal chat with the current configuration — latency and usage come back right there, so a bad config surfaces on the spot instead of the first time business code hits it.
 
@@ -107,4 +107,4 @@ Usage records land in `sys_ai_usage_log` with no conversation content — just s
 
 ## Turning off the whole module
 
-The whole module can be switched off: add `"Ai"` to `SmartAdmin:Api:DisabledModules` and both controllers' routes disappear, along with the "AI Models" entry in the admin sidebar. `IAiChatClient` is unaffected — business code keeps injecting and calling it, because the module switch only removes routes, never DI registrations. That's true of every `[Module]`-tagged controller in the kernel, not something special to the AI gateway. Providers and keys already configured stay in the database; there's just no UI left to change them.
+The whole module can be switched off: add `"Ai"` to `SmartAdmin:Api:DisabledModules` and both controllers' routes disappear, along with the "AI Gateway" entry in the admin sidebar. `IAiChatClient` is unaffected — business code keeps injecting and calling it, because the module switch only removes routes, never DI registrations. That's true of every `[Module]`-tagged controller in the kernel, not something special to the AI gateway. Providers and keys already configured stay in the database; there's just no UI left to change them.

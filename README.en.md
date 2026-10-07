@@ -99,7 +99,7 @@ Pull the frontend as in step 2. Production requires a JWT signing key, `SmartAdm
 - **Administration**: organizations, positions, users, a multi-app portal, dictionaries, a config center, notices and a recycle bin
 - **Operations**: operation / login / exception logs, file uploads (resumable chunks, signed links), scheduled jobs (cron, fixed interval, one-off), server monitoring and health checks
 - **API docs**: a built-in Scalar UI at `/scalar`, zero-config in development, rendering the same OpenAPI contract the frontend generates its types from; in production it isn't mounted unless `SmartAdmin:Scalar:EnabledInProduction` says so, and even then the shell stays anonymous while the contract JSON sits behind a permission code
-- **AI Management**: a large-model gateway behind `IAiChatClient`, with OpenAI-compatible and Anthropic protocol adapters covering OpenAI, Azure OpenAI, DeepSeek, Qwen, Zhipu, Kimi, Doubao, Gemini, Ollama and more presets; keys encrypted at rest, token usage tracked by provider / model / scene / user
+- **AI Gateway**: a large-model gateway behind `IAiChatClient`, with OpenAI-compatible and Anthropic protocol adapters covering OpenAI, Azure OpenAI, DeepSeek, Qwen, Zhipu, Kimi, Doubao, Gemini, Ollama and more presets; keys encrypted at rest, token usage tracked by provider / model / scene / user
 - **Databases**: SQLite, MySQL, SQL Server and PostgreSQL, switched by one config section; optional Redis for multi-replica deployments
 - **Admin UI**: dynamic menu routing, button-level permissions, light and dark themes, three login skins, Chinese and English, plus common components for tables, forms, dictionaries, uploads and an import wizard
 

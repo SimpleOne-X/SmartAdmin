@@ -102,7 +102,7 @@ app.Run();
 - **系统管理**：机构、岗位、用户、多应用门户、字典、配置中心、通知公告、回收站
 - **运维**：操作 / 登录 / 异常日志，文件上传（分片续传、签名直链），定时任务（cron、固定间隔、一次性），服务器监控与健康检查
 - **接口文档**：内置 Scalar UI，开发环境 `/scalar` 零配置可用，渲染的就是前端代码生成用的那份 OpenAPI 契约；生产环境默认不挂，经 `SmartAdmin:Scalar:EnabledInProduction` 显式开启后壳页面匿名、契约 JSON 走权限码
-- **AI 管理**：大模型接入网关 `IAiChatClient`，OpenAI 兼容与 Anthropic 两套协议覆盖 OpenAI、Azure OpenAI、DeepSeek、通义千问、智谱、Kimi、豆包、Gemini、Ollama 等预置厂商，Key 加密落库，按厂商 / 模型 / 场景 / 用户记 Token 用量
+- **AI 网关管理**：大模型接入网关 `IAiChatClient`，OpenAI 兼容与 Anthropic 两套协议覆盖 OpenAI、Azure OpenAI、DeepSeek、通义千问、智谱、Kimi、豆包、Gemini、Ollama 等预置厂商，Key 加密落库，按厂商 / 模型 / 场景 / 用户记 Token 用量
 - **数据库**：SQLite、MySQL、SQL Server、PostgreSQL，改一段配置切换；可选 Redis，支持多副本部署
 - **管理界面**：动态菜单路由、按钮级权限、明暗主题、三套登录皮肤、中英双语，以及表格、表单、字典、上传、导入向导等常用组件
 
