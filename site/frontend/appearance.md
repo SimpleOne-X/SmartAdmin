@@ -1,0 +1,112 @@
+# Theme & Icons
+
+Reskinning the admin with a new brand color, adding a dark palette, or slotting in a few of your own icons touches fewer places than you'd think. The whole look is driven by one layer of CSS variables, and icons are registered offline once at startup — this page explains those two mechanisms so you know where to change things, and why only there.
+
+## Four token layers; business code touches only the role tokens
+
+SmartAdmin's look is driven by CSS custom properties, not component props. The variables all live in the kernel package's `styles/tokens.css`, shipped to the app inside `smart-admin-web/style.css`, split into four layers:
+
+- **Primitives** — the gray scale (`--color-gray-50…900`) and the base colors of the four semantic colors. Fixed values, they don't flip with the theme.
+- **Role tokens** — `--color-bg-*`, `--color-text-*`, `--color-border*`, `--color-fill*`, `--color-primary*`, `--color-mask`. Semantically named, with light values on `:root` and dark overrides on `:root[data-theme="dark"]`. **Business code consumes only this layer.**
+- **Metrics** — font sizes, spacing, radii. Theme-independent, present once on `:root`.
+- **Shadows** — light on `:root`, dark overridden separately (a dark background needs a heavier shadow).
+
+"Business code touches only the role tokens" isn't a rule, it's the lazy path: if some business CSS wrote `--color-gray-900` directly as its text color, the dark theme can't reach it — the gray scale is a fixed primitive, it doesn't move with `data-theme`, so you'd get a line of black text sitting on a dark background. Only the role tokens store a value for each of light and dark, so the one line of CSS `--color-text-primary` is correct under both themes — what flips is the value behind the token, not your styles. Reskinning works the same way: swapping the whole palette only touches the override block in the role-token layer, leaving primitives and metrics untouched.
+
+## Dark, light, auto: follow the system on first visit, remembered after a manual toggle
+
+The `app` store's (`stores/app.ts`) `themeScheme` has three states: `'light'`, `'dark'`, `'auto'` (the default). In `auto`, the `isDark` getter reads the system preference reactively via VueUse's `usePreferredDark` — matching the system light/dark on first visit, and live-updating when the OS theme changes. Clicking the header's toggle (`toggleDark()`) or calling `setThemeScheme()` lands on an explicit `'light'`/`'dark'`, persisted with the store to `localStorage` (key `app`), and from then on it no longer follows the system.
+
+## Accent and density
+
+Two more user-facing knobs live in the same store, persisted alongside `themeScheme`:
+
+- `accent` — the brand color. The appearance drawer shows a macOS-style row of dots: 6 presets (`theme/accents.ts`; blue `#0A84FF` by default, then indigo, purple, teal, green and graphite), plus a rainbow dot that takes any color. A custom, valid `#RRGGBB` is kept in the browser like the presets are. Changing the accent recomputes `--color-primary*`.
+- `density` — `'comfortable'` / `'compact'`, applied as `data-density` on `<html>`, driving table row height and card padding.
+
+## From tokens to Naive UI
+
+Hand-written CSS reads the tokens directly, but Naive UI components don't understand CSS variables — they want a JS object (`GlobalThemeOverrides`). `buildThemeOverrides()` (`theme/naive-theme.ts`) reads that same batch of CSS variables out with `getComputedStyle` and maps them onto Naive's `common.*` (`primaryColor` ← `--color-primary`, `bodyColor` ← `--color-bg-body`, `borderRadius` ← `--radius-md`, and so on). Both sides read the same values, so hand-written styles and Naive components never drift into different colors.
+
+The accent is the one value that isn't read directly but computed. There's no way to pre-write hover/pressed/light states for all 6 accent candidates in `tokens.css`, so only the one `accent` is stored and the other states are derived by `mix(a, b, t)` (`theme/mix.ts`, a linear interpolation of two colors by `t∈[0,1]`): in light, `hover = mix(primary, #FFF, .16)` and `pressed = mix(primary, #000, .18)`; in dark, the accent is first lightened one step toward white (`mix(accent, #FFF, .18)`) before deriving the rest, so indigo doesn't come out muddy against a dark background.
+
+It all comes together in `useTheme()` (`composables/useTheme.ts`): it watches `app.isDark` / `accent` / `density`, and on any change stamps `data-theme` / `data-density` onto `<html>`, writes the derived `--color-primary*` into `document.documentElement` (so token-consuming hand-written CSS reskins instantly), and rebuilds Naive's `themeOverrides`. `App.vue` wires the result into `<n-config-provider :theme-overrides>`, wrapping the whole app.
+
+::: tip The full token tables
+The above is enough to change the accent, add a dark palette, and figure out which layer to touch. For the complete token listing, the semantic-badge derivations, and the full `token → Naive` mapping table, see [`web/DESIGN.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/web/DESIGN.md).
+:::
+
+## Logo: one setting, everywhere
+
+The logo in the sidebar, the header, the login page and the app chooser is always rendered by `SmartLogo`, which picks its source in order: an image URL in the admin config `sys.site.logo`; otherwise the component or image URL passed as `createSmartAdmin({ brand: { logo } })`; and only when neither is set, the built-in vector mark. `brand` is the default for an empty config, and it's also what the first frame shows before the site info arrives.
+
+Changing the logo doesn't mean uploading a file and pasting its URL. Under "System config → Branding & login", click the logo tile, pick a PNG, JPG or WEBP image and crop it to a square. The preview shows the result right away, and nothing is saved until you click Save. The image goes through a dedicated endpoint, `POST /api/v1/sys/config/logo`, which accepts bitmaps up to 1 MB and ignores the global whitelist in "Uploads". `sys.site.logo` stores a signed link; it keeps working even with `SignedUrlTtlMinutes` set, because the site info re-signs it on every response.
+
+The browser tab icon follows the logo by default: set a logo and the tab shows it, clear it and the template's own favicon comes back. To opt out, pass `createSmartAdmin({ brand: { faviconFromLogo: false } })`.
+
+## Offline icon registration
+
+Icons are rendered **offline**: a handful of Iconify collections plus your own local SVGs, registered once at startup, then used in any component through the thin `AppIcon` wrapper, and pickable interactively in menu administration via `IconPicker`.
+
+`setupIcons()` (the kernel package's `lib/icons.ts`) is called exactly once by `createSmartAdmin()`, and registers two kinds of source through `smart-naive-icon`'s `setupSmartIcon`:
+
+- **Offline Iconify collections** — `ph` (Phosphor, the default set), `lucide` (Lucide), `ep` (Element Plus), `ant-design` (Ant Design). Each is a separate lazy `@iconify-json/<prefix>` chunk, loaded only when first used. `ph` also has subsets registered synchronously at startup, covered in the next section.
+- **Local SVGs** — the kernel's own live in the package's `assets/svg/`; an app's own are glob-imported as raw strings and handed to `createSmartAdmin()`'s `icons` option:
+
+```ts
+createSmartAdmin({
+  icons: import.meta.glob('./assets/svg/*.svg', { query: '?raw', import: 'default', eager: true }),
+})
+```
+
+  The filename minus `.svg` is the icon name — `src/assets/svg/star.svg` becomes selectable as `local:star`.
+
+The four built-in icon collections and the local SVGs are all bundled into the app itself, so rendering them never reaches out to an external CDN (such as `api.iconify.design`). That only holds as long as an icon is picked from `ph`/`lucide`/`ep`/`ant-design`/`local:` — the picker's "online" tab accepts any Iconify name at all, and names outside those five aren't part of the bundle, so they simply don't render in an offline deployment.
+
+## The `ph` subsets: one from the kernel, one from the app
+
+The full `ph` set is 9,000+ icons, about 946 KB gzipped, so only a subset is registered synchronously at startup; a name outside it makes `AppIcon` lazy-load the full set the first time it renders. The kernel's subset ships with the package, and an app generates its own from its `src` with the `smart-admin-icons` command the package provides:
+
+```bash
+npm run gen:icons               # the template's script, i.e. smart-admin-icons: scans src, writes src/assets/icons/ph-subset.json
+npx smart-admin-icons --check   # for CI: exits non-zero when the output is stale or an icon name is misspelled
+```
+
+The generated JSON goes to the kernel through `iconSets`, already wired in the template:
+
+```ts
+import phSubset from './assets/icons/ph-subset.json'
+
+createSmartAdmin({
+  iconSets: [phSubset],
+})
+```
+
+Whenever a page starts using a new `ph:*` name, run `npm run gen:icons` again. Forgetting doesn't break anything: the icon still renders, it just falls back to lazy-loading the full set. The scan covers `.vue`, `.ts`, `.tsx`, `.js`, `.jsx` and `.mjs` under `src`, skipping `*.spec.*`, `*.test.*` and `node_modules`. Names that never appear in page source, such as seed-menu icons, get picked up once they're written into any `.ts` under `src` — an exported array, for example.
+
+The app's subset doesn't drop names the kernel's subset already has. Duplicates are harmless, since the same icon name carries the same data. Subtracting the kernel's subset would tie the JSON an app commits to one kernel version: every kernel upgrade could make `--check` report it stale, and upgrading would no longer mean just bumping the version.
+
+## Using an icon in a component
+
+`AppIcon` (the kernel package's `components/AppIcon.vue`) wraps `smart-naive-icon`'s `SmartIcon` and is the standard way to render an icon anywhere in the app:
+
+```vue
+<script setup lang="ts">
+import { AppIcon } from 'smart-admin-web'
+</script>
+
+<template>
+  <AppIcon icon="ph:house-duotone" />
+  <AppIcon icon="local:star" :size="20" />
+</template>
+```
+
+`icon` is a `prefix:name` string (`local:name` for a local SVG), default size `18`. When `icon` is empty or can't be resolved, `AppIcon` falls back to `ph:dot-outline-duotone` — the same fallback the sidebar menu uses for a **page leaf** with no icon set. Directory nodes have their own separate fallback, `ph:folder-duotone` (`composables/useLayoutMenu.ts`).
+
+## Picking an icon in menu admin
+
+`IconPicker` (the kernel package's `components/IconPicker/index.vue`) is the app's picker, used on the menu `icon` field in **System → Menu administration**. It wraps `smart-naive-icon`'s `SmartIconPicker`, injects SmartAdmin's own vue-i18n labels, and reuses the collections already registered globally by `setupIcons()` (so `ph` shows up as the first/default tab) — no configuration needed at the call site.
+
+::: tip The picker's full API
+This only covers how icons are wired into the app. The picker component itself — multi-library tabs, registering local SVGs, `labels`/i18n, the `v-model` contract — is provided by a standalone package; for its API, see [SmartIcon and SmartIconPicker](/components/smart-icon).
+:::

@@ -1,0 +1,149 @@
+using SmartAdmin.Core;
+using SmartAdmin.SqlSugar;
+
+namespace SmartAdmin.Services;
+
+/// <summary>
+/// 系统配置种子。播一条站点标题作为起步样例与冒烟锚点;固定 Id 保幂等,
+/// 界面上改配置值不会被重启覆盖(种子只补缺失行)。
+/// </summary>
+public class ConfigSeed : ISeedData<SysConfig>
+{
+    /// <summary>站点标题配置键(浏览器标题 + 登录页/侧栏/顶栏/水印品牌词)</summary>
+    internal const string SITE_TITLE_KEY = "sys.site.title";
+    /// <summary>登录页副标题配置键(留空回退前端内置文案)</summary>
+    internal const string SITE_SUBTITLE_KEY = "sys.site.subtitle";
+    /// <summary>版权信息配置键(登录页页脚版权名)</summary>
+    internal const string SITE_COPYRIGHT_KEY = "sys.site.copyright";
+    /// <summary>版权链接配置键(版权名的超链接;留空则纯文本)</summary>
+    internal const string SITE_COPYRIGHT_URL_KEY = "sys.site.copyrightUrl";
+    /// <summary>站点 Logo 图片地址配置键(登录页、侧栏、顶栏、应用选择页的品牌 logo,前端 SmartLogo 统一渲染;留空则回退前端内置矢量 logo)</summary>
+    internal const string SITE_LOGO_KEY = "sys.site.logo";
+    /// <summary>水印开关配置键(登录后页面叠加的防泄露水印;默认关)</summary>
+    internal const string WATERMARK_ENABLED_KEY = "sys.watermark.enabled";
+    /// <summary>水印内容项配置键:逗号分隔的 name / account / org / phone / time / text,具体值由前端按当前登录用户拼</summary>
+    internal const string WATERMARK_FIELDS_KEY = "sys.watermark.fields";
+    /// <summary>水印自定义文字配置键(内容项含 text 时才印,所有人一样)</summary>
+    internal const string WATERMARK_TEXT_KEY = "sys.watermark.text";
+    /// <summary>水印时间格式配置键(内容项含 time 时才用;YYYY-MM-DD / YYYY-MM-DD HH:mm / YYYY-MM-DD HH:mm:ss / MM-DD HH:mm)</summary>
+    internal const string WATERMARK_TIME_FORMAT_KEY = "sys.watermark.timeFormat";
+    /// <summary>水印排版配置键:single 单行 / multi 每项一行</summary>
+    internal const string WATERMARK_LAYOUT_KEY = "sys.watermark.layout";
+    /// <summary>水印字号配置键(px)</summary>
+    internal const string WATERMARK_FONT_SIZE_KEY = "sys.watermark.fontSize";
+    /// <summary>水印浓淡配置键(不透明度百分比)</summary>
+    internal const string WATERMARK_OPACITY_KEY = "sys.watermark.opacity";
+    /// <summary>水印倾斜角度配置键(度,负值向左上倾)</summary>
+    internal const string WATERMARK_ROTATE_KEY = "sys.watermark.rotate";
+    /// <summary>水印疏密配置键:sparse / normal / dense</summary>
+    internal const string WATERMARK_DENSITY_KEY = "sys.watermark.density";
+    /// <summary>水印错位排列配置键(相邻两行错开半格)</summary>
+    internal const string WATERMARK_CROSS_KEY = "sys.watermark.cross";
+    /// <summary>登录页 Hero 文案分组:仅登录前展示,匿名站点信息接口下发。</summary>
+    internal const string LOGIN_HERO_GROUP = "login";
+    /// <summary>登录页 Hero 亮点开关配置键</summary>
+    internal const string LOGIN_HERO_SHOW_FEATURES_KEY = "sys.login.hero.showFeatures";
+    /// <summary>登录页 Hero 中文主标题配置键(留空回退内置文案)</summary>
+    internal const string LOGIN_HERO_HEADLINE_ZH_KEY = "sys.login.hero.headline.zh-CN";
+    /// <summary>登录页 Hero 中文强调词配置键(留空回退内置强调词)</summary>
+    internal const string LOGIN_HERO_HIGHLIGHT_ZH_KEY = "sys.login.hero.highlight.zh-CN";
+    /// <summary>登录页 Hero 中文亮点配置键(一行一条;留空回退内置亮点)</summary>
+    internal const string LOGIN_HERO_FEATURES_ZH_KEY = "sys.login.hero.features.zh-CN";
+    /// <summary>登录页 Hero 英文主标题配置键(留空回退内置文案)</summary>
+    internal const string LOGIN_HERO_HEADLINE_EN_KEY = "sys.login.hero.headline.en-US";
+    /// <summary>登录页 Hero 英文强调词配置键(留空回退内置强调词)</summary>
+    internal const string LOGIN_HERO_HIGHLIGHT_EN_KEY = "sys.login.hero.highlight.en-US";
+    /// <summary>登录页 Hero 英文亮点配置键(一行一条;留空回退内置亮点)</summary>
+    internal const string LOGIN_HERO_FEATURES_EN_KEY = "sys.login.hero.features.en-US";
+
+    /// <summary>
+    /// 升级时只刷四列元信息(展示名/分组/排序/备注),<b>永不碰 <c>ConfigValue</c></b>——
+    /// 值是用户在配置中心改的,刷回种子值等于把人家的设置静默回滚。
+    /// <para>只同步这四列而不同步整表:同步整表会连带覆盖用户改过的 <c>ConfigValue</c>;
+    /// 完全不同步又会让内核更新过的展示名/分组永远停在旧文案上。只同步这几列安全的元信息,两个问题都不会发生。</para>
+    /// </summary>
+    public virtual bool SyncOnUpgrade => true;
+
+    /// <inheritdoc cref="SyncOnUpgrade" />
+    public virtual string[]? SyncColumns =>
+        [nameof(SysConfig.Name), nameof(SysConfig.GroupCode), nameof(SysConfig.Sort), nameof(SysConfig.Remark)];
+
+    /// <inheritdoc />
+    public virtual IEnumerable<SysConfig> HasData() =>
+    [
+        // 基础/品牌(GroupCode=sys):经匿名白名单 GetSiteInfoAsync 下发,前端登录页/框架消费。
+        new SysConfig { Id = 1, ConfigKey = SITE_TITLE_KEY, ConfigValue = "SmartAdmin", Name = "站点标题", GroupCode = "sys", Sort = 1, Remark = "浏览器标题与登录页/侧栏/顶栏展示名" },
+        new SysConfig { Id = 18, ConfigKey = SITE_SUBTITLE_KEY, ConfigValue = "", Name = "登录副标题", GroupCode = "sys", Sort = 2, Remark = "登录页副标题;留空则用前端内置文案" },
+        new SysConfig { Id = 19, ConfigKey = SITE_COPYRIGHT_KEY, ConfigValue = "SmartAdmin", Name = "版权信息", GroupCode = "sys", Sort = 3, Remark = "登录页页脚版权名;留空则回退站点标题" },
+        new SysConfig { Id = 20, ConfigKey = SITE_COPYRIGHT_URL_KEY, ConfigValue = "", Name = "版权链接", GroupCode = "sys", Sort = 4, Remark = "版权名的超链接(http/https);留空则纯文本" },
+        new SysConfig { Id = 26, ConfigKey = SITE_LOGO_KEY, ConfigValue = "", Name = "站点 Logo", GroupCode = "sys", Sort = 5, Remark = "品牌 logo 图片地址(URL):登录页、侧栏、顶栏、应用选择页统一显示;留空则回退前端内置矢量 logo" },
+
+        // 水印(GroupCode=sys):经匿名白名单 GetSiteInfoAsync 下发(只是版式参数,不含任何用户信息),前端登录后叠加。
+        new SysConfig { Id = 48, ConfigKey = WATERMARK_ENABLED_KEY, ConfigValue = "false", Name = "启用水印", GroupCode = "sys", Sort = 10, Remark = "开启后登录后的每个页面叠一层半透明水印;登录页不显示" },
+        new SysConfig { Id = 49, ConfigKey = WATERMARK_FIELDS_KEY, ConfigValue = "name,account,time", Name = "水印内容项", GroupCode = "sys", Sort = 11, Remark = "逗号分隔:name 姓名 / account 账号 / org 机构 / phone 手机尾号 / time 当前时间 / text 自定义文字" },
+        new SysConfig { Id = 50, ConfigKey = WATERMARK_TEXT_KEY, ConfigValue = "", Name = "水印自定义文字", GroupCode = "sys", Sort = 12, Remark = "内容项含 text 时才印,最多 40 字" },
+        new SysConfig { Id = 51, ConfigKey = WATERMARK_TIME_FORMAT_KEY, ConfigValue = "YYYY-MM-DD HH:mm", Name = "水印时间格式", GroupCode = "sys", Sort = 13, Remark = "YYYY-MM-DD / YYYY-MM-DD HH:mm / YYYY-MM-DD HH:mm:ss / MM-DD HH:mm" },
+        new SysConfig { Id = 52, ConfigKey = WATERMARK_LAYOUT_KEY, ConfigValue = "single", Name = "水印排版", GroupCode = "sys", Sort = 14, Remark = "single 单行 / multi 每项一行" },
+        new SysConfig { Id = 53, ConfigKey = WATERMARK_FONT_SIZE_KEY, ConfigValue = "14", Name = "水印字号", GroupCode = "sys", Sort = 15, Remark = "12–28,单位 px" },
+        new SysConfig { Id = 54, ConfigKey = WATERMARK_OPACITY_KEY, ConfigValue = "8", Name = "水印浓淡", GroupCode = "sys", Sort = 16, Remark = "2–30,不透明度百分比;越大越清楚" },
+        new SysConfig { Id = 55, ConfigKey = WATERMARK_ROTATE_KEY, ConfigValue = "-20", Name = "水印倾斜角度", GroupCode = "sys", Sort = 17, Remark = "-45–45,单位度" },
+        new SysConfig { Id = 56, ConfigKey = WATERMARK_DENSITY_KEY, ConfigValue = "normal", Name = "水印疏密", GroupCode = "sys", Sort = 18, Remark = "sparse 疏 / normal 适中 / dense 密" },
+        new SysConfig { Id = 57, ConfigKey = WATERMARK_CROSS_KEY, ConfigValue = "true", Name = "水印错位排列", GroupCode = "sys", Sort = 19, Remark = "相邻两行错开半格,更难被裁掉" },
+
+        // 登录页 Hero(GroupCode=login):仅登录前展示,经匿名白名单 GetSiteInfoAsync 下发。
+        // 空值代表沿用前端内置文案;亮点一行一条,前端最多渲染 5 条。
+        new SysConfig { Id = 40, ConfigKey = LOGIN_HERO_SHOW_FEATURES_KEY, ConfigValue = "true", Name = "显示登录页亮点", GroupCode = LOGIN_HERO_GROUP, Sort = 1, Remark = "关闭后登录页 Hero 不显示亮点清单" },
+        new SysConfig { Id = 41, ConfigKey = LOGIN_HERO_HEADLINE_ZH_KEY, ConfigValue = "", Name = "登录页主标题(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 10, Remark = "留空则使用内置中文主标题" },
+        new SysConfig { Id = 42, ConfigKey = LOGIN_HERO_HIGHLIGHT_ZH_KEY, ConfigValue = "", Name = "登录页主标题强调词(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 11, Remark = "需包含在主标题中;留空则使用内置强调词" },
+        new SysConfig { Id = 43, ConfigKey = LOGIN_HERO_FEATURES_ZH_KEY, ConfigValue = "", Name = "登录页亮点(中文)", GroupCode = LOGIN_HERO_GROUP, Sort = 12, Remark = "一行一条,最多 5 条;留空则使用内置中文亮点" },
+        new SysConfig { Id = 44, ConfigKey = LOGIN_HERO_HEADLINE_EN_KEY, ConfigValue = "", Name = "登录页主标题(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 20, Remark = "留空则使用内置英文主标题" },
+        new SysConfig { Id = 45, ConfigKey = LOGIN_HERO_HIGHLIGHT_EN_KEY, ConfigValue = "", Name = "登录页主标题强调词(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 21, Remark = "需包含在主标题中;留空则使用内置强调词" },
+        new SysConfig { Id = 46, ConfigKey = LOGIN_HERO_FEATURES_EN_KEY, ConfigValue = "", Name = "登录页亮点(English)", GroupCode = LOGIN_HERO_GROUP, Sort = 22, Remark = "一行一条,最多 5 条;留空则使用内置英文亮点" },
+
+        // 安全策略(GroupCode=security):后端强制执行时经 ISecurityPolicyProvider 读取,改值即时生效。
+        // 默认值须与 SecurityPolicyProvider 兜底一致(= 现 Options 默认)。
+        new SysConfig { Id = 2, ConfigKey = SecurityPolicyProvider.KEY_MAX_FAIL, ConfigValue = "5", Name = "登录失败锁定次数", GroupCode = SecurityPolicyProvider.GROUP, Sort = 10, Remark = "连续密码错误达此次数即锁定;≤0 关闭" },
+        new SysConfig { Id = 3, ConfigKey = SecurityPolicyProvider.KEY_LOCK_MIN, ConfigValue = "10", Name = "锁定时长(分钟)", GroupCode = SecurityPolicyProvider.GROUP, Sort = 11, Remark = "锁定时长,也是失败计数的滑动过期窗口" },
+        new SysConfig { Id = 4, ConfigKey = SecurityPolicyProvider.KEY_MIN_LEN, ConfigValue = "8", Name = "密码最小长度", GroupCode = SecurityPolicyProvider.GROUP, Sort = 20, Remark = "新口令最小长度" },
+        new SysConfig { Id = 5, ConfigKey = SecurityPolicyProvider.KEY_REQ_UPPER, ConfigValue = "true", Name = "密码须含大写字母", GroupCode = SecurityPolicyProvider.GROUP, Sort = 21, Remark = null },
+        new SysConfig { Id = 6, ConfigKey = SecurityPolicyProvider.KEY_REQ_LOWER, ConfigValue = "true", Name = "密码须含小写字母", GroupCode = SecurityPolicyProvider.GROUP, Sort = 22, Remark = null },
+        new SysConfig { Id = 7, ConfigKey = SecurityPolicyProvider.KEY_REQ_DIGIT, ConfigValue = "true", Name = "密码须含数字", GroupCode = SecurityPolicyProvider.GROUP, Sort = 23, Remark = null },
+        new SysConfig { Id = 8, ConfigKey = SecurityPolicyProvider.KEY_REQ_SPECIAL, ConfigValue = "false", Name = "密码须含特殊字符", GroupCode = SecurityPolicyProvider.GROUP, Sort = 24, Remark = "特殊字符指非字母数字" },
+        new SysConfig { Id = 22, ConfigKey = SecurityPolicyProvider.KEY_EXPIRE_DAYS, ConfigValue = "0", Name = "密码有效天数", GroupCode = SecurityPolicyProvider.GROUP, Sort = 25, Remark = "超过天数后登录强制改密(不拦登录);≤0 永不过期" },
+        new SysConfig { Id = 25, ConfigKey = SecurityPolicyProvider.KEY_HISTORY_COUNT, ConfigValue = "0", Name = "密码历史防重用条数", GroupCode = SecurityPolicyProvider.GROUP, Sort = 26, Remark = "改密/重置的新口令不得与当前或最近 N 个用过的口令相同;≤0 关闭" },
+        new SysConfig { Id = 47, ConfigKey = SecurityPolicyProvider.KEY_FORCE_CHANGE_FIRST_LOGIN, ConfigValue = "false", Name = "首次登录须改密码", GroupCode = SecurityPolicyProvider.GROUP, Sort = 27, Remark = "管理员建号/导入的新账号首次登录是否强制改密;只影响此后新建的账号,管理员重置密码与密码过期仍强制改密" },
+        new SysConfig { Id = 9, ConfigKey = SecurityPolicyProvider.KEY_ACCESS_MIN, ConfigValue = "120", Name = "访问令牌时长(分钟)", GroupCode = SecurityPolicyProvider.GROUP, Sort = 30, Remark = "访问令牌有效期,到期需用刷新令牌换发" },
+        new SysConfig { Id = 10, ConfigKey = SecurityPolicyProvider.KEY_REFRESH_MIN, ConfigValue = "10080", Name = "刷新令牌时长(分钟)", GroupCode = SecurityPolicyProvider.GROUP, Sort = 31, Remark = "刷新令牌有效期,决定最长免登录时长(默认 7 天)" },
+        new SysConfig { Id = 13, ConfigKey = CaptchaService.KEY_ENABLED, ConfigValue = "false", Name = "启用登录验证码", GroupCode = SecurityPolicyProvider.GROUP, Sort = 40, Remark = "开启后登录须过验证码;账号级锁定已挡爆破主向,此为浏览器侧加固" },
+        new SysConfig { Id = 21, ConfigKey = CaptchaService.KEY_TYPE, ConfigValue = "char", Name = "验证码类型", GroupCode = SecurityPolicyProvider.GROUP, Sort = 41, Remark = "char 字符 / path 描边(明文不入标记、更抗爬)/ math 算术;或消费方自注册的类型" },
+        new SysConfig { Id = 23, ConfigKey = SmsOtpService.KEY_MFA_ENABLED, ConfigValue = "false", Name = "启用短信二次验证", GroupCode = SecurityPolicyProvider.GROUP, Sort = 42, Remark = "开启后绑定了手机号的用户密码登录须再验短信码;未绑手机号的用户不受影响。需接入真实短信通道(ISmsSender)" },
+        new SysConfig { Id = 24, ConfigKey = SmsOtpService.KEY_LOGIN_ENABLED, ConfigValue = "false", Name = "启用短信验证码登录", GroupCode = SecurityPolicyProvider.GROUP, Sort = 43, Remark = "开启后登录页出现短信登录入口(手机号+验证码免密)。需接入真实短信通道(ISmsSender)" },
+        // TOTP 运行时总闸(与 captcha 同款):配置中心即时开关;用户 ForceTotp 在能力开启后才生效
+        new SysConfig { Id = 29, ConfigKey = AdminTotpOptions.KEY_ENABLED, ConfigValue = "false", Name = "启用动态口令(TOTP)", GroupCode = SecurityPolicyProvider.GROUP, Sort = 44, Remark = "开启后才提供自助绑定/登录二因子/恢复码;用户「强制动态口令」仅在此开启后生效。Options Totp:Enabled 为部署级硬开地板" },
+        new SysConfig { Id = 30, ConfigKey = AdminTotpOptions.KEY_REQUIRE_FOR_SUPER_ADMIN, ConfigValue = "false", Name = "超管必须动态口令", GroupCode = SecurityPolicyProvider.GROUP, Sort = 45, Remark = "能力开启时超管是否必须完成第二因子;未绑则登录引导自助绑定" },
+
+        // 请求限流(GroupCode=security):RuntimeRateLimit 快照读取,改值经事件刷新即时生效。默认须与 AdminRateLimitOptions 默认一致。
+        new SysConfig { Id = 14, ConfigKey = AdminRateLimitOptions.KEY_ENABLED, ConfigValue = "true", Name = "启用请求限流", GroupCode = SecurityPolicyProvider.GROUP, Sort = 50, Remark = "按客户端 IP 固定窗口限流;Options 硬关时此项无效" },
+        new SysConfig { Id = 15, ConfigKey = AdminRateLimitOptions.KEY_WINDOW, ConfigValue = "60", Name = "限流窗口(秒)", GroupCode = SecurityPolicyProvider.GROUP, Sort = 51, Remark = "全局与认证端点共用的窗口长度" },
+        new SysConfig { Id = 16, ConfigKey = AdminRateLimitOptions.KEY_PERMIT, ConfigValue = "300", Name = "全局每窗口请求数", GroupCode = SecurityPolicyProvider.GROUP, Sort = 52, Remark = "单 IP 每窗口允许的请求数;≤0 不限全局" },
+        new SysConfig { Id = 17, ConfigKey = AdminRateLimitOptions.KEY_AUTH_PERMIT, ConfigValue = "20", Name = "认证端点每窗口请求数", GroupCode = SecurityPolicyProvider.GROUP, Sort = 53, Remark = "/api/v1/auth/* 单 IP 每窗口允许数(更严);≤0 不限" },
+
+        // 上传约束(GroupCode=upload):FileService.UploadAsync 强制执行,改值即时生效。默认须与 AdminUploadOptions 默认一致。
+        new SysConfig { Id = 11, ConfigKey = FileService.KEY_MAX_SIZE, ConfigValue = "20", Name = "单文件大小上限(MB)", GroupCode = FileService.GROUP, Sort = 40, Remark = "超过即拒收上传" },
+        new SysConfig { Id = 12, ConfigKey = FileService.KEY_ALLOWED_EXTS, ConfigValue = ".jpg,.png,.pdf,.xlsx,.docx,.zip", Name = "允许的文件后缀", GroupCode = FileService.GROUP, Sort = 41, Remark = "逗号分隔的后缀白名单(含点);留空则回退到 Options 默认" },
+
+        // 定时任务(GroupCode=job):运行期可调旋钮;结构性参数(心跳/租约/围栏)留 SmartAdmin:Jobs 节。
+        new SysConfig { Id = 27, ConfigKey = JobConfigKeys.KEY_LOG_RETENTION_DAYS, ConfigValue = "30", Name = "执行记录保留天数", GroupCode = JobConfigKeys.GROUP, Sort = 60, Remark = "JobLogCleanupJob 按此清理 sys_job_log;≤0 不清理" },
+        new SysConfig { Id = 28, ConfigKey = JobConfigKeys.KEY_ALERT_EMAILS, ConfigValue = "", Name = "任务告警收件人", GroupCode = JobConfigKeys.GROUP, Sort = 61, Remark = "连败告警邮件的全局兜底收件人(逗号分隔);任务行自带收件人时优先任务行" },
+
+        // AI 网关(GroupCode=ai):运行期可调旋钮;厂商/Key/模型走 sys_ai_provider / sys_ai_model,不在配置中心。
+        new SysConfig { Id = 35, ConfigKey = AiConfigKeys.KEY_USAGE_RETENTION_DAYS, ConfigValue = "90", Name = "AI 用量记录保留天数", GroupCode = AiConfigKeys.GROUP, Sort = 90, Remark = "AiUsageLogCleanupJob 按此清理 sys_ai_usage_log;≤0 不清理" },
+
+        // 第三方登录运营开关(GroupCode=externalauth):登录页 GET providers 读 IsEnabledAsync;缺省 true=配了连接即显示。
+        // 配置中心「第三方登录」Tab 结构化开关;密钥仍在 appsettings。
+        new SysConfig { Id = 31, ConfigKey = "sys.externalauth.wecom.enabled", ConfigValue = "true", Name = "企业微信-登录页显示", GroupCode = "externalauth", Sort = 70, Remark = "关闭后登录页不显示该按钮;authorize 同步拒绝" },
+        new SysConfig { Id = 32, ConfigKey = "sys.externalauth.dingtalk.enabled", ConfigValue = "true", Name = "钉钉-登录页显示", GroupCode = "externalauth", Sort = 71, Remark = "关闭后登录页不显示该按钮;authorize 同步拒绝" },
+        new SysConfig { Id = 33, ConfigKey = "sys.externalauth.github.enabled", ConfigValue = "true", Name = "GitHub-登录页显示", GroupCode = "externalauth", Sort = 72, Remark = "关闭后登录页不显示该按钮;需已注册 Auth.GitHub 包" },
+        new SysConfig { Id = 34, ConfigKey = "sys.externalauth.wechat.enabled", ConfigValue = "true", Name = "微信-登录页显示", GroupCode = "externalauth", Sort = 73, Remark = "个人微信开放平台;关闭后登录页不显示" },
+    ];
+}

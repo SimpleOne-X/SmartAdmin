@@ -1,0 +1,24 @@
+{
+  "SmartAdmin": {
+    "//Database": "开发期想看 ORM 生成了什么、每条跑多久,把下面这段的注释去掉(键名去掉前导下划线)。生产别开:每请求若干条语句。",
+    "_Database": {
+      "SqlLog": {
+        "Enabled": true,
+        "MinMillis": 0,
+        "RequestSummary": true
+      }
+    },
+
+    "Seed": {
+      "AdminAccount": "superAdmin",
+      "AdminPassword": ""
+    },
+
+    "//ExternalAuth": "外部登录 / SSO。这里只有回调基址与前端结果页;各登录方式的连接与密钥在 系统配置 → 登录方式 里填写并加密入库(需先配好 SmartAdmin:Security:DataProtection:Key),运营开关(启用/未绑定策略/开户默认角色·机构)走 sys_config 键 sys.externalauth.{code}.*。",
+    "ExternalAuth": {
+      "CallbackBaseUrl": "https://admin.example.com",
+      "FrontendResultPath": "/oauth/callback",
+      "_FrontendResultPathDevNote": "前后端分离开发请写完整前端 URL,如 http://localhost:5173/oauth/callback;相对路径会 302 到后端主机。"
+    }
+  }
+}

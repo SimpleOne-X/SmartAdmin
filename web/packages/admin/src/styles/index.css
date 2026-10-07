@@ -1,0 +1,290 @@
+/* 全局基础样式 + 密度变量。tokens.css 已先行 import(包入口 index.ts 的顺序)。
+   画布是固定壁纸、内容卡片不透明实底(玻璃只给侧栏 / 顶栏 / 弹层 / 登录卡)、整站不画网格。 */
+
+:root {
+  /* 内容区留白取 14 / 12:后台常见的 1366×768 显示器上,24px 的留白四边加起来吃掉近 50px,
+     表格要少显示一行。改这里全站生效。 */
+  --pad-page: 14px;
+  /* 卡片之间的间距:全站只有这一个值,且等于壳层面板(侧栏 / 顶栏 / 内容区)之间的 8px —— 一套 8pt 网格,
+     顶栏到首张卡片、卡片到卡片、左右分栏之间都是它。新页面的卡片间距一律写 var(--gap-card),不要写死数字,
+     也不要给页面容器另加顶部留白(会让页面切换时首张卡片上下跳)。 */
+  --gap-card: 8px;
+  --row-h: 36px;
+  --sidebar-w: 236px;
+  --sidebar-w-collapsed: 76px;
+  --rail-w: 64px;
+  --header-h: 62px;
+}
+
+/* 紧凑档:页内边距 / 表格行高收紧。卡片间距不随密度变,见上。 */
+:root[data-density='compact'] {
+  --pad-page: 10px;
+  --row-h: var(--table-row-h);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: var(--font-size-base); /* 正文 15px(中文界面 14px 偏小,整体上调一档) */
+  line-height: var(--line-height-base);
+  color: var(--text-1);
+  /* 画布:固定壁纸(柔光渐变,无网格),滚动时背景不漂移 */
+  background: var(--wallpaper);
+  background-attachment: fixed;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--sel-fg);
+  text-decoration: none;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 页面常用的几个文字小工具类,页面 scoped 里再定义同名类也不冲突(scoped 特异度更高)。 */
+.muted {
+  color: var(--text-2);
+}
+.faint {
+  color: var(--text-3);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  letter-spacing: 0;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+/* 英文小标签:等宽 + 宽字距 + 大写,只做辅助层级。只放拉丁文案;中文标签别用(等宽字体没有中文字形,字距会撑散汉字)。 */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── 内容卡片:不透明实底 + 发丝渐变描边 + 柔和投影 ─────────────────────
+   HIG「Don't use Liquid Glass in the content layer」:页面里的卡片(表格 / 表单 / 统计卡)一律实底,
+   不挂 backdrop-filter;玻璃只留给侧栏、顶栏、弹层和登录卡。
+   选择器用 :where() 把特异度压到最低,登录卡等自带玻璃的卡片在自己的样式里直接覆盖即可。
+   Naive 卡片有 1px 透明边框,实底会从边框下透出一圈白边:底色只铺到内边距(background-clip),
+   描边用 ::before 画在边框那一圈上(macOS 面板边缘是细发丝线,没有亮白圈)。
+   弹窗卡(.n-modal)与嵌入卡(embedded)不画,它们有自己的层级表达。 */
+.n-card:where(:not(.n-modal):not(.n-card--embedded)) {
+  position: relative;
+  background-clip: padding-box;
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.n-card:where(:not(.n-modal):not(.n-card--embedded))::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--edge-top) 0%,
+    var(--edge-mid) 30%,
+    var(--edge-bottom) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* 暗色的科技感:主按钮带一圈强调色辉光,悬停时更亮;只在暗色出现,亮色保持 macOS 的平面按钮。 */
+:root[data-theme='dark'] .n-button--primary-type:not(.n-button--disabled) {
+  box-shadow: 0 0 16px -4px var(--signal-glow);
+  transition: box-shadow 0.2s var(--ease);
+}
+:root[data-theme='dark'] .n-button--primary-type:not(.n-button--disabled):hover {
+  box-shadow: 0 0 22px -2px var(--signal-glow);
+}
+
+/* 卡片类 .a-card(<n-card class="a-card">):页面卡片已由上面的通用规则统一处理,
+   这条让显式带 a-card 类的卡片得到同样的外观——玻璃卡(模糊 14px 圆角)用在页面之外(登录卡等),
+   页面内容层(.page / .page-view 之下)去掉 backdrop-filter。顶边渐变描边就是上面的 ::before。 */
+.n-card.a-card {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow-soft);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.page .n-card.a-card,
+.page-view .n-card.a-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 窄档底部抽屉(.n-drawer.st-sheet):高度随内容、圆角只在上沿;
+   官方 .n-drawer-body 是 flex: 1 0 0,父级高度 auto 时会塌成 0,所以这一路都改成 flex 列 + min-height:0 的滚动链。 */
+.n-drawer.st-sheet {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.n-drawer.st-sheet .n-drawer-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.n-drawer.st-sheet .n-drawer-content {
+  min-height: 0;
+}
+.n-drawer.st-sheet .n-drawer-content .n-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 弹窗卡:实底 + 重投影拉层级(弹层统一玻璃由下面的 backdrop-filter 组负责)。 */
+.n-card.n-modal {
+  box-shadow: var(--shadow-3);
+}
+
+/* 弹窗进出场:Naive 的 Modal 默认从 scale(0.5) 弹出(modal/styles 里 enterScale: .5),是「弹跳」的手感;
+   macOS 的 sheet / 提示框只是从 ~0.96 轻轻落定。进场 0.24s 减速到位,退场 0.14s 更快收走(退出快于进入)。
+   选择器写成 (0,3,0) 压过 Naive 运行时注入的 (0,2,0) 规则,对 n-card 弹窗和 useDialog 的 n-dialog 都生效。 */
+:is(.n-card, .n-dialog).n-modal.fade-in-scale-up-transition-enter-from,
+:is(.n-card, .n-dialog).n-modal.fade-in-scale-up-transition-leave-to {
+  transform: scale(0.96);
+}
+:is(.n-card, .n-dialog).n-modal.fade-in-scale-up-transition-enter-active {
+  transition-duration: 0.24s;
+}
+:is(.n-card, .n-dialog).n-modal.fade-in-scale-up-transition-leave-active {
+  transition-duration: 0.14s;
+}
+
+/* ── 浮层统一玻璃:气泡 / 下拉 / 抽屉 / 弹窗 / 对话框 / 消息 / 通知 / 选择菜单 / 日期面板 ── */
+.n-popover:not(.n-tooltip),
+.n-dropdown-menu,
+.n-drawer,
+.n-card.n-modal,
+.n-dialog,
+.n-message,
+.n-notification,
+.n-base-select-menu,
+.n-date-panel {
+  backdrop-filter: blur(40px) saturate(170%);
+  -webkit-backdrop-filter: blur(40px) saturate(170%);
+}
+
+/* 不支持 backdrop-filter 的浏览器:浮层退回近乎不透明的实底,别让半透明底直接叠在内容上 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .n-popover:not(.n-tooltip),
+  .n-dropdown-menu,
+  .n-drawer,
+  .n-card.n-modal,
+  .n-dialog,
+  .n-message,
+  .n-notification,
+  .n-base-select-menu,
+  .n-date-panel {
+    background: var(--glass-solid) !important;
+  }
+}
+
+/* 遮罩统一走 --mask(亮色是画布色的 55%,暗色是深蓝黑的 60%) */
+.n-modal-mask,
+.n-drawer-mask {
+  background-color: var(--mask) !important;
+}
+
+/* 滚动条 / 选区:跟随强调色,不用写死的灰与青。 */
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.52);
+}
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+::selection {
+  background: color-mix(in srgb, var(--signal) 28%, transparent);
+}
+
+/* 明暗切换:整屏快照交叉淡入(composables/useTheme.ts 里的 startViewTransition)。
+   时长与缓动取 macOS 切外观的手感:约 0.3s 的 ease-in-out,不弹、不拖。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 6px 半透明圆角滚动条,track 透明。 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(144, 147, 153, 0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 147, 153, 0.7);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 页面切换动画(default.vue 的 <transition :name="app.pageTransition" mode="out-in">)。
+   只做「进场」:旧页立刻让位、新页带入,不做离场淡出——out-in 下离场淡出 + 进场淡入会让整页
+   经过一段空白(一次切换约 0.6s 全屏闪烁)。新页的 chunk 由路由守卫预取(router/index.ts),
+   换页那一刻内容已经在了,所以起点不用压得很低,0.4 起、减速曲线收尾,像 macOS 的视图切换那样「落定」。 */
+.fade-enter-active {
+  transition: opacity 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.fade-enter-from {
+  opacity: 0.4;
+}
+.fade-slide-enter-active {
+  transition:
+    opacity 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.fade-slide-enter-from {
+  opacity: 0.4;
+  transform: translateY(6px);
+}
+
+/* 导航菜单禁选中:n-menu 的项是「按钮」不是「文本」,但浏览器仍把标签当可选文本 ——
+   展开子菜单时内容在指针下方位移(手风琴动画),按下-抬起被判定成拖拽选区,
+   于是整段菜单文字被刷上蓝色选中底色(双击菜单项同理)。整棵菜单禁选即可,
+   折叠态弹出的 dropdown 菜单同源同理。 */
+.n-menu,
+.n-dropdown-menu {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 减少动效:系统开了「减少动态效果」就把动画与过渡压到近零 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
