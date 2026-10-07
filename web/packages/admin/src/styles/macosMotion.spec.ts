@@ -49,6 +49,16 @@ describe('表格:列竖线和外框用 Naive 原生的', () => {
   })
 })
 
+describe('表格工具条:勾选后的批量栏与正常态同高', () => {
+  const css = read('table.css')
+
+  it('批量栏左半与右半图标组的高度跟 --control-h,不用库写死的 34px', () => {
+    expect(css).toMatch(
+      /\.smart-table-batch-info,\s*\.smart-table-toolbar\.smart-table-toolbar--batch:not\(\.smart-table-toolbar--batch-narrow\)\s*\.smart-table-toolbar-icons\s*\{\s*height:\s*var\(--control-h, 30px\);/,
+    )
+  })
+})
+
 describe('弹窗:从 0.96 落定,退场比进场快', () => {
   const css = read('index.css')
   const enterFrom =

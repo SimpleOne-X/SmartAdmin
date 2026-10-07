@@ -45,6 +45,16 @@
   border-bottom: 1px solid var(--n-merged-border-color);
 }
 
+/* 勾选后工具条换成批量栏(已选 N 项 / 批量删除 / 取消选择),库把批量栏左半和右半图标组的高度写死 34px,
+   而正常态的工具条由 30px 的控件撑出来(--control-h),切换时整条高 4px,下面的表格被顶下去一下。
+   让批量栏跟控件同高;窄屏档(--batch-narrow)是上下两层的另一套排法,不动。 */
+.smart-table-toolbar.smart-table-toolbar--batch:not(.smart-table-toolbar--batch-narrow)
+  .smart-table-batch-info,
+.smart-table-toolbar.smart-table-toolbar--batch:not(.smart-table-toolbar--batch-narrow)
+  .smart-table-toolbar-icons {
+  height: var(--control-h, 30px);
+}
+
 /* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/
 .n-data-table .n-data-table-td--last-col .n-space {
   gap: 0 !important;
