@@ -5,26 +5,47 @@ import { describe, expect, it } from 'vitest'
 import { buildThemeOverrides } from '#/theme/naive-theme'
 
 /**
- * macOS 对齐的几处视觉 / 动效约定,锁住别被回退:
- *   表格只留横向发丝线、弹窗从 0.96 落定、按钮无波纹、侧栏收起有过渡。
+ * 几处视觉 / 动效约定,锁住别被回退:
+ *   表格有列竖线和外框、弹窗从 0.96 落定、按钮无波纹、侧栏收起有过渡。
  * 样式是纯文本,直接读文件断言(happy-dom 不加载 CSS 文件,算不出计算样式);真实渲染由 e2e / 手测兜底。
  */
 const here = dirname(fileURLToPath(import.meta.url))
 const read = (...p: string[]) => readFileSync(resolve(here, ...p), 'utf8')
 
-describe('表格:只留横向发丝线', () => {
+describe('表格:列竖线和外框用 Naive 原生的', () => {
   const css = read('table.css')
 
-  it('去掉单元格竖线,选择器要和 Naive 的 :not(--single-line) 同级才压得过', () => {
+  it('不压掉单元格竖线(竖线来自 Naive 的 :not(--single-line) 下 th / td 的 border-right)', () => {
+    expect(css).not.toMatch(/border-right:\s*0/)
+  })
+
+  it('不压掉表格自己的外框(外框是 --bordered 下 wrapper 的 border)', () => {
+    expect(css).not.toMatch(/n-data-table-wrapper\s*\{[^}]*border:\s*0/)
+  })
+
+  it('fill-height 表格的末行要画底线(行少时末行与外框之间是空白,不画就像没有横线)', () => {
     expect(css).toMatch(
-      /\.n-data-table:not\(\.n-data-table--single-line\) \.n-data-table-th,\s*\.n-data-table:not\(\.n-data-table--single-line\) \.n-data-table-td\s*\{\s*border-right:\s*0 !important;/,
+      /\.n-data-table\.n-data-table--flex-height \.n-data-table-td\.n-data-table-td--last-row\s*\{\s*border-bottom:\s*1px solid var\(--n-merged-border-color\);/,
     )
   })
 
-  it('去掉表格自己的外框(卡片里不套一圈框)', () => {
-    expect(css).toMatch(
-      /\.n-data-table\.n-data-table--bordered \.n-data-table-wrapper\s*\{[^}]*border:\s*0 !important;/,
+  it('不撑满的表格不全局画末行底线(外框紧贴末行,再画就是两道)', () => {
+    expect(css).not.toMatch(
+      /\.n-data-table \.n-data-table-td\.n-data-table-td--last-row\s*\{[^}]*border-bottom:\s*1px/,
     )
+  })
+
+  it('线色取 --hairline-strong:比 --separator 实,125% / 150% 缩放下亚像素偏移摊淡后仍看得见', () => {
+    const root = document.documentElement
+    root.style.setProperty('--hairline-strong', 'rgba(1, 2, 3, 0.4)')
+    root.style.setProperty('--separator', 'rgba(9, 9, 9, 0.1)')
+    try {
+      const o = buildThemeOverrides({ dark: false, accent: '#0A84FF' })
+      expect(o.DataTable?.borderColor).toBe('rgba(1, 2, 3, 0.4)')
+    } finally {
+      root.style.removeProperty('--hairline-strong')
+      root.style.removeProperty('--separator')
+    }
   })
 })
 
