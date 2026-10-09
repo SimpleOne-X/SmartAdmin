@@ -368,6 +368,50 @@ public class UserMenuGrantPolicyTests
     }
 
     [Fact]
+    public async Task Empty_change_set_neither_invalidates_portal_cache_nor_publishes()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        var generationBefore = await cache.GetAsync<long>(CacheKeys.PortalGeneration);
+        using var watch = new ChangeEventWatch(f.Services.GetRequiredService<IEventBus>());
+
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target, None));
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target, None, [Ping]));   // 移除一条本来就没有的记录
+
+        Assert.DoesNotContain(target, await watch.SettleAsync());
+        Assert.Equal(generationBefore, await cache.GetAsync<long>(CacheKeys.PortalGeneration));
+    }
+
+    [Fact]
+    public async Task Resubmitting_identical_records_changes_nothing()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        var expire = DateTime.Today.AddDays(4).AddSeconds(-1);
+        await GrantTestKit.InsertGrantAsync(f, target, Ping, UserMenuEffect.Allow);
+        await GrantTestKit.InsertGrantAsync(f, target, PositionQuery, UserMenuEffect.Deny, expire);
+        var before = (await GrantTestKit.GrantRowsAsync(f, target)).ToDictionary(g => g.MenuId);
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        var generationBefore = await cache.GetAsync<long>(CacheKeys.PortalGeneration);
+        using var watch = new ChangeEventWatch(f.Services.GetRequiredService<IEventBus>());
+
+        // 内容与库里一致(备注空白规整后也是空):既不是新增也不是修改
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target,
+            [GrantTestKit.Allow(Ping, remark: "   "), GrantTestKit.Deny(PositionQuery, GrantTestKit.Local(expire))]));
+
+        Assert.DoesNotContain(target, await watch.SettleAsync());
+        Assert.Equal(generationBefore, await cache.GetAsync<long>(CacheKeys.PortalGeneration));
+        foreach (var row in await GrantTestKit.GrantRowsAsync(f, target))   // 审计字段原样,没有被当成一次修改
+        {
+            Assert.Equal(before[row.MenuId].UpdateTime, row.UpdateTime);
+            Assert.Equal(before[row.MenuId].UpdateUserId, row.UpdateUserId);
+        }
+    }
+
+    [Fact]
     public async Task Saving_publishes_change_event_with_details()
     {
         using var f = new AdminAppFactory();
@@ -453,6 +497,40 @@ public class UserMenuGrantPolicyTests
         Assert.DoesNotContain(target, seen);                                             // 没发事件
         Assert.NotNull(await cache.GetAsync<string[]>(CacheKeys.UserPermissions(target)));   // 权限码缓存没被失效
         Assert.Equal(generationBefore, await cache.GetAsync<long>(CacheKeys.PortalGeneration));   // 门户代际没动
+    }
+
+    /// <summary>
+    /// 订阅授权变更事件,并靠哨兵确认「此前该发的事件都已派发完」:事件总线是单读通道、按发布顺序派发,
+    /// 等到哨兵就等于此前的都到了,断言「没发事件」不必靠固定等待。
+    /// </summary>
+    private sealed class ChangeEventWatch : IDisposable
+    {
+        private const long SentinelUserId = -1;
+        private readonly IEventBus _bus;
+        private readonly ConcurrentQueue<long> _seen = new();
+        private readonly TaskCompletionSource _sentinel = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly IDisposable _subscription;
+
+        public ChangeEventWatch(IEventBus bus)
+        {
+            _bus = bus;
+            _subscription = bus.Subscribe<UserMenuGrantsChangedEvent>((e, ct) =>
+            {
+                _seen.Enqueue(e.UserId);
+                if (e.UserId == SentinelUserId) _sentinel.TrySetResult();
+                return Task.CompletedTask;
+            });
+        }
+
+        /// <summary>发哨兵并等它到达,返回订阅期间收到的全部目标用户 Id。</summary>
+        public async Task<long[]> SettleAsync()
+        {
+            await _bus.PublishAsync(new UserMenuGrantsChangedEvent(SentinelUserId, null, [], [], []));
+            await _sentinel.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            return [.. _seen];
+        }
+
+        public void Dispose() => _subscription.Dispose();
     }
 
     /// <summary>更新必抛异常的授权仓储:让「插入已成功、随后更新失败」的事务中途失败可复现。</summary>
