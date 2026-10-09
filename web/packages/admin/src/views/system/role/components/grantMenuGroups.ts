@@ -278,3 +278,21 @@ export const modulesForRole = <T extends { id: number }>(
   builtinRole || visibleTree.some(n => n.moduleId === SYSTEM_MODULE_ID)
     ? modules
     : modules.filter(m => m.id !== SYSTEM_MODULE_ID)
+
+/**
+ * 已授权 id 里出现在树(含全部子孙)中的那部分,保持原顺序。
+ * 非内置角色的弹窗看不到系统自带的目录,角色身上若还留着那些授权(升级清理失败、关了种子、滚动升级窗口、
+ * 菜单被挪到内核目录下),它们不在树里;保存是全量替换,把它们原样提交会被后端以 41009 拒绝。
+ * 打开弹窗时先求交,保存提交的就只有看得见的授权,看不见的系统菜单随之收回。
+ */
+export function grantedInTree(granted: number[], tree: MenuTreeNode[]): number[] {
+  const inTree = new Set<number>()
+  const walk = (nodes: MenuTreeNode[]) => {
+    for (const n of nodes) {
+      inTree.add(n.id)
+      walk(n.children)
+    }
+  }
+  walk(tree)
+  return granted.filter(id => inTree.has(id))
+}

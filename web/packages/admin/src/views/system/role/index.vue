@@ -25,7 +25,12 @@ import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import OrgTreeSelect from '#/components/OrgTreeSelect/index.vue'
 import UserPicker from '#/components/UserPicker/index.vue'
 import GrantMenuSheet from './components/GrantMenuSheet.vue'
-import { isBuiltinRole, treeForRole, modulesForRole } from './components/grantMenuGroups'
+import {
+  isBuiltinRole,
+  treeForRole,
+  modulesForRole,
+  grantedInTree,
+} from './components/grantMenuGroups'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { roleApi, menuApi, moduleApi, userApi } from '#/api'
@@ -277,7 +282,8 @@ async function openMenus(r: SysRole) {
     menuRole.value = r
     menuTree.value = treeForRole(tree, builtin)
     menuModules.value = modulesForRole(modules.value, builtin, menuTree.value)
-    menuGranted.value = granted
+    // 非内置角色身上可能还留着看不见的系统菜单授权:只带看得见的进弹窗,保存时它们就不会被回传而得到 41009
+    menuGranted.value = builtin ? granted : grantedInTree(granted, menuTree.value)
     const preferred = auth.currentModuleId ?? menuModules.value[0]?.id ?? UNASSIGNED
     defaultModuleId.value = menuModules.value.some(m => m.id === preferred)
       ? preferred

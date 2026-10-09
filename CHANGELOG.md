@@ -111,6 +111,7 @@
   - 用户页行「更多」新增「授权菜单」（需要 `PUT:/api/v1/sys/user/menu`，超管那一行和自己那一行不出入口），工具栏「更多」新增「单独授权一览」（需要 `GET:/api/v1/sys/user/menu-grants/page`）。
   - 模块管理页多一列和一个「可转授」开关。
   - 角色页「授权菜单」：非内置角色不再显示系统自带的目录。「系统」应用下没有你自建的目录时，应用下拉里也去掉「系统」。
+    打开弹窗时只带入看得见的授权：角色身上残留的系统菜单授权不会被原样回传（否则保存会得到 `41009`），保存时它们就被收回。
   - 类型：`ModuleRow` / `ModuleInput` 多可选字段 `isDelegatable`，`SysRole` 多可选字段 `isBuiltin`。
     新增枚举 `UserMenuEffect`、`UserMenuGrantStatus`，以及 `UserMenuGrantItem`、`UserMenuGrantUpsert`、`UserMenuLeakedCode`、`UserMenuEffectiveNode`、`UserMenuModuleItem`、`UserMenuEffective`、`UserMenuGrantPageItem`。
   - `userApi` 新增 `getMenuGrants`、`getEffectiveMenus`、`setMenuGrants`、`menuGrantPage` 四个方法。

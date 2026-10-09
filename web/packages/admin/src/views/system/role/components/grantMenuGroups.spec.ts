@@ -16,6 +16,7 @@ import {
   isBuiltinRole,
   SYSTEM_MODULE_ID,
   KERNEL_MAX_ID,
+  grantedInTree,
 } from './grantMenuGroups'
 
 const node = (
@@ -257,6 +258,39 @@ describe('角色授权范围:系统菜单只授内置角色', () => {
   it('内置角色原样', () => {
     expect(treeForRole(scopeTree, true)).toBe(scopeTree)
     expect(modulesForRole(modules, true, scopeTree)).toBe(modules)
+  })
+})
+
+describe('grantedInTree:只留树里看得见的已授权', () => {
+  const top = (id: number, moduleId: number, children: MenuTreeNode[] = []) =>
+    node(id, MenuType.Catalog, `c${id}`, children, { moduleId })
+  // 非内置角色看到的树:内核目录 200/300 已被 treeForRole 去掉,剩业务目录 900 和消费者在系统应用下自建的 1200
+  const visible = treeForRole(
+    [
+      top(200, SYSTEM_MODULE_ID, [node(210, MenuType.Menu, 'm210')]),
+      top(300, SYSTEM_MODULE_ID),
+      top(900, 2, [node(910, MenuType.Menu, 'm910', [node(911, MenuType.Button, 'b911')])]),
+      top(1200, SYSTEM_MODULE_ID, [node(1210, MenuType.Menu, 'm1210')]),
+    ],
+    false,
+  )
+
+  it('隐藏的内核系统菜单 id 被丢掉,树里的(含深层子孙)保留,顺序不变', () => {
+    expect(grantedInTree([911, 210, 300, 900, 200, 1210], visible)).toEqual([911, 900, 1210])
+  })
+
+  it('消费者在系统应用下自建的目录及其子孙保留', () => {
+    expect(grantedInTree([1200, 1210], visible)).toEqual([1200, 1210])
+  })
+
+  it('已授权里有树里根本没有的 id(已删除的菜单)同样丢掉', () => {
+    expect(grantedInTree([900, 424242], visible)).toEqual([900])
+  })
+
+  it('空输入', () => {
+    expect(grantedInTree([], visible)).toEqual([])
+    expect(grantedInTree([900], [])).toEqual([])
+    expect(grantedInTree([], [])).toEqual([])
   })
 })
 
