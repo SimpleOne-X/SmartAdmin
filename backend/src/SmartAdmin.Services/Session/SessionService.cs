@@ -330,13 +330,19 @@ public class SessionService(
             return;
         }
 
-        if (scopeGuard is not null && !scopeGuard.IsUnrestricted)
+        if (scopeGuard is not null)
         {
+            // 不能按 IsUnrestricted 跳过:它对「数据范围=全部」的普通管理员也为真,而超管账号对非超管不可见与范围无关
+            // (IsUserInScopeAsync 对非超管看超管恒假),跳过了就让「全部」范围的管理员能把超管踢下线。超管自己与不受限范围的超管仍直接放行。
             AdminException.ThrowIf(!await scopeGuard.IsUserInScopeAsync(target.UserId), ErrorCode.SessionNotFound);
-            // 非超管不得踢超管:范围之外还有一层身份高度,越权面比机构维度更大
-            var targetUser = await users.AsQueryable().ClearFilter<ISoftDelete>()
-                .Where(u => u.Id == target.UserId).Select(u => new { u.IsSuperAdmin }).FirstAsync();
-            AdminException.ThrowIf(targetUser?.IsSuperAdmin == true, ErrorCode.SessionNotFound);
+            if (!scopeGuard.IsUnrestricted)
+            {
+                // 非超管不得踢超管:范围之外还有一层身份高度,越权面比机构维度更大。
+                // 范围受限的调用者在换了自定义范围守卫(不排除超管)时,靠这一层兜底
+                var targetUser = await users.AsQueryable().ClearFilter<ISoftDelete>()
+                    .Where(u => u.Id == target.UserId).Select(u => new { u.IsSuperAdmin }).FirstAsync();
+                AdminException.ThrowIf(targetUser?.IsSuperAdmin == true, ErrorCode.SessionNotFound);
+            }
         }
 
         await RevokeAsync(sessionId);

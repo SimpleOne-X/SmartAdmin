@@ -138,11 +138,15 @@ public class UserMenuGrantQueryTests
         Assert.Empty(nodes[Ping].GetProperty("roles").EnumerateArray());          // 也不当作来源列出
     }
 
+    /// <summary>
+    /// 超管作为目标:全部启用节点都有效、只读展示,名下的拒绝记录不起作用。
+    /// 已登录的非超管读不到超管(见 <c>SuperAdminHiddenFromAdminsTests</c>,HTTP 上得到 41005),
+    /// 所以这条计算只在无登录上下文(种子、后台任务)里走得到,这里直接调服务,不经 HTTP。
+    /// </summary>
     [Fact]
     public async Task Effective_of_super_admin_target_is_all_effective_and_read_only()
     {
         using var f = new AdminAppFactory();
-        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
         var superId = await GrantTestKit.SuperAdminIdAsync(f);
         var (_, stoppedPage) = await GrantTestKit.CreateCatalogWithPageAsync(f, 2);
         long[] enabledIds;
@@ -155,18 +159,20 @@ public class UserMenuGrantQueryTests
         // 超管名下留着一条拒绝记录(绕过服务直接写库):超管不走单独授权计算,它不能让任何节点失效
         await GrantTestKit.InsertGrantAsync(f, superId, BizWorkbench, UserMenuEffect.Deny);
 
-        var data = await DataAsync(admin, $"/api/v1/sys/user/{superId}/menus/effective");
-        var nodes = data.GetProperty("nodes").EnumerateArray().ToList();
+        UserMenuEffectiveOutput data;
+        using (var scope = f.Services.CreateScope())
+            data = await scope.ServiceProvider.GetRequiredService<IUserMenuGrantService>().GetEffectiveAsync(superId);
+        var nodes = data.Nodes;
 
-        Assert.False(data.GetProperty("targetEditable").GetBoolean());
-        Assert.Equal((int)ErrorCode.SuperAdminProtected, data.GetProperty("readOnlyReason").GetInt32());
+        Assert.False(data.TargetEditable);
+        Assert.Equal(ErrorCode.SuperAdminProtected, data.ReadOnlyReason);
         // 有效的恰好是全部启用节点:停用的那个不在内,被「拒绝」记录点名的 110 仍在
-        long[] effectiveIds = [.. nodes.Where(n => n.GetProperty("effective").GetBoolean()).Select(n => n.GetProperty("menuId").GetInt64()).Order()];
+        long[] effectiveIds = [.. nodes.Where(n => n.Effective).Select(n => n.MenuId).Order()];
         Assert.Equal(enabledIds, effectiveIds);
         Assert.DoesNotContain(stoppedPage, effectiveIds);
         Assert.Contains(BizWorkbench, effectiveIds);
-        Assert.All(nodes, n => Assert.False(n.GetProperty("deniedByAncestor").GetBoolean()));
-        Assert.All(nodes, n => Assert.Empty(n.GetProperty("leakedCodes").EnumerateArray()));
+        Assert.All(nodes, n => Assert.False(n.DeniedByAncestor));
+        Assert.All(nodes, n => Assert.Empty(n.LeakedCodes));
     }
 
     [Fact]
