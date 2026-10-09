@@ -39,6 +39,48 @@
   white-space: nowrap;
 }
 
+/* 树列里的省略号要给前面的缩进和展开箭头让位。
+   树单元格 = 缩进(每层 16px)+ 展开箭头或叶子占位(16px + 8px 间距)+ 内容,而 NEllipsis 自己只有
+   max-width: 100%,列窄到放不下时「…」会画出单元格右边界,盖到隔壁列上。
+   Naive 本想用 --indent-offset 扣掉这段宽度,但 2.45 起这个变量没有写进 DOM,所以直接按缩进层数逐级扣:
+   缩进 div 依次排在单元格最前面,第 n 个存在就是至少 n 层。数到 10 层,更深的按 10 层算。
+   每层 16px 是 Naive 的默认缩进;表格传了 :indent 的页面(菜单页是 26)在这里会扣少,要自己另算。 */
+.n-data-table
+  .n-data-table-td:has(> .n-data-table-expand-trigger, > .n-data-table-expand-placeholder)
+  > .n-ellipsis {
+  max-width: calc(100% - 24px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(1)) > .n-ellipsis {
+  max-width: calc(100% - 40px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(2)) > .n-ellipsis {
+  max-width: calc(100% - 56px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(3)) > .n-ellipsis {
+  max-width: calc(100% - 72px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(4)) > .n-ellipsis {
+  max-width: calc(100% - 88px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(5)) > .n-ellipsis {
+  max-width: calc(100% - 104px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(6)) > .n-ellipsis {
+  max-width: calc(100% - 120px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(7)) > .n-ellipsis {
+  max-width: calc(100% - 136px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(8)) > .n-ellipsis {
+  max-width: calc(100% - 152px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(9)) > .n-ellipsis {
+  max-width: calc(100% - 168px);
+}
+.n-data-table .n-data-table-td:has(> .n-data-table-indent:nth-child(10)) > .n-ellipsis {
+  max-width: calc(100% - 184px);
+}
+
 /* fill-height 表格的外框拉到容器底,行少时末行和外框之间是一片空白,末行不画线就像这张表没有横线,所以补上。
    不撑满的表格(外框紧贴末行)保持 Naive 默认的末行无底线,否则末行线和外框叠成两道。 */
 .n-data-table.n-data-table--flex-height .n-data-table-td.n-data-table-td--last-row {

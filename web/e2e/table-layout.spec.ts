@@ -124,6 +124,35 @@ test.describe('表格统一布局', () => {
     expect(Math.abs(loaded.x - loading.x)).toBeLessThan(1)
   })
 
+  test('机构树表:名称列拖到最窄,省略号不越出单元格', async ({ page }) => {
+    await openList(page, '/system/org')
+    const rows = page.locator('.n-data-table-tbody .n-data-table-tr')
+    await expect(rows.nth(3)).toBeVisible({ timeout: 10_000 }) // 种子机构至少 4 行,含 3 层
+
+    // 全站默认开着列宽拖拽,用户把名称列往窄了拖是正常操作;列被钳在 minWidth,正是内容放不下的最坏状态
+    const th = page.locator('thead th[data-col-key="name"]')
+    const thBox = await boxOf(th)
+    const handle = await boxOf(th.locator('.n-data-table-resize-button'))
+    const y = handle.y + handle.height / 2
+    await page.mouse.move(handle.x + handle.width / 2, y)
+    await page.mouse.down()
+    await page.mouse.move(thBox.x, y, { steps: 10 })
+    await page.mouse.up()
+    await expect.poll(async () => (await boxOf(th)).width).toBeLessThan(thBox.width - 100)
+
+    // 树单元格 = 缩进 + 展开箭头 + 省略号,省略号的 max-width 只扣了 100%、没扣前面两样,
+    // 内容放不下时「…」会画到列边界外面,盖到隔壁列上
+    const cells = page.locator('.n-data-table-tbody td[data-col-key="name"]')
+    const count = await cells.count()
+    for (let i = 0; i < count; i++) {
+      const td = await boxOf(cells.nth(i))
+      const ell = await boxOf(cells.nth(i).locator('.n-ellipsis'))
+      expect(ell.x + ell.width, `第 ${i + 1} 行的省略号越出了名称列`).toBeLessThanOrEqual(
+        td.x + td.width,
+      )
+    }
+  })
+
   test('字典管理:字典类型在上,字典项在下,两块同宽、竖直排列', async ({ page }) => {
     await openList(page, '/system/dict')
 
