@@ -17,6 +17,7 @@ import {
   SYSTEM_MODULE_ID,
   KERNEL_MAX_ID,
   grantedInTree,
+  grantScopeForRole,
 } from './grantMenuGroups'
 
 const node = (
@@ -303,5 +304,37 @@ describe('isBuiltinRole:只有后端明确说非内置才算非内置', () => {
   it('后端没带该字段(缺省 / null)按内置处理,不过滤', () => {
     expect(isBuiltinRole({})).toBe(true)
     expect(isBuiltinRole({ isBuiltin: null })).toBe(true)
+  })
+})
+
+describe('grantScopeForRole:打开授权弹窗时的树、应用与已授权三者口径一致', () => {
+  const top = (id: number, moduleId: number, children: MenuTreeNode[] = []) =>
+    node(id, MenuType.Catalog, `c${id}`, children, { moduleId })
+  const fullTree = [
+    top(200, SYSTEM_MODULE_ID, [node(210, MenuType.Menu, 'm210')]),
+    top(900, 2, [node(910, MenuType.Menu, 'm910')]),
+  ]
+  const modules = [{ id: SYSTEM_MODULE_ID }, { id: 2 }]
+  // 角色身上除了业务授权,还留着看不见的系统菜单 200 / 210
+  const granted = [910, 210, 200, 900]
+
+  it('非内置角色:树去掉内核目录、应用去掉系统、已授权只剩看得见的,不改直接保存不会回传隐藏的 id', () => {
+    const scope = grantScopeForRole({ isBuiltin: false }, fullTree, modules, granted)
+    expect(scope.tree.map(n => n.id)).toEqual([900])
+    expect(scope.modules.map(m => m.id)).toEqual([2])
+    expect(scope.granted).toEqual([910, 900])
+  })
+
+  it('内置角色:树、应用、已授权都原样,隐藏规则一概不套用', () => {
+    const scope = grantScopeForRole({ isBuiltin: true }, fullTree, modules, granted)
+    expect(scope.tree).toBe(fullTree)
+    expect(scope.modules).toBe(modules)
+    expect(scope.granted).toBe(granted)
+  })
+
+  it('后端没带 isBuiltin 字段时按内置处理,已授权不被求交', () => {
+    const scope = grantScopeForRole({}, fullTree, modules, granted)
+    expect(scope.tree).toBe(fullTree)
+    expect(scope.granted).toBe(granted)
   })
 })

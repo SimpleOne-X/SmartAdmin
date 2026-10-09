@@ -296,3 +296,22 @@ export function grantedInTree(granted: number[], tree: MenuTreeNode[]): number[]
   walk(tree)
   return granted.filter(id => inTree.has(id))
 }
+
+/**
+ * 打开某个角色的授权弹窗时,弹窗该展示的树、应用与已授权 id。
+ * 三者必须同口径(树隐藏了系统菜单,应用下拉与已授权也要跟着收),收在一处,页面只管调用。
+ */
+export function grantScopeForRole<M extends { id: number }>(
+  role: { isBuiltin?: boolean | null },
+  tree: MenuTreeNode[],
+  modules: M[],
+  granted: number[],
+): { tree: MenuTreeNode[]; modules: M[]; granted: number[] } {
+  const builtin = isBuiltinRole(role)
+  const visibleTree = treeForRole(tree, builtin)
+  return {
+    tree: visibleTree,
+    modules: modulesForRole(modules, builtin, visibleTree),
+    granted: builtin ? granted : grantedInTree(granted, visibleTree),
+  }
+}

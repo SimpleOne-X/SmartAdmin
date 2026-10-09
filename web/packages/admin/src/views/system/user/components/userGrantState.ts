@@ -140,7 +140,7 @@ export function maxExpireDate(maxDays: number | null | undefined, today: Date): 
  * 普通管理员授允许的到期日上限(也是默认值);不限时为 null。
  * 服务端给了 delegatedMaxDate 就直接用它:那是服务器本地日期 + 最长天数,与后端校验是同一份计算。
  * 浏览器与服务器不在同一时区时(服务器 UTC、用户东八区),浏览器自己加天数每天凌晨会领先一天,选出被后端拒收的上限。
- * 日期串只做字符串比较,不转成 Date(new Date('yyyy-MM-dd') 按 UTC 解析,在东八区以西的时区会差一天)。
+ * 日期串只做字符串比较,不转成 Date(new Date('yyyy-MM-dd') 按 UTC 解析,在 UTC 以西的时区会差一天)。
  * 没给(自定义的策略实现没提供最晚到期日)才退回浏览器的今天 + delegatedMaxDays。
  */
 export function expiryLimit(
