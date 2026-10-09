@@ -2,10 +2,10 @@
 // 单独授权一览:全系统的例外放在一张表里给超管复核;普通管理员只看得到自己数据范围内用户的记录(后端收口)。
 // 行操作「去调整」把用户交给父页,打开授权菜单弹窗。
 // 取数全交给 SmartTable:翻页、改筛选时它自己丢弃慢的旧响应;抽屉关闭即卸载,下次打开重新取最新数据。
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import { NButton, NDrawer, NDrawerContent, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { SmartTable, type SmartTableColumn } from 'smart-naive-table'
+import { SmartTable, type SmartTableColumn, type SmartTableInst } from 'smart-naive-table'
 import TableTotal from '#/components/TableTotal/index.vue'
 import { userApi } from '#/api'
 import { translateMenuTitle } from '#/locales/menuTitle'
@@ -18,6 +18,11 @@ const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ (e: 'adjust', user: { id: number; name: string }): void }>()
 const { t } = useI18n()
 const message = useMessage()
+
+// 父页在授权弹窗保存后调 refresh,让「去调整」改过的记录马上反映在列表里。
+// 抽屉没打开时表格未挂载,tableRef 为空,refresh 什么都不做。
+const tableRef = ref<SmartTableInst<UserMenuGrantPageItem>>()
+defineExpose({ refresh: () => tableRef.value?.refresh() })
 
 const effectOptions = computed(() => [
   { label: t('userGrant.allow'), value: UserMenuEffect.Allow },
@@ -147,6 +152,7 @@ deriveHeaderFilters(columns)
       :body-content-style="{ height: '100%', display: 'flex', flexDirection: 'column' }"
     >
       <SmartTable
+        ref="tableRef"
         :columns="columns"
         :fetcher="userApi.menuGrantPage"
         :search="{ container: 'table' }"

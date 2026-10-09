@@ -28,17 +28,19 @@ function deferred() {
 }
 
 let app: App<Element> | undefined
+let drawer: InstanceType<typeof UserGrantOverviewDrawer>
 let warnings: string[] = []
 
-function mount() {
+function mount(open = true) {
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const show = ref(true)
+  const show = ref(open)
   app = createApp({
     render: () =>
       h(NMessageProvider, null, {
         default: () =>
           h(UserGrantOverviewDrawer, {
+            ref: (r: unknown) => (drawer = r as InstanceType<typeof UserGrantOverviewDrawer>),
             show: show.value,
             'onUpdate:show': (v: boolean) => (show.value = v),
           }),
@@ -125,5 +127,52 @@ describe('UserGrantOverviewDrawer 取数', () => {
     expect(qa('.n-drawer')).toHaveLength(1)
     expect(totalText()).toBe('共 0 条')
     expect(warnings).toEqual([])
+  })
+})
+
+// 父页在授权弹窗保存后调它,让「去调整」改过的记录马上反映在列表里。
+describe('UserGrantOverviewDrawer refresh', () => {
+  it('打开着时 refresh 重新取一次列表,停在当前页,「共 N 条」跟着新响应走', async () => {
+    pageMock.mockResolvedValueOnce({ items: [], total: 250 })
+    mount()
+    await settle()
+    expect(totalText()).toBe('共 250 条')
+
+    pageMock.mockResolvedValueOnce({ items: [], total: 249 })
+    drawer.refresh()
+    await settle()
+
+    expect(pageMock).toHaveBeenCalledTimes(2)
+    expect(pageMock.mock.calls[1]![0]).toMatchObject({ page: 1 })
+    expect(totalText()).toBe('共 249 条')
+  })
+
+  it('refresh 连点两次,慢的旧响应晚到不覆盖最新一次(沿用表格自带的请求序号)', async () => {
+    pageMock.mockResolvedValueOnce({ items: [], total: 250 })
+    mount()
+    await settle()
+
+    const first = deferred()
+    const second = deferred()
+    pageMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    drawer.refresh()
+    drawer.refresh()
+    await settle()
+    expect(pageMock).toHaveBeenCalledTimes(3)
+
+    second.resolve({ items: [], total: 248 })
+    await settle()
+    first.resolve({ items: [], total: 111 })
+    await settle()
+    expect(totalText()).toBe('共 248 条')
+  })
+
+  it('抽屉没打开(表格未挂载)时 refresh 不发请求也不抛', async () => {
+    mount(false)
+    await settle()
+
+    expect(() => drawer.refresh()).not.toThrow()
+    await settle()
+    expect(pageMock).not.toHaveBeenCalled()
   })
 })

@@ -220,6 +220,14 @@ const exportShow = ref(false)
 const exporting = ref(false)
 // 单独授权一览抽屉(全系统的授权例外在一张表里复核)
 const grantOverviewShow = ref(false)
+const grantOverviewRef = ref<InstanceType<typeof UserGrantOverviewDrawer> | null>(null)
+
+// 授权菜单弹窗保存成功:用户表刷新;一览抽屉开着时也刷新,「去调整」改过的记录马上反映在列表里。
+// 抽屉没开就不拉:下次打开本来就会重新取数。
+function onGrantSaved() {
+  tableRef.value?.refresh()
+  if (grantOverviewShow.value) grantOverviewRef.value?.refresh()
+}
 
 // 导入 / 导出、单独授权一览收进表格内置的「更多」菜单(统一标准:业务按钮只留高频动作)。
 // 没有任何权限时 more 为空数组,按钮不出现,不会露出一个空菜单;导入 / 导出的权限码与原按钮的 v-auth 一字不差。
@@ -653,9 +661,13 @@ deriveHeaderFilters(columns)
 
   <ResetPasswordModal ref="resetModalRef" />
 
-  <UserGrantMenuSheet ref="grantSheetRef" @saved="() => tableRef?.refresh()" />
+  <UserGrantMenuSheet ref="grantSheetRef" @saved="onGrantSaved" />
 
-  <UserGrantOverviewDrawer v-model:show="grantOverviewShow" @adjust="u => grantSheetRef?.open(u)" />
+  <UserGrantOverviewDrawer
+    ref="grantOverviewRef"
+    v-model:show="grantOverviewShow"
+    @adjust="u => grantSheetRef?.open(u)"
+  />
 
   <ImportWizard
     v-model:show="importShow"
