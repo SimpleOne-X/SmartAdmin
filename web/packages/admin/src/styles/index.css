@@ -113,13 +113,35 @@ a {
   mask-composite: exclude;
 }
 
-/* 暗色的科技感:主按钮带一圈强调色辉光,悬停时更亮;只在暗色出现,亮色保持 macOS 的平面按钮。 */
-:root[data-theme='dark'] .n-button--primary-type:not(.n-button--disabled) {
-  box-shadow: 0 0 16px -4px var(--signal-glow);
+/* 暗色的科技感:实心主按钮带一圈收敛的强调色辉光,悬停时略强;只在暗色出现,亮色保持 macOS 的平面按钮。
+   - 辉光只给实心款。Naive 只给实心 / ghost / dashed 款渲染 .n-button__border 子元素
+     (quaternary / tertiary / secondary / text 款没有),所以用 :has(> .n-button__border) 筛出实心款,
+     再用类名剔除 ghost / dashed。文字款(表格操作列的「编辑」)和淡色底款(「查询」)不发光:
+     辉光会糊进透明或半透明的底色,按钮的边就看不见了。
+   - 辉光再亮也要留得住边:实心款内圈叠一道淡亮描边;淡色底的 secondary 主色钮改画一圈同色细描边。 */
+:root[data-theme='dark']
+  .n-button--primary-type:has(> .n-button__border):not(
+    .n-button--disabled,
+    .n-button--ghost,
+    .n-button--dashed
+  ) {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 10px -4px var(--signal-glow);
   transition: box-shadow 0.2s var(--ease);
 }
-:root[data-theme='dark'] .n-button--primary-type:not(.n-button--disabled):hover {
-  box-shadow: 0 0 22px -2px var(--signal-glow);
+:root[data-theme='dark']
+  .n-button--primary-type:has(> .n-button__border):not(
+    .n-button--disabled,
+    .n-button--ghost,
+    .n-button--dashed
+  ):hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 14px -3px var(--signal-glow);
+}
+:root[data-theme='dark'] .n-button--primary-type.n-button--secondary:not(.n-button--disabled) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 45%, transparent);
 }
 
 /* 卡片类 .a-card(<n-card class="a-card">):页面卡片已由上面的通用规则统一处理,
