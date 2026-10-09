@@ -54,7 +54,7 @@ SmartAdmin 内接入约定:
 - **已能用(透传)**:列宽拖拽(列 `resizable`)、合计行(`:summary`)、合并单元格(列 `rowSpan/colSpan`)——经 attrs/列透传,无需新 API。铺满父容器 + 虚拟滚动是 3.0 自带的 `fill-height`(整页列表一律用它,不写 `flex-height` + `virtual-scroll`)。
 - **弹窗 / 下拉表格选择**:用 `smart-naive-table` 自带的 `SmartSelectTable`(触发器像下拉框,点开是「搜索框 + 带分页的表格」,单选 / 多选、本地 `data` 或远程 `fetcher`),内核不自研选择表组件。
   远程 `fetcher` 收 `{ page, pageSize, keyword }`,所以后端入参要有关键字(编号或名称的或匹配);`v-model:value` 是主键,行对象走 `@pick`。完整用法见包 README 的「下拉表格选择 SmartSelectTable」一节。
-- **版本**:依赖 `^3.1.0`(peer,实际解析 3.1.0);列排序依赖后端 `SortField/SortOrder`(行拖拽是纯前端能力,本项目未接线,见上),改后端后 `npm run gen:api` 重生成 schema。
+- **版本**:依赖 `^3.1.1`(peer,实际解析 3.1.1);列排序依赖后端 `SortField/SortOrder`(行拖拽是纯前端能力,本项目未接线,见上),改后端后 `npm run gen:api` 重生成 schema。
 
 范例页:`src/views/system/user/index.vue`(标准列表 + 排序)、`position`(可编辑 Sort 排序)、`org`/`menu`(树)、`dict`(主从 + 窄栏条件搜索)。
 条件搜索范例:`system/log/op`(日期区间 + 隐藏选项列 + 导出)、`system/user`(路由预置 + 导出)、`system/job-log`(列改名 + 路由预置)。
