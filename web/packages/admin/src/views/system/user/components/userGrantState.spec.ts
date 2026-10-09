@@ -5,7 +5,9 @@ import {
   countDraft,
   diffDraft,
   draftFromGrants,
+  expiryLimit,
   invalidExpiry,
+  isExpiryDateDisabled,
   leakedCodes,
   maxExpireDate,
   setTriState,
@@ -169,9 +171,38 @@ describe('非整点到期时间', () => {
 })
 
 describe('到期日', () => {
-  it('上限 = 今天 + 最长天数;不限时为 null', () => {
+  it('后备算法:浏览器今天 + 最长天数;不限时为 null', () => {
     expect(maxExpireDate(90, TODAY)).toBe('2027-01-07')
     expect(maxExpireDate(null, TODAY)).toBeNull()
+  })
+
+  it('上限取服务端给的最晚到期日,不看浏览器的今天', () => {
+    // 服务器还在昨天时,最晚到期日比浏览器算出来的 2027-01-07 早一天
+    expect(expiryLimit({ delegatedMaxDays: 90, delegatedMaxDate: '2027-01-06' }, TODAY)).toBe(
+      '2027-01-06',
+    )
+    // 换一个远得多的今天,结果不变:根本没用浏览器的日期
+    expect(
+      expiryLimit(
+        { delegatedMaxDays: 90, delegatedMaxDate: '2027-01-06' },
+        new Date(2031, 0, 1, 10, 0, 0),
+      ),
+    ).toBe('2027-01-06')
+  })
+
+  it('服务端没给最晚到期日(自定义策略)才退回浏览器今天 + 最长天数;都没有就是不限', () => {
+    expect(expiryLimit({ delegatedMaxDays: 90 }, TODAY)).toBe('2027-01-07')
+    expect(expiryLimit({ delegatedMaxDays: 90, delegatedMaxDate: null }, TODAY)).toBe('2027-01-07')
+    expect(expiryLimit({ delegatedMaxDays: null, delegatedMaxDate: null }, TODAY)).toBeNull()
+    expect(expiryLimit(undefined, TODAY)).toBeNull()
+  })
+
+  it('日期选择器:今天以前、上限以后不可选,上限当天可选;不限时只管过去', () => {
+    expect(isExpiryDateDisabled('2026-10-08', '2026-10-09', '2027-01-07')).toBe(true)
+    expect(isExpiryDateDisabled('2026-10-09', '2026-10-09', '2027-01-07')).toBe(false)
+    expect(isExpiryDateDisabled('2027-01-07', '2026-10-09', '2027-01-07')).toBe(false)
+    expect(isExpiryDateDisabled('2027-01-08', '2026-10-09', '2027-01-07')).toBe(true)
+    expect(isExpiryDateDisabled('2099-01-01', '2026-10-09', null)).toBe(false)
   })
 
   it('受限时允许必须有到期日且不晚于上限;拒绝不要求;任何人都不能选过去的日期', () => {
@@ -181,8 +212,15 @@ describe('到期日', () => {
     setTriState(draft, 3, 'allow', '2027-01-07') // 正好上限
     setTriState(draft, 4, 'deny', null) // 拒绝不要求
     draft.set(5, { effect: UserMenuEffect.Deny, expireDate: '2026-10-08', remark: null }) // 过去
-    expect(invalidExpiry(new Map(), draft, 90, TODAY)).toEqual([1, 2, 5])
+    expect(invalidExpiry(new Map(), draft, '2027-01-07', TODAY)).toEqual([1, 2, 5])
     expect(invalidExpiry(new Map(), draft, null, TODAY)).toEqual([5])
+  })
+
+  it('校验的上限就是传入的那一天,不再自己用今天加天数', () => {
+    const draft: Draft = new Map()
+    setTriState(draft, 1, 'allow', '2027-01-08') // 浏览器算出的上限是 2027-01-07,服务端给的更晚
+    setTriState(draft, 2, 'allow', '2027-01-09')
+    expect(invalidExpiry(new Map(), draft, '2027-01-08', TODAY)).toEqual([2])
   })
 
   it('没改动的老记录不校验', () => {
@@ -201,7 +239,7 @@ describe('到期日', () => {
             grantTime: 't',
           },
         ]),
-        90,
+        '2027-01-07',
         TODAY,
       ),
     ).toEqual([])

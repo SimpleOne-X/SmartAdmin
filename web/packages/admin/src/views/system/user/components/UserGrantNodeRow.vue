@@ -6,7 +6,7 @@ import { NDatePicker, NInput, NRadioButton, NRadioGroup, NTag, NTooltip } from '
 import { useI18n } from 'vue-i18n'
 import AppIcon from '#/components/AppIcon.vue'
 import { UserMenuEffect, type UserMenuEffectiveNode } from '#/types/api'
-import { formatDate, type DraftEntry, type TriState } from './userGrantState'
+import { formatDate, isExpiryDateDisabled, type DraftEntry, type TriState } from './userGrantState'
 
 const props = defineProps<{
   title: string
@@ -36,10 +36,8 @@ const roles = computed(() => props.node?.roles ?? [])
 const shownRoles = computed(() => roles.value.slice(0, 2))
 const today = formatDate(new Date())
 /** 今天以前、上限以后的日期不可选。 */
-const isDateDisabled = (ts: number) => {
-  const d = formatDate(new Date(ts))
-  return d < today || (props.maxDate != null && d > props.maxDate)
-}
+const isDateDisabled = (ts: number) =>
+  isExpiryDateDisabled(formatDate(new Date(ts)), today, props.maxDate)
 /** 受限时「允许」的到期日必填(不给清空);拒绝与不受限时可留空 = 长期。 */
 const clearable = computed(
   () => props.maxDate == null || props.entry?.effect === UserMenuEffect.Deny,

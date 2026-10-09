@@ -190,6 +190,7 @@ public class UserMenuGrantService(
             TargetEditable = block is null,
             ReadOnlyReason = block,
             DelegatedMaxDays = policy.DelegatedMaxDays,
+            DelegatedMaxDate = policy.DelegatedMaxDate,
             Modules = [.. allModules.Select(x => new UserMenuModuleItem
             {
                 // 内置系统模块在代码里固定不可转授,不看库里的列值;只有 true 算可转授

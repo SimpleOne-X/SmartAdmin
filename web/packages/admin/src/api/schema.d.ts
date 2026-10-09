@@ -7178,7 +7178,7 @@ export interface components {
              */
             isDelegatable?: null | boolean;
             /**
-             * @description 内置角色:内核种子播的固定 Id(1–999)。系统模块的菜单只能授给内置角色,界面上新建的角色(雪花 Id)
+             * @description 内置角色:内核种子播的固定 Id(1–999)。系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
              *     与消费者种子里的角色(Id ≥ 1000)都授不了。只读计算属性,不建列。
              */
             isBuiltin?: boolean;
@@ -7443,6 +7443,11 @@ export interface components {
              * @description 委派授权最长天数;超管、配置为 0 时为空
              */
             delegatedMaxDays?: null | number | string;
+            /**
+             * Format: date
+             * @description 委派授权的最晚到期日(服务器当前本地日期加最长天数);超管、配置为 0 时为空。界面的日期选择器上限与保存前校验都按它算,不用浏览器的日期。
+             */
+            delegatedMaxDate?: null | string;
             modules?: components["schemas"]["UserMenuModuleItem"][];
             /** @description 全部未删除菜单节点(含停用的)各一项 */
             nodes?: components["schemas"]["UserMenuEffectiveNode"][];

@@ -65,6 +65,7 @@ const effectiveOf = (patch: Partial<UserMenuEffective> = {}): UserMenuEffective 
   targetEditable: true,
   readOnlyReason: null,
   delegatedMaxDays: null,
+  delegatedMaxDate: null,
   modules: [{ id: 1, title: '业务应用', delegatable: true }],
   nodes: [100, 110, 111, 112, 120, 121].map(menuId => ({
     menuId,
@@ -245,6 +246,34 @@ describe('UserGrantMenuSheet 三态与保存', () => {
           menuId: 112,
           effect: UserMenuEffect.Allow,
           expireTime: `${expected}T23:59:59`,
+          remark: null,
+        },
+      ],
+      [],
+    )
+  })
+
+  it('服务端给了最晚到期日:默认到期日与提交都按它,不按浏览器今天加天数', async () => {
+    // 2099 年远在浏览器今天 + 30 天之后:默认值若还是浏览器算的,这里一眼就是错的
+    expect(maxExpireDate(30, new Date())).not.toBe('2099-03-04')
+    await openSheet({
+      effective: effectiveOf({ delegatedMaxDays: 30, delegatedMaxDate: '2099-03-04' }),
+    })
+
+    await pick('订单导出', '允许')
+    expect(qa('.n-date-picker input', rowOf('订单导出'))[0]!.getAttribute('value')).toBe(
+      '2099-03-04',
+    )
+
+    saveButton()!.click()
+    await settle()
+    expect(saveMock).toHaveBeenCalledWith(
+      7,
+      [
+        {
+          menuId: 112,
+          effect: UserMenuEffect.Allow,
+          expireTime: '2099-03-04T23:59:59',
           remark: null,
         },
       ],
@@ -485,6 +514,36 @@ describe('UserGrantMenuSheet 保存的守卫', () => {
       effective: effectiveOf({ delegatedMaxDays: 30 }),
       grants: [
         { ...grantOf(112, UserMenuEffect.Allow, '太远'), expireTime: '2099-01-01T23:59:59' },
+      ],
+    })
+    await typeRemark('订单导出', '改个备注')
+
+    saveButton()!.click()
+    await settle()
+    expect(document.body.textContent).toContain(invalidHint)
+    expect(saveMock).not.toHaveBeenCalled()
+  })
+
+  it('保存校验按服务端给的最晚到期日:当天放行(浏览器算的上限早得多)', async () => {
+    await openSheet({
+      effective: effectiveOf({ delegatedMaxDays: 30, delegatedMaxDate: '2099-03-04' }),
+      grants: [
+        { ...grantOf(112, UserMenuEffect.Allow, '长期'), expireTime: '2099-03-04T23:59:59' },
+      ],
+    })
+    await typeRemark('订单导出', '改个备注')
+
+    saveButton()!.click()
+    await settle()
+    expect(document.body.textContent).not.toContain(invalidHint)
+    expect(saveMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('保存校验按服务端给的最晚到期日:晚一天拦下', async () => {
+    await openSheet({
+      effective: effectiveOf({ delegatedMaxDays: 30, delegatedMaxDate: '2099-03-04' }),
+      grants: [
+        { ...grantOf(112, UserMenuEffect.Allow, '太远'), expireTime: '2099-03-05T23:59:59' },
       ],
     })
     await typeRemark('订单导出', '改个备注')

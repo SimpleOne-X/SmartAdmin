@@ -135,6 +135,9 @@ public record UserMenuEffectiveOutput
     /// <summary>委派授权最长天数;超管、配置为 0 时为空</summary>
     public int? DelegatedMaxDays { get; init; }
 
+    /// <summary>委派授权的最晚到期日(服务器当前本地日期加最长天数);超管、配置为 0 时为空。界面的日期选择器上限与保存前校验都按它算,不用浏览器的日期。</summary>
+    public DateOnly? DelegatedMaxDate { get; init; }
+
     public IReadOnlyList<UserMenuModuleItem> Modules { get; init; } = [];
 
     /// <summary>全部未删除菜单节点(含停用的)各一项</summary>

@@ -253,6 +253,8 @@ To lock or pull back a grant, a super admin turns the switch off first and then 
 | --- | --- | --- |
 | `SmartAdmin:Security:DelegatedGrantMaxDays` | `90` | When an ordinary admin grants an Allow, the latest expiry date is this many days after today, judged by date |
 
+"Today" is the server's local date.
+The date-picker limit and the pre-save check in the grant dialog use the day the server computed (`delegatedMaxDate` in the `menus/effective` response), never the browser's date.
 The range is 0 to 3650; a value outside it makes startup fail, and a negative value is never treated as "unlimited".
 `0` means unlimited: no expiry time is required and there is no upper bound.
 Super admins are not subject to this setting.

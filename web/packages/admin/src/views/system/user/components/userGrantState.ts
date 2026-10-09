@@ -2,7 +2,7 @@
 // 保存只提交变更集:与打开时的快照比,算出新增 / 修改(upserts)与移除(removes),没动的记录不提交。
 // 到期按日期:前端只选日期,新选的日期提交当天 23:59:59;日期没动的老记录原样带回它的到期时间串
 //(后端存的不一定是 23:59:59,只改备注不能把它悄悄改写,更不能让已过期的记录重新生效)。
-// 普通管理员授允许的上限是今天 + 最长天数(后端同一口径)。
+// 普通管理员授允许的上限是服务端给出的最晚到期日(服务器本地日期 + 最长天数),校验与展示共用这一天。
 import { splitPermission, type MenuTreeNode } from '#/types/menu'
 import { UserMenuEffect, type UserMenuGrantItem, type UserMenuGrantUpsert } from '#/types/api'
 
@@ -130,24 +130,43 @@ export function countDraft(draft: Draft): { allow: number; deny: number } {
   return { allow, deny }
 }
 
-/** 普通管理员授允许的到期日上限 = 今天 + 最长天数(也是默认值);不限时为 null。 */
+/** 浏览器的今天 + 最长天数;不限时为 null。只在服务端没给出最晚到期日时作后备。 */
 export function maxExpireDate(maxDays: number | null | undefined, today: Date): string | null {
   if (maxDays == null) return null
   return formatDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + maxDays))
 }
 
 /**
- * 要提交的记录里到期日不合规的菜单 Id:谁都不能选今天以前的日期;受限(maxDays 非空)时,
+ * 普通管理员授允许的到期日上限(也是默认值);不限时为 null。
+ * 服务端给了 delegatedMaxDate 就直接用它:那是服务器本地日期 + 最长天数,与后端校验是同一份计算。
+ * 浏览器与服务器不在同一时区时(服务器 UTC、用户东八区),浏览器自己加天数每天凌晨会领先一天,选出被后端拒收的上限。
+ * 日期串只做字符串比较,不转成 Date(new Date('yyyy-MM-dd') 按 UTC 解析,在东八区以西的时区会差一天)。
+ * 没给(自定义的策略实现没提供最晚到期日)才退回浏览器的今天 + delegatedMaxDays。
+ */
+export function expiryLimit(
+  effective:
+    { delegatedMaxDate?: string | null; delegatedMaxDays?: number | null } | null | undefined,
+  today: Date,
+): string | null {
+  if (effective?.delegatedMaxDate) return effective.delegatedMaxDate
+  return maxExpireDate(effective?.delegatedMaxDays, today)
+}
+
+/** 日期选择器里不可选的日子:今天以前,以及(受限时)最晚到期日以后。三个参数都是 yyyy-MM-dd,按字符串比较。 */
+export const isExpiryDateDisabled = (date: string, today: string, max: string | null): boolean =>
+  date < today || (max != null && date > max)
+
+/**
+ * 要提交的记录里到期日不合规的菜单 Id:谁都不能选今天以前的日期;受限(max 非空,即 expiryLimit 的结果)时,
  * 「允许」还必须有到期日且不晚于上限。只看变更集,没动的老记录不校验(后端同样只校验变更集)。
  */
 export function invalidExpiry(
   baseline: Draft,
   draft: Draft,
-  maxDays: number | null | undefined,
+  max: string | null,
   today: Date,
 ): number[] {
   const todayStr = formatDate(today)
-  const max = maxExpireDate(maxDays, today)
   return diffDraft(baseline, draft)
     .upserts.filter(u => {
       const date = toExpireDate(u.expireTime)

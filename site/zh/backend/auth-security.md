@@ -254,7 +254,8 @@ builder.Services.AddSmartAdmin(builder.Configuration);
 | --- | --- | --- |
 | `SmartAdmin:Security:DelegatedGrantMaxDays` | `90` | 普通管理员授「允许」时，到期日最多晚于今天几天 |
 
-按日期判：到期日不晚于今天加上这个天数即可。
+按日期判：到期日不晚于今天加上这个天数即可，今天以服务器的本地日期为准。
+授权弹窗里的日期选择器上限和保存前校验用的是服务端算好的那一天（`menus/effective` 返回的 `delegatedMaxDate`），不看浏览器的日期。
 取值范围是 0 到 3650，超出范围启动即拒，负数不会被当成「不限」。
 `0` 表示不限：既不要求到期时间，也没有上限。超管不受这项约束。
 

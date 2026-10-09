@@ -33,6 +33,9 @@ public class UserMenuGrantPolicy(
     public virtual int? DelegatedMaxDays => IsTrusted || security.DelegatedGrantMaxDays <= 0 ? null : security.DelegatedGrantMaxDays;
 
     /// <inheritdoc />
+    public virtual DateOnly? DelegatedMaxDate => DelegatedMaxDays is { } days ? DateOnly.FromDateTime(Now).AddDays(days) : null;
+
+    /// <inheritdoc />
     public virtual async Task<ErrorCode?> GetTargetBlockAsync(long targetUserId)
     {
         if (currentUser is { IsAuthenticated: true } && currentUser.UserId == targetUserId) return ErrorCode.CannotOperateSelf;
@@ -69,15 +72,14 @@ public class UserMenuGrantPolicy(
     }
 
     /// <summary>
-    /// 每一条「允许」必须带到期时间,且到期日不晚于今天加最长天数(按日期判,与前端日期选择器一致)。
+    /// 每一条「允许」必须带到期时间,且到期日不晚于 <see cref="DelegatedMaxDate"/>(按日期判,与界面展示的上限是同一份计算)。
     /// 「拒绝」只会收紧权限,不要求限时。长期权限应当走角色,单独授权本就是临时例外。
     /// </summary>
     protected virtual void EnsureDelegatedExpiry(IReadOnlyCollection<UserMenuGrantUpsert> upserts)
     {
-        if (DelegatedMaxDays is not { } maxDays) return;
-        var lastDay = Now.Date.AddDays(maxDays);
+        if (DelegatedMaxDays is not { } maxDays || DelegatedMaxDate is not { } lastDay) return;
         foreach (var u in upserts.Where(u => u.Effect == UserMenuEffect.Allow))
-            AdminException.ThrowIf(u.ExpireTime is not { } t || t.Date > lastDay, ErrorCode.DelegatedGrantExpiryInvalid,
+            AdminException.ThrowIf(u.ExpireTime is not { } t || DateOnly.FromDateTime(t) > lastDay, ErrorCode.DelegatedGrantExpiryInvalid,
                 new Dictionary<string, object?> { ["maxDays"] = maxDays });
     }
 

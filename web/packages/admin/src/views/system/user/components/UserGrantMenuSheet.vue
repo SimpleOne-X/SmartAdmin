@@ -19,7 +19,7 @@ import {
   diffDraft,
   draftFromGrants,
   invalidExpiry,
-  maxExpireDate,
+  expiryLimit,
   type Draft,
 } from './userGrantState'
 
@@ -61,7 +61,7 @@ const contentStyle: CSSProperties = {
 }
 const footerStyle = { padding: '0' }
 
-const maxDate = computed(() => maxExpireDate(effective.value?.delegatedMaxDays, new Date()))
+const maxDate = computed(() => expiryLimit(effective.value, new Date()))
 const counts = computed(() => countDraft(draft))
 const dirty = computed(() => {
   const d = diffDraft(baseline.value, draft)
@@ -119,7 +119,7 @@ async function open(target: { id: number; name: string }) {
 
 async function save() {
   if (saving.value || !user.value) return
-  const bad = invalidExpiry(baseline.value, draft, effective.value?.delegatedMaxDays, new Date())
+  const bad = invalidExpiry(baseline.value, draft, maxDate.value, new Date())
   if (bad.length) {
     message.warning(t('userGrant.invalidExpiry', { count: bad.length }))
     return

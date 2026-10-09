@@ -73,6 +73,8 @@
   - 新增四个端点：`GET /api/v1/sys/user/{id}/menus`、`GET /api/v1/sys/user/{id}/menus/effective`、`PUT /api/v1/sys/user/menu`、`GET /api/v1/sys/user/menu-grants/page`。
     它们的权限码都挂在按钮 239 上；按钮 239 的权限串共五条，除这四条外还有弹窗要读的 `GET:/api/v1/sys/menu/tree`。
     前两个读端点按数据范围收口，目标用户在范围外返回 `41005`。
+    `menus/effective` 的出参带 `delegatedMaxDays` 与 `delegatedMaxDate`。
+    后者是服务器本地日期加最长天数，授权弹窗的日期选择器上限和保存前校验都按它算，浏览器与服务器不在同一时区也不会差一天；超管或配置为 `0` 时两者为空。
   - `PUT /api/v1/sys/user/menu` 进内核高敏权限码集合，端点带 `[RequireReauth]`：开了 TOTP 时保存授权要再认证一次。
     操作日志里记为「用户授权菜单」，请求体就是这次的增改删明细。
   - `POST /sys/module/add`、`PUT /sys/module/{id}` 的入参与 `GET /sys/module/list|{id}` 的出参多一个 `isDelegatable`。
@@ -87,6 +89,7 @@
 
 - **后端 API 表面。**
   - 新接口 `IUserMenuGrantService`、`IUserMenuGrantPolicy`，用 `TryAdd` 注册，可前置替换。
+    `IUserMenuGrantPolicy` 除 `DelegatedMaxDays` 外还有 `DateOnly? DelegatedMaxDate`：服务器本地日期加最长天数，保存校验与界面展示共用这一天，自己实现该接口的项目要一并提供。
     默认实现 `UserMenuGrantService`、`UserMenuGrantPolicy` 是 public 类，长流程拆成 `protected virtual` 步骤（校验、`PlanChangesAsync`、`PersistAsync`、`AfterCommitAsync` 等），可单独覆写。
   - 新事件 `UserMenuGrantsChangedEvent`：保存提交、缓存失效之后经 `IEventBus` 发布，带目标用户、操作人和新增、修改、移除的明细，内核自己不订阅。
   - 新增 public 类型：实体 `SysUserMenu`，枚举 `UserMenuEffect` 与 `UserMenuGrantStatus`，规则 `UserMenuGrantRules`，查询 `UserMenuGrantQueries`，菜单树运算 `MenuTree`（`RootModuleId`、`IsKernelSystemMenu`、`HasAncestorIn`、`WithDescendants`），安全选项启动校验 `AdminSecurityOptionsValidation`。

@@ -15,6 +15,13 @@ public interface IUserMenuGrantPolicy
     /// <summary>当前授权人受委派限时约束时的最长天数;超管、系统上下文、配置为 0 时为 null(不限)。</summary>
     int? DelegatedMaxDays { get; }
 
+    /// <summary>
+    /// 当前授权人能授出的「允许」的最晚到期日:服务器当前本地日期加 <see cref="DelegatedMaxDays"/>;不受限时为 null。
+    /// 校验与界面展示都用它,日期由服务端给出,不让浏览器按自己的时区再算一遍
+    /// (服务器在 UTC、用户在东八区时,每天凌晨浏览器的日期会领先服务器一天)。
+    /// </summary>
+    DateOnly? DelegatedMaxDate { get; }
+
     /// <summary>当前授权人不能编辑该目标用户的原因(规则 1–5 的错误码);能编辑返回 null。</summary>
     Task<ErrorCode?> GetTargetBlockAsync(long targetUserId);
 

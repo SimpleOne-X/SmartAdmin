@@ -248,6 +248,8 @@ export interface UserMenuEffective {
   targetEditable: boolean
   readOnlyReason?: number | null
   delegatedMaxDays?: number | null
+  /** 委派授权的最晚到期日 yyyy-MM-dd(服务器本地日期 + 最长天数);不限时为空。日期选择器上限与保存前校验都按它算。 */
+  delegatedMaxDate?: string | null
   modules: UserMenuModuleItem[]
   nodes: UserMenuEffectiveNode[]
 }
