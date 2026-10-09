@@ -287,7 +287,8 @@ An empty database, an ordinary restart, or seeding turned off (which skips the v
   A project that grants System menus this way has to use a built-in role instead, or change its own seed.
 - The cleanup runs once and is never retried.
   The version row is written as 7 before the cleanup runs, so if the cleanup fails the startup aborts with an exception.
-  A failed deletion also leaves an Error log line saying the transaction was rolled back and no grant was deleted.
+  A failed lookup or a failed deletion leaves an Error log line saying no grant was deleted (a failed deletion also says the transaction was rolled back).
+  When a deployment that skips table creation lacks `sys_user_menu`, the missing-table guard aborts the startup, but the cleanup is registered ahead of it and has already finished.
   To recover, a super admin re-saves the grants of the roles involved on the role-grant page:
   the dialog doesn't show system menus and a save submits only the grants that are visible, so saving takes them back.
 - If only the cache invalidation fails after the grants are deleted, it writes an Error log line and startup carries on.

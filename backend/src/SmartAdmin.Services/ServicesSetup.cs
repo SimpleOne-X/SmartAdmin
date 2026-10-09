@@ -115,6 +115,11 @@ public static class ServicesSetup
         services.TryAddScoped<IPermissionProvider, RbacPermissionProvider>();
         services.TryAddScoped<IRoleGrantPolicy, RoleGrantPolicy>();   // 角色授予的唯一判定出口,RbacService 收口调用
         services.TryAddScoped<IRbacService, RbacService>();
+        // 库就绪钩子按登记顺序执行,下面两个的顺序不能换:守卫缺表时抛错会中断后面所有的钩子,
+        // 而种子版本行已先写成当前版本,排在守卫后面的升级清理就错过了唯一一次机会,以后再也不会运行。
+        // 清理不读写 sys_user_menu,不依赖守卫要确认的那张表。
+        // 系统菜单只授内置角色:从老版本升级上来的那一次清掉非内置角色上的存量
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, SystemMenuRoleGrantCleanup>());
         // 单独授权表在鉴权热路径上:建表被跳过时库就绪即确认它在,缺了点名拦下而不是放进程起来再 500
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, UserMenuGrantTableGuard>());
         services.TryAddScoped<IRoleService, RoleService>();   // 角色生命周期 CRUD(授权/数据范围仍走 IRbacService)
@@ -254,9 +259,6 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultUserRoleSeed>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultDataScopeSeed>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultJobSeed>());
-
-        // 系统菜单只授内置角色:从老版本升级上来的那一次清掉非内置角色上的存量
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, SystemMenuRoleGrantCleanup>());
 
         return services;
     }

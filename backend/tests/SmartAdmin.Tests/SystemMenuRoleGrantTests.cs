@@ -526,6 +526,56 @@ public class SystemMenuRoleGrantTests
         Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("共删除 1 条"));
     }
 
+    /// <summary>
+    /// 读库找待删授权就失败了(版本行已先写成 7,不会重试):启动照常失败(异常原样抛出),
+    /// 并留一条 Error 说明没删任何授权、不会自动重试、该怎么补救。读库失败时还不知道涉及哪些角色,所以补救写成「对每个非内置角色重存」。
+    /// </summary>
+    [Fact]
+    public async Task Cleanup_lookup_failure_logs_error_and_rethrows()
+    {
+        using var f = new AdminAppFactory();
+        var role = await GrantTestKit.CreateRoleAsync(f, [Ping, BizWorkbench]);
+
+        var logger = new CapturingLogger<SystemMenuRoleGrantCleanup>();
+        using (var s = f.Services.CreateScope())
+        {
+            var sp = s.ServiceProvider;
+            var hook = new FailOnFindCleanup(sp.GetRequiredService<ISqlSugarClient>(), sp.GetRequiredService<ICacheProvider>(), logger);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => hook.OnDatabaseReadyAsync(UpgradeFromSix, CancellationToken.None));
+        }
+
+        var error = Assert.Single(logger.Entries, e => e.Level >= LogLevel.Warning);
+        Assert.Equal(LogLevel.Error, error.Level);
+        Assert.Contains("查找待删授权失败", error.Message);
+        Assert.Contains("没有删除任何授权", error.Message);
+        Assert.Contains("不会自动重试", error.Message);
+        Assert.Contains("重存", error.Message);
+        Assert.IsType<InvalidOperationException>(error.Exception);
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal([BizWorkbench, Ping], menus);   // 一条没动
+    }
+
+    /// <summary>
+    /// 计划要删的行在删除前已被别处删光(多副本同时升级,另一个副本先删完):删除影响 0 行,
+    /// 不再逐行写「删除」,也不写「共删除」汇总,只记一条说明已无待删项。
+    /// </summary>
+    [Fact]
+    public async Task Cleanup_with_everything_already_deleted_logs_one_note_instead_of_per_row_lines()
+    {
+        using var f = new AdminAppFactory();
+        await GrantTestKit.CreateRoleAsync(f, [Ping, ConfigQueryButton, BizWorkbench]);
+
+        var logger = await RunLoggedCleanupAsync(f, UpgradeFromSix, (db, cache, log) => new AlreadyDeletedCleanup(db, cache, log));
+
+        Assert.DoesNotContain(logger.Entries, e => e.Message.Contains("升级清理删除角色"));
+        Assert.DoesNotContain(logger.Entries, e => e.Message.Contains("共删除"));
+        Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Error);
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("待删除 2 条"));   // 删除前的汇总照旧
+        var note = Assert.Single(logger.Entries, e => e.Message.Contains("已不在库里"));
+        Assert.Contains("2 条", note.Message);
+        Assert.Contains("没有删除任何授权", note.Message);
+    }
+
     /// <summary>覆写逐批删除:执行完第 <c>failOnBatch</c> 批后抛异常,让前面的批真实执行过再整体回滚。</summary>
     private sealed class FailOnBatchCleanup(ISqlSugarClient db, ICacheProvider cache, ILogger<SystemMenuRoleGrantCleanup> logger, int failOnBatch)
         : SystemMenuRoleGrantCleanup(db, cache, logger)
@@ -551,6 +601,28 @@ public class SystemMenuRoleGrantTests
             var stale = await base.FindStaleGrantsAsync();
             var firstId = stale.Links[0].Id;
             await _db.Deleteable<SysRoleMenu>().Where(x => x.Id == firstId).ExecuteCommandAsync();
+            return stale;
+        }
+    }
+
+    /// <summary>覆写「找出待删授权」:直接抛异常,模拟读库失败。</summary>
+    private sealed class FailOnFindCleanup(ISqlSugarClient db, ICacheProvider cache, ILogger<SystemMenuRoleGrantCleanup> logger)
+        : SystemMenuRoleGrantCleanup(db, cache, logger)
+    {
+        protected override Task<StaleGrants> FindStaleGrantsAsync() => throw new InvalidOperationException("注入的读库失败");
+    }
+
+    /// <summary>覆写「找出待删授权」:返回之前先把其中全部行从库里删掉,模拟另一个副本已经清完。</summary>
+    private sealed class AlreadyDeletedCleanup(ISqlSugarClient db, ICacheProvider cache, ILogger<SystemMenuRoleGrantCleanup> logger)
+        : SystemMenuRoleGrantCleanup(db, cache, logger)
+    {
+        private readonly ISqlSugarClient _db = db;
+
+        protected override async Task<StaleGrants> FindStaleGrantsAsync()
+        {
+            var stale = await base.FindStaleGrantsAsync();
+            long[] ids = [.. stale.Links.Select(x => x.Id)];
+            await _db.Deleteable<SysRoleMenu>().Where(x => ids.Contains(x.Id)).ExecuteCommandAsync();
             return stale;
         }
     }

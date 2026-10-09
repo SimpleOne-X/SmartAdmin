@@ -36,9 +36,12 @@
     升级那一次启动，种子先把授权补回，清理再把它们删掉；之后每次重启，种子（没有登录上下文，不受守卫限制）又会把缺的行补回来。
     依赖这种做法的项目，改用内置角色，或者改自己的种子。
   - 清理只做一次，不会重试：框架先把种子版本行写成 7，再跑清理。
-    删除阶段失败时，启动因异常中止，日志里有一条 Error，写明事务已回滚、没有删任何授权。
+    查找待删授权失败时，启动因异常中止，日志里有一条 Error，写明没有删任何授权。
+    删除阶段失败时同样中止启动，日志里有一条 Error，写明事务已回滚、没有删任何授权。
     重启后不会再触发清理，补救办法是超管在角色授权页对涉及的角色重新保存一次授权：弹窗里不显示系统菜单，保存提交的只有弹窗里看得见的授权，系统菜单就被收回了。
     授权删完之后缓存失效失败，只写一条 Error，启动照常；到缓存管理页分别清除「权限缓存」与「门户菜单缓存」即可。
+    多副本同时升级时，先到的副本把授权删光，后到的副本发现待删的行已不在库里，只记一条说明，不再逐行写「删除」。
+  - 清理排在缺表守卫之前执行。跳过建表的部署缺 `sys_user_menu` 时，守卫会中断启动，清理已经先跑完，不会因为这次启动失败而被永久跳过。
   - 关了种子（`EnableSeed=false`）的部署不走版本闸门，不会自动清理，这些授权暂时仍有效。
     超管在角色授权页逐个打开这类角色，保存一次即收回。
   - 滚动升级期间，还在跑的旧版本副本仍能给新建角色授系统菜单。
@@ -94,7 +97,7 @@
     两个类新增 `protected virtual` 步骤 `ApplyUserGrantsAsync` 与 `GetNextGrantExpiryAsync`，`MenuService` 另有 `ResolveGrantedMenuIdsAsync`，都可单独覆写。
   - `SysRole` 新增只读计算属性 `IsBuiltin`（不建列）。
     `RbacService` 主构造器不变，新增 `protected virtual` 步骤 `EnsureRoleMenusAssignableAsync`。
-  - 库就绪钩子 `SystemMenuRoleGrantCleanup`（升级清理）与 `UserMenuGrantTableGuard`（缺表守卫）用 `TryAddEnumerable` 登记。
+  - 库就绪钩子 `SystemMenuRoleGrantCleanup`（升级清理）与 `UserMenuGrantTableGuard`（缺表守卫）用 `TryAddEnumerable` 登记，升级清理登记在前、先执行。
     升级清理的查找、记日志、删除、失效缓存各是一个 `protected virtual` 步骤。
   - `IRbacService`、`IPermissionProvider`、`IMenuService` 的成员没有变，`InvalidatePermissionsByMenuAsync` 的默认实现扩大了失效范围，见下面 Changed 一节。
   - 整体替换了 `IPermissionProvider` 或 `IMenuService` 的项目，自己的实现不认 `sys_user_menu`，单独授权不会生效。

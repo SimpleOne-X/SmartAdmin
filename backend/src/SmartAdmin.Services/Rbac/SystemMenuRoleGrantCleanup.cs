@@ -14,8 +14,10 @@ namespace SmartAdmin.Services;
 /// 关了种子(不走版本闸门)都不执行。删除不可恢复,所以日志要逐条列出删了哪个角色的哪个菜单。</para>
 /// <para>判「是不是系统菜单」读的是全表(含停用与软删的节点),理由同 <c>RbacService.EnsureRoleMenusAssignableAsync</c>:
 /// 只读启用节点会在停用的中间目录处断链而漏删,软删的菜单恢复后会带着授权回来。</para>
-/// <para>流程拆成「找出待删授权 → 记待删汇总 → 删除 → 记日志 → 失效缓存」几步,各自 <c>protected virtual</c>,可单独覆写。</para>
+/// <para>流程拆成「找出待删授权 → 记待删汇总 → 删除 → 记日志 → 失效缓存」几步,各自 <c>protected virtual</c>,可单独覆写。
+/// 它登记在 <see cref="UserMenuGrantTableGuard"/> 之前(见 <c>ServicesSetup</c>):守卫抛错会中断后面的钩子,而版本行已经写过,清理错过这次就不再运行。</para>
 /// <para>版本行先于钩子写成当前版本,所以这里不会重试:钩子失败后下次启动不再当作升级。因此失败要留下运维看得见的痕迹——
+/// 查找待删授权失败写 Error(说明没删任何授权、如何补救)并照常抛出让启动失败;
 /// 删除前先记一条待删汇总;删除事务失败写 Error(说明已回滚、没删任何授权、如何补救)并照常抛出让启动失败;
 /// 授权删完之后缓存失效失败也写 Error,但<b>不再抛出</b>:授权已经删了,抛出只会让启动失败而无从重试,
 /// 缓存本就有过期时间,最坏是旧权限多留一阵,日志里给出缓存管理页的补救办法。</para>
@@ -54,7 +56,18 @@ public class SystemMenuRoleGrantCleanup(
         if (!context.Upgraded || context.PreviousSchemaVersion is not { } previous) return;
         if (int.TryParse(previous, out var from) && from >= SinceSchemaVersion) return;
 
-        var stale = await FindStaleGrantsAsync();
+        StaleGrants stale;
+        try
+        {
+            stale = await FindStaleGrantsAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "SmartAdmin: 升级清理查找待删授权失败:没有删除任何授权。种子版本已前进,不会自动重试,"
+                + "请超管在角色授权页对每个非内置角色重存一次授权(系统菜单不会再显示,保存即收回)");
+            throw;
+        }
         if (stale.Links.Count == 0) return;
 
         LogPendingGrants(stale);
@@ -140,9 +153,19 @@ public class SystemMenuRoleGrantCleanup(
         return await db.Deleteable<SysRoleMenu>().Where(x => ids.Contains(x.Id)).ExecuteCommandAsync();
     }
 
-    /// <summary>删完再记:日志只陈述已经发生的事。每删一行一条 Warning,末尾一条汇总,条数取实际删除的行数。</summary>
+    /// <summary>
+    /// 删完再记:日志只陈述已经发生的事。每删一行一条 Warning,末尾一条汇总,条数取实际删除的行数。
+    /// 一行都没删到(多副本同时升级,另一个副本已经删光)就只记一条说明,不逐行写「删除」。
+    /// </summary>
     protected virtual void LogDeletedGrants(StaleGrants stale, int deleted)
     {
+        if (deleted == 0)
+        {
+            logger.LogInformation("SmartAdmin: 升级清理待删的 {Count} 条授权已不在库里(多副本同时升级时,另一个副本已删除),本次没有删除任何授权",
+                stale.Links.Count);
+            return;
+        }
+
         foreach (var link in stale.Links)
             logger.LogWarning("SmartAdmin: 系统菜单只能授给内置角色,升级清理删除角色 {Role} 上的菜单 {Menu}(Id {MenuId})",
                 stale.RoleNames.GetValueOrDefault(link.RoleId, link.RoleId.ToString()), stale.MenuTitles[link.MenuId], link.MenuId);
