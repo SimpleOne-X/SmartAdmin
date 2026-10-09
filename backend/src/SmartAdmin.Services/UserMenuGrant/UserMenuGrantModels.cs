@@ -129,7 +129,7 @@ public record UserMenuEffectiveOutput
     /// <summary>当前授权人能否编辑这个目标用户</summary>
     public bool TargetEditable { get; init; }
 
-    /// <summary>不能编辑的原因:42029 自己 / 42007 超管 / 41005 范围外 / 41007 对方是管理员</summary>
+    /// <summary>不能编辑的原因:42029 自己 / 42007 超管 / 41007 对方是管理员。范围外由接口直接报 41005,此处不会出现。</summary>
     public ErrorCode? ReadOnlyReason { get; init; }
 
     /// <summary>委派授权最长天数;超管、配置为 0 时为空</summary>

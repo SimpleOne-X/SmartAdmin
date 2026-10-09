@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
@@ -79,6 +80,32 @@ public class UserMenuGrantQueryTests
         var leaked = Assert.Single(nodes[RoleGrantMenus].GetProperty("leakedCodes").EnumerateArray());
         Assert.Equal("GET:/api/v1/sys/menu/tree", leaked.GetProperty("code").GetString());
         Assert.Equal([MenuQuery], leaked.GetProperty("carrierMenuIds").EnumerateArray().Select(x => x.GetInt64()));
+
+        // 245 自己有生效的拒绝,祖先 200 也有(245 → 240 → 200):撤掉 245 自己的拒绝并不能恢复它,所以仍是「被祖先收回」
+        Assert.Equal(2, nodes[RoleGrantMenus].GetProperty("grant").GetInt32());
+        Assert.True(nodes[RoleGrantMenus].GetProperty("deniedByAncestor").GetBoolean());
+        // 200 自己被拒,它之上没有任何拒绝:不是被祖先收回
+        Assert.False(nodes[OrgCatalog].GetProperty("effective").GetBoolean());
+        Assert.False(nodes[OrgCatalog].GetProperty("deniedByAncestor").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Effective_marks_only_descendants_of_a_denied_node_as_denied_by_ancestor()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, [MenuQuery, RoleGrantMenus]);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, [role]);
+        const long roleManagePage = 240;   // 角色管理页:245 的父节点、200 的子节点
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target, [GrantTestKit.Deny(roleManagePage)]));
+
+        var nodes = (await DataAsync(super, $"/api/v1/sys/user/{target}/menus/effective")).GetProperty("nodes").EnumerateArray()
+            .ToDictionary(n => n.GetProperty("menuId").GetInt64());
+
+        Assert.False(nodes[roleManagePage].GetProperty("deniedByAncestor").GetBoolean());    // 自己被拒,上面没有拒绝
+        Assert.True(nodes[RoleGrantMenus].GetProperty("deniedByAncestor").GetBoolean());     // 子孙被连带收回
+        Assert.False(nodes[OrgCatalog].GetProperty("deniedByAncestor").GetBoolean());        // 祖先不受影响
+        Assert.False(nodes[MenuQuery].GetProperty("deniedByAncestor").GetBoolean());         // 别的分支不受影响
     }
 
     [Fact]
@@ -116,12 +143,30 @@ public class UserMenuGrantQueryTests
     {
         using var f = new AdminAppFactory();
         var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
+        var superId = await GrantTestKit.SuperAdminIdAsync(f);
+        var (_, stoppedPage) = await GrantTestKit.CreateCatalogWithPageAsync(f, 2);
+        long[] enabledIds;
+        using (var scope = f.Services.CreateScope())
+        {
+            var menus = scope.ServiceProvider.GetRequiredService<IRepository<SysMenu>>();
+            await menus.Db.Updateable<SysMenu>().SetColumns(m => m.Enabled == false).Where(m => m.Id == stoppedPage).ExecuteCommandAsync();
+            enabledIds = [.. (await menus.AsQueryable().Where(m => m.Enabled == true).Select(m => m.Id).ToListAsync()).Order()];
+        }
+        // 超管名下留着一条拒绝记录(绕过服务直接写库):超管不走单独授权计算,它不能让任何节点失效
+        await GrantTestKit.InsertGrantAsync(f, superId, BizWorkbench, UserMenuEffect.Deny);
 
-        var data = await DataAsync(admin, $"/api/v1/sys/user/{await GrantTestKit.SuperAdminIdAsync(f)}/menus/effective");
+        var data = await DataAsync(admin, $"/api/v1/sys/user/{superId}/menus/effective");
+        var nodes = data.GetProperty("nodes").EnumerateArray().ToList();
 
         Assert.False(data.GetProperty("targetEditable").GetBoolean());
         Assert.Equal((int)ErrorCode.SuperAdminProtected, data.GetProperty("readOnlyReason").GetInt32());
-        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), n => n.GetProperty("effective").GetBoolean());
+        // 有效的恰好是全部启用节点:停用的那个不在内,被「拒绝」记录点名的 110 仍在
+        long[] effectiveIds = [.. nodes.Where(n => n.GetProperty("effective").GetBoolean()).Select(n => n.GetProperty("menuId").GetInt64()).Order()];
+        Assert.Equal(enabledIds, effectiveIds);
+        Assert.DoesNotContain(stoppedPage, effectiveIds);
+        Assert.Contains(BizWorkbench, effectiveIds);
+        Assert.All(nodes, n => Assert.False(n.GetProperty("deniedByAncestor").GetBoolean()));
+        Assert.All(nodes, n => Assert.Empty(n.GetProperty("leakedCodes").EnumerateArray()));
     }
 
     [Fact]
@@ -174,6 +219,31 @@ public class UserMenuGrantQueryTests
     }
 
     [Fact]
+    public async Task Reads_succeed_for_users_inside_data_scope()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f, DataScopeType.Custom, [3], orgId: 3);
+        var (inside, _) = await GrantTestKit.CreateUserAsync(f, [], orgId: 3);
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, inside, [GrantTestKit.Deny(BizWorkbench)]));
+
+        var item = Assert.Single((await DataAsync(admin, $"/api/v1/sys/user/{inside}/menus")).EnumerateArray());
+        Assert.Equal(BizWorkbench, item.GetProperty("menuId").GetInt64());
+        var effective = await DataAsync(admin, $"/api/v1/sys/user/{inside}/menus/effective");
+        Assert.True(effective.GetProperty("targetEditable").GetBoolean());
+        Assert.Equal(inside, effective.GetProperty("userId").GetInt64());
+    }
+
+    [Fact]
+    public async Task Reads_of_unknown_user_report_not_found()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        Assert.Equal((int)ErrorCode.UserNotFound, await CodeAsync(super, "/api/v1/sys/user/999999/menus"));
+        Assert.Equal((int)ErrorCode.UserNotFound, await CodeAsync(super, "/api/v1/sys/user/999999/menus/effective"));
+    }
+
+    [Fact]
     public async Task Grant_page_filters_by_status_effect_grantor_and_user()
     {
         using var f = new AdminAppFactory();
@@ -200,6 +270,120 @@ public class UserMenuGrantQueryTests
         Assert.Equal(2, item.GetProperty("status").GetInt32());
         Assert.Equal(2, item.GetProperty("moduleId").GetInt64());
         Assert.Equal(account, item.GetProperty("userAccount").GetString());
+    }
+
+    /// <summary>三条授权的授权时间拉开到整天:同一秒内靠 Id 兜底的顺序在各库上精度不同,不拿它做断言。返回账号。</summary>
+    private static async Task<string> ThreeGrantsOnDistinctDaysAsync(AdminAppFactory f)
+    {
+        var (target, account) = await GrantTestKit.CreateUserAsync(f, []);
+        var granted = new (long MenuId, int DaysAgo)[] { (Ping, 3), (BizWorkbench, 2), (PositionQuery, 1) };   // 301 最旧,221 最新
+        foreach (var (menuId, _) in granted) await GrantTestKit.InsertGrantAsync(f, target, menuId, UserMenuEffect.Allow);
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IRepository<SysUserMenu>>().Db;
+        foreach (var (menuId, daysAgo) in granted)
+        {
+            var at = DateTime.Today.AddDays(-daysAgo).AddHours(10);
+            await db.Updateable<SysUserMenu>().SetColumns(g => g.CreateTime == at).Where(g => g.UserId == target && g.MenuId == menuId).ExecuteCommandAsync();
+        }
+        return account;
+    }
+
+    /// <summary>取一览的一页,断言总数与这一页上的菜单 Id(按返回顺序)。</summary>
+    private static async Task AssertGrantPageAsync(HttpClient c, string account, string query, int total, long[] menuIds)
+    {
+        var data = await DataAsync(c, $"/api/v1/sys/user/menu-grants/page?User={account}&{query}");
+        Assert.Equal(total, data.GetProperty("total").GetInt32());
+        long[] actual = [.. data.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("menuId").GetInt64())];
+        Assert.Equal(menuIds, actual);
+    }
+
+    [Fact]
+    public async Task Grant_page_pages_newest_first_with_a_stable_total()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var account = await ThreeGrantsOnDistinctDaysAsync(f);
+
+        await AssertGrantPageAsync(super, account, "Current=1&Size=1", 3, [PositionQuery]);
+        await AssertGrantPageAsync(super, account, "Current=2&Size=1", 3, [BizWorkbench]);
+        await AssertGrantPageAsync(super, account, "Current=3&Size=1", 3, [Ping]);
+        await AssertGrantPageAsync(super, account, "Current=4&Size=1", 3, []);
+        await AssertGrantPageAsync(super, account, "Current=2&Size=2", 3, [Ping]);
+    }
+
+    [Fact]
+    public async Task Grant_page_honours_sort_field_and_ignores_unknown_ones()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var account = await ThreeGrantsOnDistinctDaysAsync(f);
+
+        await AssertGrantPageAsync(super, account, "Current=1&Size=10&SortField=menuId&SortOrder=desc", 3, [Ping, PositionQuery, BizWorkbench]);
+        await AssertGrantPageAsync(super, account, "Current=1&Size=10&SortField=MenuId&SortOrder=asc", 3, [BizWorkbench, PositionQuery, Ping]);
+        // 不是实体列的排序字段被忽略,回到默认的授权时间倒序(而不是报错或拼进 SQL)
+        await AssertGrantPageAsync(super, account, "Current=1&Size=10&SortField=nope;drop&SortOrder=desc", 3, [PositionQuery, BizWorkbench, Ping]);
+    }
+
+    [Fact]
+    public async Task Grant_status_boundaries_follow_the_injected_clock()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds()));   // 整秒:各库时间列精度不同
+        using var f = new AdminAppFactory
+        {
+            Overrides = s =>
+            {
+                s.RemoveAll<TimeProvider>();
+                s.AddSingleton<TimeProvider>(clock);
+            },
+        };
+        var now = clock.GetLocalNow().DateTime;
+        var (target, account) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, target, Ping, UserMenuEffect.Allow, now.AddDays(7));                // 恰好 7 天:7 天内到期
+        await GrantTestKit.InsertGrantAsync(f, target, BizWorkbench, UserMenuEffect.Allow, now.AddDays(7).AddSeconds(1));   // 再多一秒:仍是生效中
+        await GrantTestKit.InsertGrantAsync(f, target, PositionQuery, UserMenuEffect.Deny, now);                   // 到期时刻即失效:已过期
+        await GrantTestKit.InsertGrantAsync(f, target, MenuQuery, UserMenuEffect.Allow, now.AddSeconds(1));        // 还差一秒:7 天内到期
+        await GrantTestKit.InsertGrantAsync(f, target, RoleGrantMenus, UserMenuEffect.Allow);                      // 长期:生效中
+
+        using var scope = f.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IUserMenuGrantService>();
+        async Task<Dictionary<long, UserMenuGrantStatus>> Page(UserMenuGrantStatus? status) =>
+            (await service.GetGrantPageAsync(new UserMenuGrantPageInput { User = account, Size = 50, Status = status }))
+                .Items.ToDictionary(i => i.MenuId, i => i.Status);
+
+        Assert.Equal(new Dictionary<long, UserMenuGrantStatus>
+        {
+            [Ping] = UserMenuGrantStatus.Expiring,
+            [BizWorkbench] = UserMenuGrantStatus.Active,
+            [PositionQuery] = UserMenuGrantStatus.Expired,
+            [MenuQuery] = UserMenuGrantStatus.Expiring,
+            [RoleGrantMenus] = UserMenuGrantStatus.Active,
+        }.OrderBy(x => x.Key), (await Page(null)).OrderBy(x => x.Key));
+        // 筛选条件「生效中」含 7 天内到期的;「7 天内到期」「已过期」各取一档
+        Assert.Equal([BizWorkbench, RoleGrantMenus, Ping, MenuQuery], (await Page(UserMenuGrantStatus.Active)).Keys.Order());
+        Assert.Equal([Ping, MenuQuery], (await Page(UserMenuGrantStatus.Expiring)).Keys.Order());
+        Assert.Equal([PositionQuery], (await Page(UserMenuGrantStatus.Expired)).Keys.Order());
+    }
+
+    [Fact]
+    public async Task Grant_page_validates_paging_even_when_nothing_matches()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var (target, account) = await GrantTestKit.CreateUserAsync(f, []);
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target, [GrantTestKit.Allow(Ping)]));
+        const string pageUrl = "/api/v1/sys/user/menu-grants/page";
+
+        // 超大页:有数据和没数据(用户筛选落空)一样被拒,而不是短路成一个「成功的空页」
+        var withData = await CodeAsync(super, $"{pageUrl}?Current=1&Size=10001&User={account}");
+        var noMatch = await CodeAsync(super, $"{pageUrl}?Current=1&Size=10001&User=no-such-user");
+        Assert.Equal((int)ErrorCode.PageSizeExceeded, withData);
+        Assert.Equal(withData, noMatch);
+
+        // 页码、页大小的规整也与有数据时一致:Current=0 → 1,Size=0 → 20
+        var empty = await DataAsync(super, $"{pageUrl}?Current=0&Size=0&User=no-such-user");
+        Assert.Equal(1, empty.GetProperty("current").GetInt32());
+        Assert.Equal(20, empty.GetProperty("size").GetInt32());
+        Assert.Equal(0, empty.GetProperty("total").GetInt32());
     }
 
     [Fact]

@@ -27,17 +27,35 @@ public static class PagedListExtensions
     /// </summary>
     public static async Task<PagedList<T>> ToPagedListAsync<T>(this ISugarQueryable<T> query, int current, int size)
     {
-        current = current <= 0 ? 1 : current;
-        var max = MaxSize > 0 ? MaxSize : MAX_SIZE;
-        AdminException.ThrowIf(size > max, ErrorCode.PageSizeExceeded,
-            new Dictionary<string, object?> { ["size"] = size, ["max"] = max });
-        size = size <= 0 ? 20 : size;
+        (current, size) = Normalize(current, size);
 
         // RefAsync<int> 是 SqlSugar 的"输出参数"载体:分页查询顺带把总数写回它,免二次 Count 往返
         RefAsync<int> total = 0;
         var items = await query.ToPageListAsync(current, size, total);
 
         return new PagedList<T> { Current = current, Size = size, Total = total, Items = items };
+    }
+
+    /// <summary>
+    /// 一个空页。查询在到达数据库之前就能确定没有结果(筛选条件落空、范围里没有任何人)时,用它代替物化:
+    /// 页码、页大小的规整与超限校验和 <see cref="ToPagedListAsync{T}(ISugarQueryable{T}, int, int)"/> 一致,
+    /// 短路不会让一个超限的请求"成功"返回,也不会把没规整过的页码页大小原样回显。
+    /// </summary>
+    public static PagedList<T> EmptyPage<T>(int current, int size)
+    {
+        (current, size) = Normalize(current, size);
+        return new PagedList<T> { Current = current, Size = size, Total = 0, Items = [] };
+    }
+
+    /// <summary>页码 ≤ 0 归一为 1;页大小超过 <see cref="MaxSize"/> 抛错,≤ 0 归一为默认 20。</summary>
+    private static (int Current, int Size) Normalize(int current, int size)
+    {
+        current = current <= 0 ? 1 : current;
+        var max = MaxSize > 0 ? MaxSize : MAX_SIZE;
+        AdminException.ThrowIf(size > max, ErrorCode.PageSizeExceeded,
+            new Dictionary<string, object?> { ["size"] = size, ["max"] = max });
+        size = size <= 0 ? 20 : size;
+        return (current, size);
     }
 
     /// <summary>

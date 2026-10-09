@@ -157,11 +157,15 @@ public class UserMenuGrantService(
         var grantable = await policy.GetGrantableModuleIdsAsync();
         var block = await policy.GetTargetBlockAsync(userId);
         var grantByMenu = rows.ToDictionary(g => g.MenuId);
+        // 生效中的拒绝节点。超管不走单独授权的计算,名下即使留着记录也不产生拒绝
+        HashSet<long> activeDenyIds = target.IsSuperAdmin
+            ? []
+            : [.. rows.Where(g => g.Effect == UserMenuEffect.Deny && UserMenuGrantRules.IsActive(g, now)).Select(g => g.MenuId)];
         var nodes = allMenus.Select(m =>
         {
             var moduleId = MenuTree.RootModuleId(m.Id, byId);
             grantByMenu.TryGetValue(m.Id, out var g);
-            var activeDeny = g is { Effect: UserMenuEffect.Deny } && UserMenuGrantRules.IsActive(g, now);
+            var activeDeny = activeDenyIds.Contains(m.Id);
             return new UserMenuEffectiveNode
             {
                 MenuId = m.Id,
@@ -171,8 +175,8 @@ public class UserMenuGrantService(
                 Grant = g?.Effect,
                 ExpireTime = g?.ExpireTime,
                 Expired = g is not null && !UserMenuGrantRules.IsActive(g, now),
-                // 自己的拒绝生效中时,收回的原因是它本身,不是祖先
-                DeniedByAncestor = result.DeniedMenuIds.Contains(m.Id) && !activeDeny,
+                // 只看祖先,和节点自己有没有拒绝无关:自己与祖先都被拒时,撤掉自己的拒绝并不能恢复它
+                DeniedByAncestor = MenuTree.HasAncestorIn(m.Id, byId, activeDenyIds),
                 Grantable = grantable is null || (moduleId is { } mid && grantable.Contains(mid)),
                 LeakedCodes = activeDeny ? UserMenuGrantRules.LeakedCodes(m.Id, allMenus, result.EffectiveMenuIds) : [],
             };
@@ -293,7 +297,9 @@ public class UserMenuGrantService(
         : g.ExpireTime is { } t && t <= now.AddDays(ExpiringDays) ? UserMenuGrantStatus.Expiring
         : UserMenuGrantStatus.Active;
 
-    private static PagedList<UserMenuGrantPageItem> Empty(PageInputBase input) => new() { Current = input.Current, Size = input.Size, Total = 0 };
+    /// <summary>查询落空时的短路结果:页码、页大小照分页同一套规整与校验,超限的请求不会因为没有数据而"成功"。</summary>
+    private static PagedList<UserMenuGrantPageItem> Empty(PageInputBase input) =>
+        PagedListExtensions.EmptyPage<UserMenuGrantPageItem>(input.Current, input.Size);
 
     /// <summary>变更集自身的合法性:同一菜单只出现一次、效果取值有效、到期时间晚于当前时间、备注不超长、菜单存在。</summary>
     protected virtual async Task ValidateChangeSetAsync(IReadOnlyCollection<UserMenuGrantUpsert> upserts, IReadOnlyCollection<long> removes)

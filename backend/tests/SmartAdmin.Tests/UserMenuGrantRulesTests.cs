@@ -99,4 +99,24 @@ public class UserMenuGrantRulesTests
         Assert.Equal(2L, MenuTree.RootModuleId(21, byId));
         Assert.Null(MenuTree.RootModuleId(999, byId));
     }
+
+    [Fact]
+    public void Ancestor_lookup_excludes_the_node_itself_and_stops_on_broken_or_cyclic_chains()
+    {
+        var byId = Menus.ToDictionary(m => m.Id);
+        Assert.True(MenuTree.HasAncestorIn(11, byId, new HashSet<long> { 10 }));          // 父
+        Assert.True(MenuTree.HasAncestorIn(11, byId, new HashSet<long> { 1 }));           // 祖父
+        Assert.False(MenuTree.HasAncestorIn(10, byId, new HashSet<long> { 10 }));         // 自己不算
+        Assert.False(MenuTree.HasAncestorIn(11, byId, new HashSet<long> { 20, 12 }));     // 别的分支、兄弟
+        Assert.False(MenuTree.HasAncestorIn(1, byId, new HashSet<long> { 1 }));           // 根没有祖先
+        Assert.False(MenuTree.HasAncestorIn(11, byId, new HashSet<long>()));
+        Assert.False(MenuTree.HasAncestorIn(999, byId, new HashSet<long> { 1 }));         // 节点不存在
+
+        var broken = new SysMenu[] { M(5, 99) }.ToDictionary(m => m.Id);                  // 父节点不在表里:上溯到断点为止
+        Assert.True(MenuTree.HasAncestorIn(5, broken, new HashSet<long> { 99 }));
+        Assert.False(MenuTree.HasAncestorIn(5, broken, new HashSet<long> { 1 }));
+
+        var cyclic = new SysMenu[] { M(1, 2), M(2, 1) }.ToDictionary(m => m.Id);          // 成环:有限步内收手
+        Assert.False(MenuTree.HasAncestorIn(1, cyclic, new HashSet<long> { 3 }));
+    }
 }
