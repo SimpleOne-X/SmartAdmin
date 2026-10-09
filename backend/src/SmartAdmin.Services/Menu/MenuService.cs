@@ -63,7 +63,7 @@ public class MenuService(
         // 若角色仍关联已停用菜单,它不应继续让用户在门户看到该模块(Permission 本身也不会授出)。
         var byId = (await menus.AsQueryable().Where(m => m.Enabled).ToListAsync()).ToDictionary(m => m.Id);
         var accessibleModuleIds = grantedMenuIds
-            .Select(id => RootModuleId(id, byId))
+            .Select(id => MenuTree.RootModuleId(id, byId))
             .Where(mid => mid is not null)
             .Select(mid => mid!.Value)
             .ToHashSet();
@@ -91,7 +91,7 @@ public class MenuService(
         var byId = allMenus.ToDictionary(m => m.Id);
 
         // 该模块下的节点 = 其根目录 ModuleId == moduleId
-        var moduleMenus = allMenus.Where(m => RootModuleId(m.Id, byId) == moduleId).ToList();
+        var moduleMenus = allMenus.Where(m => MenuTree.RootModuleId(m.Id, byId) == moduleId).ToList();
 
         IEnumerable<SysMenu> visible = moduleMenus;
         if (!isSuperAdmin)
@@ -233,19 +233,6 @@ public class MenuService(
         Sort = m.Sort, Enabled = m.Enabled, ModuleId = m.ModuleId,
         Path = m.Path, Component = m.Component, Icon = m.Icon, Visible = m.Visible,
     };
-
-    /// <summary>上溯 <paramref name="menuId"/> 的 ParentId 链到根目录,返回根目录的 ModuleId(未挂模块或断链为 null)。</summary>
-    private static long? RootModuleId(long menuId, IReadOnlyDictionary<long, SysMenu> byId)
-    {
-        var cur = byId.GetValueOrDefault(menuId);
-        var guard = 0;
-        while (cur is not null && cur.ParentId != 0 && guard++ < WalkGuard)
-        {
-            if (!byId.TryGetValue(cur.ParentId, out var parent)) break;
-            cur = parent;
-        }
-        return cur?.ModuleId;
-    }
 
     /// <summary>按 ParentId 把平铺(已排序)节点拼成森林;父不在集合内的节点升为根。</summary>
     private static List<MenuNode> BuildForest(List<SysMenu> nodes)
