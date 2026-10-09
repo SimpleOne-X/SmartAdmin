@@ -261,9 +261,8 @@ export function buildThemeOverrides(opts: { dark: boolean; accent: string }): Gl
       thTextColor: text2,
       thFontWeight: '600',
       thIconColor: text3,
-      // 表格网格线取比 --separator 更实的发丝线:虚拟滚动的行带亚像素偏移,125% / 150% 缩放下线会被摊到两个像素上变淡,
-      // 0.16 的透明度会淡到几乎看不见
-      borderColor: hairlineStrong,
+      // 表格线(列竖线 / 外框 / 行线)的标准就是 --separator(亮色 0.16),不换更实的线色:见 DESIGN.md §5「表格线色」
+      borderColor: separator,
       borderRadius: '10px',
       thPaddingMedium: '6px 12px',
       tdPaddingMedium: '4px 12px',

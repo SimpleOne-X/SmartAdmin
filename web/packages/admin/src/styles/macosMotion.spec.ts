@@ -35,17 +35,23 @@ describe('表格:列竖线和外框用 Naive 原生的', () => {
     )
   })
 
-  it('线色取 --hairline-strong:比 --separator 实,125% / 150% 缩放下亚像素偏移摊淡后仍看得见', () => {
+  it('线色标准是 --separator(亮色 0.16),不跟更实的 --hairline-strong 走(DESIGN.md §5「表格线色」)', () => {
     const root = document.documentElement
-    root.style.setProperty('--hairline-strong', 'rgba(1, 2, 3, 0.4)')
-    root.style.setProperty('--separator', 'rgba(9, 9, 9, 0.1)')
+    root.style.setProperty('--separator', 'rgba(1, 2, 3, 0.16)')
+    root.style.setProperty('--hairline-strong', 'rgba(4, 5, 6, 0.4)')
     try {
       const o = buildThemeOverrides({ dark: false, accent: '#0A84FF' })
-      expect(o.DataTable?.borderColor).toBe('rgba(1, 2, 3, 0.4)')
+      expect(o.DataTable?.borderColor).toBe('rgba(1, 2, 3, 0.16)')
     } finally {
-      root.style.removeProperty('--hairline-strong')
       root.style.removeProperty('--separator')
+      root.style.removeProperty('--hairline-strong')
     }
+  })
+
+  it('亮色 --separator 的透明度锁在 0.16:表格线的深浅由它决定,别随手调', () => {
+    const m = read('tokens.css').match(/--separator:\s*rgba\([^)]*,\s*([\d.]+)\)/)
+    expect(m, '找不到 :root 里的 --separator').not.toBeNull()
+    expect(Number(m![1])).toBe(0.16)
   })
 })
 

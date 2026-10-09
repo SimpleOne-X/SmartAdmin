@@ -6,7 +6,7 @@
    下面这些情形不需要再写覆盖:
    - 斑马纹:不加(HIG 建议多列表格用,但 ERP 宽表叠上选中色、悬停色会显得花,保持细分隔线);
    - 列分隔竖线 + 表格外框:用 Naive 原生的(smart-naive-table 3.x 内部是 single-line:false,bordered 走默认的 true),
-     线色取主题 DataTable.borderColor(= --hairline-strong),这里不覆盖。要给某张表去线,传 single-line / :bordered="false";
+     线色取主题 DataTable.borderColor(= --separator,标准见 DESIGN.md §5「表格线色」),这里不覆盖。要给某张表去线,传 single-line / :bordered="false";
    - 固定列 / 固定表头的实底:DataTable 的 tdColor / thColor 本身就是不透明实色,固定列 sticky 叠在别的列上不会透底,
      不必逐态覆盖;
    - SmartTable 当前行(activeRowKey)的固定列补丁:库自己对整行 td 叠 background-image,固定列同样被覆盖,不需要补丁。 */
