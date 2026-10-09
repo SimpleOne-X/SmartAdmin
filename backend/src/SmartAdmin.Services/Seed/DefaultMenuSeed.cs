@@ -89,7 +89,7 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 237, ParentId = 230, Type = MenuType.Button, Title = "用户-导入", Permission = Codes("POST:/api/v1/sys/user/import/preview", "POST:/api/v1/sys/user/import/validate", "POST:/api/v1/sys/user/import/error-report", "POST:/api/v1/sys/user/import/commit"), Sort = 7, Enabled = true },
         new SysMenu { Id = 238, ParentId = 230, Type = MenuType.Button, Title = "用户-导出", Permission = "GET:/api/v1/sys/user/export", Sort = 8, Enabled = true },
         // 单独授权:弹窗要读菜单树;回显、提交、一览拆开授没有意义,同「角色-授权菜单」的归法。
-        new SysMenu { Id = 239, ParentId = 230, Type = MenuType.Button, Title = "用户-授权菜单", Permission = Codes("GET:/api/v1/sys/menu/tree", "PUT:/api/v1/sys/user/menu"), Sort = 9, Enabled = true },
+        new SysMenu { Id = 239, ParentId = 230, Type = MenuType.Button, Title = "用户-授权菜单", Permission = Codes("GET:/api/v1/sys/menu/tree", "GET:/api/v1/sys/user/{id}/menus", "GET:/api/v1/sys/user/{id}/menus/effective", "PUT:/api/v1/sys/user/menu", "GET:/api/v1/sys/user/menu-grants/page"), Sort = 9, Enabled = true },
 
         // 角色管理页(SysRoleController:CRUD + 授菜单 + 配数据范围 + 授用户)。
         // 三个授权抽屉各自是一颗按钮:回显(GET)与提交(PUT)一起授,授权菜单抽屉还要读菜单树。

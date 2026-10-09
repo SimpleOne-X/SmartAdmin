@@ -482,7 +482,10 @@ public class UserMenuGrantPolicyTests
             var grants = new UpdateFailsGrantRepository(sp.GetRequiredService<IRepository<SysUserMenu>>().Db);
             var service = new UserMenuGrantService(
                 grants, sp.GetRequiredService<IRepository<SysUser>>(), sp.GetRequiredService<IRepository<SysMenu>>(),
-                sp.GetRequiredService<IUserMenuGrantPolicy>(), cache, bus, sp.GetRequiredService<TimeProvider>());
+                sp.GetRequiredService<IRepository<SysModule>>(), sp.GetRequiredService<IRepository<SysRole>>(),
+                sp.GetRequiredService<IRepository<SysUserRole>>(), sp.GetRequiredService<IRepository<SysRoleMenu>>(),
+                sp.GetRequiredService<IUserMenuGrantPolicy>(), sp.GetRequiredService<IDataScopeGuard>(),
+                cache, bus, sp.GetRequiredService<TimeProvider>());
 
             // 先插入业务那条(成功),再更新系统那条(抛异常):插入必须随事务一起回滚
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyChangesAsync(target,
