@@ -64,6 +64,12 @@ import type {
   UpdateUserInput,
   UserDetail,
   UserItem,
+  UserMenuEffect,
+  UserMenuEffective,
+  UserMenuGrantItem,
+  UserMenuGrantPageItem,
+  UserMenuGrantStatus,
+  UserMenuGrantUpsert,
   UserProfile,
   UserShortcutItem,
   WorkbenchTodoSummary,
@@ -583,6 +589,46 @@ export const userApi = {
     client
       .PUT('/api/v1/sys/user/{id}/enabled', { params: { path: { id } }, body: { enabled } })
       .then(r => unwrap<boolean>(r)),
+
+  // ── 单独授权 ──
+
+  /** 某用户的单独授权记录(授权菜单弹窗回显)。 */
+  getMenuGrants: (id: number) =>
+    client
+      .GET('/api/v1/sys/user/{id}/menus', { params: { path: { id } } })
+      .then(r => unwrap<UserMenuGrantItem[]>(r)),
+  /** 某用户的有效权限与来源:能否授、能否编辑及原因、委派最长天数、模块清单,一次取齐。 */
+  getEffectiveMenus: (id: number) =>
+    client
+      .GET('/api/v1/sys/user/{id}/menus/effective', { params: { path: { id } } })
+      .then(r => unwrap<UserMenuEffective>(r)),
+  /** 按变更集保存单独授权:没提到的记录原样保留。 */
+  setMenuGrants: (userId: number, upserts: UserMenuGrantUpsert[], removes: number[]) =>
+    client
+      .PUT('/api/v1/sys/user/menu', { body: { userId, upserts, removes } })
+      .then(r => unwrap<boolean>(r)),
+  /** 单独授权一览:分页 + 筛选(用户 / 授权人模糊,效果、状态精确)。 */
+  menuGrantPage: (params: {
+    page: number
+    pageSize: number
+    user?: string
+    grantor?: string
+    effect?: UserMenuEffect
+    status?: UserMenuGrantStatus
+  }) =>
+    client
+      .GET('/api/v1/sys/user/menu-grants/page', {
+        params: {
+          query: {
+            ...pageParams(params),
+            User: params.user,
+            Grantor: params.grantor,
+            Effect: params.effect,
+            Status: params.status,
+          },
+        },
+      })
+      .then(r => toPage<UserMenuGrantPageItem>(r)),
 
   // ── 导入 / 导出 ──
 
