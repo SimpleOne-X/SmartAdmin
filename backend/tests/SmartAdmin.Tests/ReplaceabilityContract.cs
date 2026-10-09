@@ -68,6 +68,8 @@ public static class ReplaceabilityContract
         (typeof(IRoleGrantPolicy), ServiceLifetime.Scoped),
         (typeof(IRbacService), ServiceLifetime.Scoped),
         (typeof(IRoleService), ServiceLifetime.Scoped),
+        (typeof(IUserMenuGrantPolicy), ServiceLifetime.Scoped),
+        (typeof(IUserMenuGrantService), ServiceLifetime.Scoped),
 
         // 基础设施
         (typeof(ICacheProvider), ServiceLifetime.Singleton),

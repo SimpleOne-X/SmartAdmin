@@ -118,6 +118,9 @@ public static class ServicesSetup
         // 单独授权表在鉴权热路径上:建表被跳过时库就绪即确认它在,缺了点名拦下而不是放进程起来再 500
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, UserMenuGrantTableGuard>());
         services.TryAddScoped<IRoleService, RoleService>();   // 角色生命周期 CRUD(授权/数据范围仍走 IRbacService)
+        // 用户单独授权:守卫是委派授权的唯一判定出口,服务的保存与读接口都经它
+        services.TryAddScoped<IUserMenuGrantPolicy, UserMenuGrantPolicy>();
+        services.TryAddScoped<IUserMenuGrantService, UserMenuGrantService>();
 
         // 数据范围解析(招牌能力):合并用户多角色范围,结果按用户缓存
         services.TryAddScoped<IDataScopeProvider, DataScopeProvider>();
