@@ -33,6 +33,7 @@ import ExportColumnsModal from '#/components/ExportColumnsModal/index.vue'
 import UserFormModal from './components/UserFormModal.vue'
 import ResetPasswordModal from './components/ResetPasswordModal.vue'
 import UserGrantMenuSheet from './components/UserGrantMenuSheet.vue'
+import UserGrantOverviewDrawer from './components/UserGrantOverviewDrawer.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { mfaApi, userApi, positionApi, roleApi, orgApi } from '#/api'
@@ -217,9 +218,11 @@ const initial = (name?: string | null) => (name || '?').slice(0, 1)
 const importShow = ref(false)
 const exportShow = ref(false)
 const exporting = ref(false)
+// 单独授权一览抽屉(全系统的授权例外在一张表里复核)
+const grantOverviewShow = ref(false)
 
-// 导入 / 导出收进表格内置的「更多」菜单(统一标准:业务按钮只留高频动作)。
-// 没有任何权限时 more 为空数组,按钮不出现,不会露出一个空菜单;权限码与原按钮的 v-auth 一字不差。
+// 导入 / 导出、单独授权一览收进表格内置的「更多」菜单(统一标准:业务按钮只留高频动作)。
+// 没有任何权限时 more 为空数组,按钮不出现,不会露出一个空菜单;导入 / 导出的权限码与原按钮的 v-auth 一字不差。
 const toolbarMore = computed(() =>
   [
     authStore.hasPerm('POST:/api/v1/sys/user/import/preview')
@@ -228,6 +231,9 @@ const toolbarMore = computed(() =>
     authStore.hasPerm('GET:/api/v1/sys/user/export')
       ? { label: t('export.button'), key: 'export' }
       : null,
+    authStore.hasPerm('GET:/api/v1/sys/user/menu-grants/page')
+      ? { label: t('userGrant.overview'), key: 'grantOverview' }
+      : null,
   ].filter((o): o is { label: string; key: string } => o !== null),
 )
 // 引用稳定的 toolbar 配置:不要把 `{ ...TABLE_TOOLBAR, more }` 直接写进模板,那样每次重渲染都会新建一个对象
@@ -235,6 +241,7 @@ const toolbar = computed(() => ({ ...TABLE_TOOLBAR, more: toolbarMore.value }))
 function onMoreSelect(key: string | number) {
   if (key === 'import') importShow.value = true
   else if (key === 'export') exportShow.value = true
+  else if (key === 'grantOverview') grantOverviewShow.value = true
 }
 
 /** 与后端 UserExportProfile.Columns 对齐(前端无列清单端点,照档案硬编码)。 */
@@ -647,6 +654,8 @@ deriveHeaderFilters(columns)
   <ResetPasswordModal ref="resetModalRef" />
 
   <UserGrantMenuSheet ref="grantSheetRef" @saved="() => tableRef?.refresh()" />
+
+  <UserGrantOverviewDrawer v-model:show="grantOverviewShow" @adjust="u => grantSheetRef?.open(u)" />
 
   <ImportWizard
     v-model:show="importShow"
