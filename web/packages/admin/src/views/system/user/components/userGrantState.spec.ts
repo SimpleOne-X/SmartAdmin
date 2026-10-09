@@ -115,6 +115,59 @@ describe('变更集', () => {
   })
 })
 
+// 后端的到期时间不一定是 23:59:59(别的入口写的、或历史数据);日期没动就必须原样带回
+const grantAt = (expireTime: string): Draft =>
+  draftFromGrants([
+    { menuId: 1, effect: UserMenuEffect.Allow, expireTime, remark: 'a', grantTime: 't' },
+  ])
+
+describe('非整点到期时间', () => {
+  it('只改备注时沿用基线的原始到期时间串', () => {
+    const draft = grantAt('2026-10-20T08:30:00')
+    draft.get(1)!.remark = 'b'
+    expect(diffDraft(grantAt('2026-10-20T08:30:00'), draft).upserts).toEqual([
+      { menuId: 1, effect: UserMenuEffect.Allow, expireTime: '2026-10-20T08:30:00', remark: 'b' },
+    ])
+  })
+
+  it('已过期的记录只改备注,不会被写成当天最后一秒而复活', () => {
+    const draft = grantAt('2026-10-09T08:00:00') // TODAY 当天早上 8 点,此时 10 点已过期
+    draft.get(1)!.remark = 'b'
+    expect(diffDraft(grantAt('2026-10-09T08:00:00'), draft).upserts[0].expireTime).toBe(
+      '2026-10-09T08:00:00',
+    )
+  })
+
+  it('经 setTriState 切换效果时同样沿用原始到期时间串', () => {
+    const draft = grantAt('2026-10-20T08:30:00')
+    setTriState(draft, 1, 'deny', null)
+    expect(diffDraft(grantAt('2026-10-20T08:30:00'), draft).upserts).toEqual([
+      { menuId: 1, effect: UserMenuEffect.Deny, expireTime: '2026-10-20T08:30:00', remark: 'a' },
+    ])
+  })
+
+  it('日期被改动才重新生成当天最后一秒', () => {
+    const draft = grantAt('2026-10-20T08:30:00')
+    draft.get(1)!.expireDate = '2026-10-25'
+    expect(diffDraft(grantAt('2026-10-20T08:30:00'), draft).upserts[0].expireTime).toBe(
+      '2026-10-25T23:59:59',
+    )
+  })
+
+  it('日期改了又改回原值,等于没动', () => {
+    const draft = grantAt('2026-10-20T08:30:00')
+    draft.get(1)!.expireDate = '2026-10-25'
+    draft.get(1)!.expireDate = '2026-10-20'
+    expect(diffDraft(grantAt('2026-10-20T08:30:00'), draft)).toEqual({ upserts: [], removes: [] })
+  })
+
+  it('清掉到期日就是长期,不再带原始时间串', () => {
+    const draft = grantAt('2026-10-20T08:30:00')
+    draft.get(1)!.expireDate = null
+    expect(diffDraft(grantAt('2026-10-20T08:30:00'), draft).upserts[0].expireTime).toBeNull()
+  })
+})
+
 describe('到期日', () => {
   it('上限 = 今天 + 最长天数;不限时为 null', () => {
     expect(maxExpireDate(90, TODAY)).toBe('2027-01-07')

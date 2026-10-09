@@ -1,6 +1,8 @@
 // 用户授权弹窗的草稿状态(纯函数,组件只管渲染)。草稿 = 菜单 Id → 单独授权记录;没有记录就是「跟随角色」。
 // 保存只提交变更集:与打开时的快照比,算出新增 / 修改(upserts)与移除(removes),没动的记录不提交。
-// 到期按日期:前端只选日期,提交当天 23:59:59;普通管理员授允许的上限是今天 + 最长天数(后端同一口径)。
+// 到期按日期:前端只选日期,新选的日期提交当天 23:59:59;日期没动的老记录原样带回它的到期时间串
+//(后端存的不一定是 23:59:59,只改备注不能把它悄悄改写,更不能让已过期的记录重新生效)。
+// 普通管理员授允许的上限是今天 + 最长天数(后端同一口径)。
 import { splitPermission, type MenuTreeNode } from '#/types/menu'
 import { UserMenuEffect, type UserMenuGrantItem, type UserMenuGrantUpsert } from '#/types/api'
 
@@ -8,8 +10,10 @@ export type TriState = 'follow' | 'allow' | 'deny'
 
 export interface DraftEntry {
   effect: UserMenuEffect
-  /** 到期日 yyyy-MM-dd,当天最后一秒失效;null = 长期 */
+  /** 到期日 yyyy-MM-dd;null = 长期 */
   expireDate: string | null
+  /** 基线记录的原始到期时间串,只在日期没被改动时原样带回;新建的记录没有 */
+  expireTime?: string | null
   remark: string | null
 }
 export type Draft = Map<number, DraftEntry>
@@ -39,7 +43,12 @@ export function draftFromGrants(grants: UserMenuGrantItem[]): Draft {
   return new Map(
     grants.map(g => [
       g.menuId,
-      { effect: g.effect, expireDate: toExpireDate(g.expireTime), remark: g.remark ?? null },
+      {
+        effect: g.effect,
+        expireDate: toExpireDate(g.expireTime),
+        expireTime: g.expireTime ?? null,
+        remark: g.remark ?? null,
+      },
     ]),
   )
 }
@@ -67,7 +76,12 @@ export function setTriState(
   const effect = next === 'allow' ? UserMenuEffect.Allow : UserMenuEffect.Deny
   const cur = draft.get(menuId)
   const expireDate = cur?.expireDate ?? (effect === UserMenuEffect.Allow ? defaultExpireDate : null)
-  draft.set(menuId, { effect, expireDate, remark: cur?.remark ?? null })
+  draft.set(menuId, {
+    effect,
+    expireDate,
+    expireTime: cur?.expireTime,
+    remark: cur?.remark ?? null,
+  })
 }
 
 const normRemark = (remark: string | null) => remark?.trim() || null
@@ -76,6 +90,12 @@ const sameEntry = (a: DraftEntry, b: DraftEntry) =>
   a.effect === b.effect &&
   a.expireDate === b.expireDate &&
   normRemark(a.remark) === normRemark(b.remark)
+
+/** 提交用的到期时间:日期没动就沿用原始时间串,日期被改动(或新选)才取当天最后一秒。 */
+const expireTimeOf = (entry: DraftEntry) =>
+  entry.expireTime && toExpireDate(entry.expireTime) === entry.expireDate
+    ? entry.expireTime
+    : toExpireTime(entry.expireDate)
 
 /** 与打开时的快照比出变更集。按菜单 Id 升序,提交内容稳定。 */
 export function diffDraft(
@@ -89,7 +109,7 @@ export function diffDraft(
     upserts.push({
       menuId,
       effect: entry.effect,
-      expireTime: toExpireTime(entry.expireDate),
+      expireTime: expireTimeOf(entry),
       remark: normRemark(entry.remark),
     })
   }
