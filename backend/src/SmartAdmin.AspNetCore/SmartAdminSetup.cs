@@ -72,8 +72,9 @@ public static class SmartAdminSetup
 
         services.TryAddSingleton<SmartAdminRegistered>();
         services.AddSmartAdminOptions(options);
-        // 定时任务:API 与 Worker 共用同一校验入口(租约/正数项/CIDR 围栏)
+        // 选项校验:API 与 Worker 共用同一入口。定时任务查租约/正数项/CIDR 围栏,安全选项查取值范围
         AdminJobsOptionsValidation.Validate(options.Jobs);
+        AdminSecurityOptionsValidation.Validate(options.Security);
 
         // ── 雪花机器号:多副本同号 = 同毫秒发号撞主键。这是数据损坏级的问题,且不会有任何报错提示 ──
         //   真正的来源不是算法:同一份配置被同机多个进程同时加载(IIS 应用池重叠回收期间新旧 w3wp 并存、Web 园、

@@ -253,8 +253,8 @@ To lock or pull back a grant, a super admin turns the switch off first and then 
 | --- | --- | --- |
 | `SmartAdmin:Security:DelegatedGrantMaxDays` | `90` | When an ordinary admin grants an Allow, the latest expiry date is this many days after today, judged by date |
 
+The range is 0 to 3650; a value outside it makes startup fail, and a negative value is never treated as "unlimited".
 `0` means unlimited: no expiry time is required and there is no upper bound.
-A negative value is undefined, so don't set one.
 Super admins are not subject to this setting.
 
 Role grants have a rule of their own: system menus can be granted only to built-in roles.

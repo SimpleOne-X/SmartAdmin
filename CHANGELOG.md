@@ -89,7 +89,7 @@
   - 新接口 `IUserMenuGrantService`、`IUserMenuGrantPolicy`，用 `TryAdd` 注册，可前置替换。
     默认实现 `UserMenuGrantService`、`UserMenuGrantPolicy` 是 public 类，长流程拆成 `protected virtual` 步骤（校验、`PlanChangesAsync`、`PersistAsync`、`AfterCommitAsync` 等），可单独覆写。
   - 新事件 `UserMenuGrantsChangedEvent`：保存提交、缓存失效之后经 `IEventBus` 发布，带目标用户、操作人和新增、修改、移除的明细，内核自己不订阅。
-  - 新增 public 类型：实体 `SysUserMenu`，枚举 `UserMenuEffect` 与 `UserMenuGrantStatus`，规则 `UserMenuGrantRules`，查询 `UserMenuGrantQueries`，菜单树运算 `MenuTree`（`RootModuleId`、`HasAncestorIn`、`WithDescendants`）。
+  - 新增 public 类型：实体 `SysUserMenu`，枚举 `UserMenuEffect` 与 `UserMenuGrantStatus`，规则 `UserMenuGrantRules`，查询 `UserMenuGrantQueries`，菜单树运算 `MenuTree`（`RootModuleId`、`IsKernelSystemMenu`、`HasAncestorIn`、`WithDescendants`），安全选项启动校验 `AdminSecurityOptionsValidation`。
   - `SmartAdmin.SqlSugar` 的 `PagedListExtensions` 新增 `EmptyPage<T>`，查询在到达数据库之前就能确定没有结果时用它短路。
     页码、页大小的规整与超限校验抽成共用，`ToPagedListAsync` 的行为不变。
   - `RbacPermissionProvider`、`MenuService` 主构造器末尾追加可选参数 `TimeProvider? time = null`。
@@ -105,7 +105,8 @@
 
 - **配置。**
   `SmartAdmin:Security:DelegatedGrantMaxDays`（默认 `90`）：普通管理员授出的「允许」，到期日最多晚于今天几天，按日期判。
-  `0` 表示不限，既不要求到期时间，也没有上限。「拒绝」和超管不受这项约束。配成负数没有定义，别这么配。
+  取值 0 到 3650，超出范围启动即拒（API 与 Worker 都校验，抛 `InvalidOperationException`，信息里写明配置名、范围和实际值）。
+  `0` 表示不限，既不要求到期时间，也没有上限。「拒绝」和超管不受这项约束。
 
 - **前端（`smart-admin-web`）。**
   - 用户页行「更多」新增「授权菜单」（需要 `PUT:/api/v1/sys/user/menu`，超管那一行和自己那一行不出入口），工具栏「更多」新增「单独授权一览」（需要 `GET:/api/v1/sys/user/menu-grants/page`）。

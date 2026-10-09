@@ -46,6 +46,7 @@ public static class WorkerSetup
                 "Worker 天然是多实例形态,机器号同号会让不同进程在同毫秒发出相同的雪花 Id、撞主键。");
         // 与 AddSmartAdmin 共用:租约、正数项、HTTP 围栏 CIDR——Worker 才是真正执行任务的一侧,不能漏
         AdminJobsOptionsValidation.Validate(options.Jobs);
+        AdminSecurityOptionsValidation.Validate(options.Security);   // 与 AddSmartAdmin 共用:Worker 也读这些选项,配错不能只在 API 侧才发现
 
         services.TryAddSingleton<SmartAdminRegistered>();
         services.TryAddSingleton(options.Id);   // 机器号已在上面强校验过,直接入容器(API 宿主是抢号工厂,故不在共用助手里)
