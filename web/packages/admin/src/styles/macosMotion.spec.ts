@@ -65,6 +65,33 @@ describe('表格工具条:勾选后的批量栏与正常态同高', () => {
   })
 })
 
+describe('提示气泡:和其它浮层同一套表面,随亮暗主题走', () => {
+  const css = read('tokens.css')
+
+  it('--tooltip-bg 亮 / 暗两套都是不透明实底(半透明会让底下行里的字透出来)', () => {
+    const all = [...css.matchAll(/--tooltip-bg:\s*([^;]+);/g)].map(m => m[1].trim())
+    expect(all, '亮色一处 + 暗色一处').toHaveLength(2)
+    for (const v of all) expect(v).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+
+  it('字色取 --text-1,不写死白色(白字只在深底下成立,亮色主题下就是白底白字)', () => {
+    const root = document.documentElement
+    root.style.setProperty('--tooltip-bg', '#fbfcff')
+    root.style.setProperty('--text-1', '#101828')
+    try {
+      const o = buildThemeOverrides({ dark: false, accent: '#0A84FF' })
+      expect(o.Tooltip?.color).toBe('#fbfcff')
+      expect(o.Tooltip?.textColor).toBe('#101828')
+      // Tooltip 底下的 Popover 会被全局 Popover 覆盖压过,peers 里必须同样给一份
+      expect(o.Tooltip?.peers?.Popover?.color).toBe('#fbfcff')
+      expect(o.Tooltip?.peers?.Popover?.textColor).toBe('#101828')
+    } finally {
+      root.style.removeProperty('--tooltip-bg')
+      root.style.removeProperty('--text-1')
+    }
+  })
+})
+
 describe('弹窗:从 0.96 落定,退场比进场快', () => {
   const css = read('index.css')
   const enterFrom =

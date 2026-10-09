@@ -37,6 +37,7 @@ export function buildThemeOverrides(opts: { dark: boolean; accent: string }): Gl
   const separator = v('--separator')
   const hairline = v('--hairline')
   const hairlineStrong = v('--hairline-strong')
+  const tooltipBg = v('--tooltip-bg')
   const glassStrong = v('--glass-strong')
   const fill = v('--fill')
   const fillStrong = v('--fill-strong')
@@ -399,19 +400,23 @@ export function buildThemeOverrides(opts: { dark: boolean; accent: string }): Gl
       optionColorHover: hoverBg,
       dividerColor: separator,
     },
+    // 提示气泡和下拉 / 弹层同一套浮层表面,随亮暗主题走(亮色近白底深字,暗色深蓝底亮字),不做亮暗都黑的特例。
+    // 底色、字色、阴影成套给:Tooltip 底下是 Popover,Naive 合并时全局 `Popover` 覆盖(上面的 elevated 与大阴影)
+    // 压过 Tooltip 自带的值,所以同一套要在 peers.Popover 里再写一遍(它在合并链最后,只对 Tooltip 生效)。
+    // 阴影用描边 + 卡片级的轻阴影:气泡很小,弹层那种大范围投影会显得过重。
     Tooltip: {
-      color: v('--tooltip-bg'),
-      textColor: '#FFFFFF',
+      color: tooltipBg,
+      textColor: text1,
       borderRadius: '8px',
       padding: '5px 9px',
-      // Tooltip 底下是 Popover,而 Naive 合并时全局 `Popover` 覆盖(上面的实底 elevated)压过 Tooltip 自带的 color,
-      // 文字色却仍是 Tooltip 的白色 → 亮色下白底白字。peers.Popover 在合并链最后,只对 Tooltip 生效。
+      boxShadow: `0 0 0 1px ${hairlineStrong}, ${shadow1}`,
       peers: {
         Popover: {
-          color: v('--tooltip-bg'),
-          textColor: '#FFFFFF',
+          color: tooltipBg,
+          textColor: text1,
           borderRadius: '8px',
           padding: '5px 9px',
+          boxShadow: `0 0 0 1px ${hairlineStrong}, ${shadow1}`,
         },
       },
     },

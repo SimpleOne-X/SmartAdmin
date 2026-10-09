@@ -123,7 +123,7 @@
   --th-bg: #f4f7fb;
   --th-bg-hover: #edf2f9;
   --td-bg-hover: #eff4fb;
-  --tooltip-bg: rgba(17, 17, 19, 0.92);
+  --tooltip-bg: #fbfcff; /* 提示气泡:实底(半透明会让底下行里的字透出来,箭头也会和气泡不同色) */
   --badge-bg: #ff3b30;
   --input-border-hover: rgba(20, 40, 90, 0.34);
   --select-border-hover: rgba(40, 60, 100, 0.5);
@@ -349,7 +349,7 @@
   --th-bg: #1a2540;
   --th-bg-hover: #222f4e;
   --td-bg-hover: #17223a;
-  --tooltip-bg: rgba(24, 34, 60, 0.96);
+  --tooltip-bg: #1d2a4b;
   --badge-bg: #ff453a;
   --input-border-hover: rgba(160, 190, 255, 0.42);
   --select-border-hover: rgba(160, 190, 255, 0.52);
