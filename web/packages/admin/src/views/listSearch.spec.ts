@@ -22,6 +22,8 @@ const EMBEDDED = new Set([
   'views/system/job-log/components/AttemptTable.vue',
   // 导入向导「预览改错」步骤里的表:单元格就是输入框 / 字典下拉,嵌在向导弹窗里
   'components/ImportWizard/index.vue',
+  // 用户授权弹窗「有效权限」页签里的只读表:随弹窗定高,搜索 / 工具栏对它没有意义
+  'views/system/user/components/UserGrantEffectiveTable.vue',
 ])
 
 /** `#toolbar`(左半)里放的不是按钮,而是限定数据范围的控件,允许留在左半。 */

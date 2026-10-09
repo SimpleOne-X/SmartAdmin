@@ -32,10 +32,12 @@ import ImportWizard, { type ImportWizardApi } from '#/components/ImportWizard/in
 import ExportColumnsModal from '#/components/ExportColumnsModal/index.vue'
 import UserFormModal from './components/UserFormModal.vue'
 import ResetPasswordModal from './components/ResetPasswordModal.vue'
+import UserGrantMenuSheet from './components/UserGrantMenuSheet.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { mfaApi, userApi, positionApi, roleApi, orgApi } from '#/api'
 import { useAuthStore } from '#/stores/auth'
+import { useUserStore } from '#/stores/user'
 import { translateError } from '#/utils/error'
 import {
   SEARCH_ACTIONS,
@@ -63,6 +65,10 @@ const { checkedKeys, run: batchDelete } = useBatchDelete({
 // 新增/编辑弹窗 + 重置密码弹窗(表单/校验/保存均在各自组件内,父页只传下拉选项 + 收 saved/passwordGenerated)。
 const userFormRef = ref<InstanceType<typeof UserFormModal> | null>(null)
 const resetModalRef = ref<InstanceType<typeof ResetPasswordModal> | null>(null)
+// 授权菜单弹窗(用户单独授权);超管那一行和自己那一行不出入口(后端同样拒绝)
+const grantSheetRef = ref<InstanceType<typeof UserGrantMenuSheet> | null>(null)
+const userStore = useUserStore()
+const myId = computed(() => userStore.userInfo?.userId)
 
 const clearMfaLoading = ref(false)
 
@@ -408,6 +414,9 @@ const columns: SmartTableColumn<UserItem>[] = [
     hideInSetting: true,
     render: r => {
       const rawMoreOptions: (DropdownOption | null)[] = [
+        authStore.hasPerm('PUT:/api/v1/sys/user/menu') && !r.isSuperAdmin && r.id !== myId.value
+          ? { key: 'grantMenus', label: t('userGrant.action'), icon: menuIcon('ph:list-checks') }
+          : null,
         authStore.hasPerm('PUT:/api/v1/sys/user/{id}/password')
           ? { key: 'resetPassword', label: t('user.resetPassword'), icon: menuIcon('ph:key') }
           : null,
@@ -461,6 +470,8 @@ const columns: SmartTableColumn<UserItem>[] = [
                 onSelect: (key: string) => {
                   if (key === 'resetPassword') resetModalRef.value?.openReset(r)
                   else if (key === 'clearMfa') void clearUserMfa(r)
+                  else if (key === 'grantMenus')
+                    grantSheetRef.value?.open({ id: r.id, name: r.name })
                 },
               },
               () =>
@@ -634,6 +645,8 @@ deriveHeaderFilters(columns)
   />
 
   <ResetPasswordModal ref="resetModalRef" />
+
+  <UserGrantMenuSheet ref="grantSheetRef" @saved="() => tableRef?.refresh()" />
 
   <ImportWizard
     v-model:show="importShow"
