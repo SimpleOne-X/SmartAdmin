@@ -249,6 +249,13 @@ export function collectChecked(groups: CatalogGroup[]): number[] {
 /** 内置 system 模块的 Id(与后端 DefaultModuleSeed.BUILTIN_MODULE_ID 一致)。 */
 export const SYSTEM_MODULE_ID = 1
 
+/**
+ * 是不是内置角色。只有后端明确给 false 才算非内置:字段缺省(后端版本落后)时不做任何过滤,
+ * 否则保存是全量替换,被隐藏的系统菜单 id 会从提交里消失,等于静默撤销内置角色的授权。
+ */
+export const isBuiltinRole = (role: { isBuiltin?: boolean | null }): boolean =>
+  role.isBuiltin !== false
+
 /** 系统模块的菜单只能授给内置角色:非内置角色去掉挂在系统模块下的顶级节点(后端同样拒绝)。 */
 export const treeForRole = (tree: MenuTreeNode[], builtinRole: boolean): MenuTreeNode[] =>
   builtinRole ? tree : tree.filter(n => n.moduleId !== SYSTEM_MODULE_ID)

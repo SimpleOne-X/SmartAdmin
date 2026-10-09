@@ -83,9 +83,9 @@ const rules: FormRules = {
 const editingId = ref<number | null>(null)
 /** 正在编辑内置 system 模块:可转授开关固定关、置灰(后端读写都按 false)。 */
 const editingBuiltin = computed(() => editingId.value !== null && form.code === 'system')
-/** NSwitch 只收布尔,null(存量模块)按关显示。 */
+/** NSwitch 只收布尔,null(存量模块)按关显示;内置模块恒显示为关,不论后端返回什么。 */
 const delegatable = computed({
-  get: () => form.isDelegatable === true,
+  get: () => !editingBuiltin.value && form.isDelegatable === true,
   set: (v: boolean) => (form.isDelegatable = v),
 })
 const blank = (): ModuleInput => ({
@@ -111,7 +111,8 @@ const toInput = (r: ModuleRow): ModuleInput => ({
   sort: r.sort,
   enabled: r.enabled,
   remark: r.remark ?? '',
-  isDelegatable: r.isDelegatable ?? false,
+  // 内置模块恒为不可转授:编辑回填与行内改状态都提交 false,不把后端偶发的 true 带回去
+  isDelegatable: isBuiltin(r) ? false : (r.isDelegatable ?? false),
 })
 
 function openAdd() {

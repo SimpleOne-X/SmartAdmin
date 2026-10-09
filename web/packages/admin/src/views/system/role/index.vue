@@ -25,7 +25,7 @@ import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import OrgTreeSelect from '#/components/OrgTreeSelect/index.vue'
 import UserPicker from '#/components/UserPicker/index.vue'
 import GrantMenuSheet from './components/GrantMenuSheet.vue'
-import { treeForRole, modulesForRole } from './components/grantMenuGroups'
+import { isBuiltinRole, treeForRole, modulesForRole } from './components/grantMenuGroups'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { roleApi, menuApi, moduleApi, userApi } from '#/api'
@@ -266,14 +266,14 @@ const menuTree = shallowRef<MenuTreeNode[]>([])
 const menuGranted = shallowRef<number[]>([])
 const menuRole = ref<SysRole | null>(null)
 const defaultModuleId = ref(UNASSIGNED)
-// 授权弹窗实际展示的应用:新建角色不含系统模块
+// 授权弹窗实际展示的应用:非内置角色不含系统模块
 const menuModules = shallowRef<ModuleRow[]>([])
 
 async function openMenus(r: SysRole) {
   try {
     const [tree, granted] = await Promise.all([menuApi.tree(), roleApi.getMenus(r.id)])
-    // 系统模块的菜单只能授给内置角色:新建角色的弹窗里不出现系统模块(后端同样拒绝)
-    const builtin = r.isBuiltin === true
+    // 系统模块的菜单只能授给内置角色:非内置角色的弹窗里不出现系统模块(后端同样拒绝)
+    const builtin = isBuiltinRole(r)
     menuRole.value = r
     menuTree.value = treeForRole(tree, builtin)
     menuModules.value = modulesForRole(modules.value, builtin)
@@ -460,7 +460,7 @@ async function saveScope() {
     :granted="menuGranted"
     :modules="menuModules"
     :default-module-id="defaultModuleId"
-    :hint="menuRole?.isBuiltin ? undefined : t('role.systemMenusBuiltinOnly')"
+    :hint="menuRole && !isBuiltinRole(menuRole) ? t('role.systemMenusBuiltinOnly') : undefined"
     :on-save="saveMenus"
   />
 

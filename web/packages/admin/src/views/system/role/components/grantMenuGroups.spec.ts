@@ -13,6 +13,7 @@ import {
   setMenuChecked,
   treeForRole,
   modulesForRole,
+  isBuiltinRole,
   SYSTEM_MODULE_ID,
 } from './grantMenuGroups'
 
@@ -230,5 +231,17 @@ describe('角色授权范围:系统模块只授内置角色', () => {
   it('内置角色原样', () => {
     expect(treeForRole(scopeTree, true)).toBe(scopeTree)
     expect(modulesForRole(modules, true)).toBe(modules)
+  })
+})
+
+describe('isBuiltinRole:只有后端明确说非内置才算非内置', () => {
+  it('true 是内置,false 是非内置', () => {
+    expect(isBuiltinRole({ isBuiltin: true })).toBe(true)
+    expect(isBuiltinRole({ isBuiltin: false })).toBe(false)
+  })
+
+  it('后端没带该字段(缺省 / null)按内置处理,不过滤', () => {
+    expect(isBuiltinRole({})).toBe(true)
+    expect(isBuiltinRole({ isBuiltin: null })).toBe(true)
   })
 })
