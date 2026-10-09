@@ -29,10 +29,13 @@ public class RbacPermissionProvider(
         var cached = await cache.GetAsync<string[]>(key, cancellationToken);
         if (cached is not null) return cached;
 
+        // 有将到期的单独授权时,缓存不能活过那一刻,否则到期后最长还按旧权限放行一个 TTL。
+        // 最早到期时刻要先于聚合取:聚合计入的授权到期时间都不早于它,封到它就不会活过任何一条被计入的授权;
+        // 先聚合再取的话,授权恰在两步之间到期,封顶查询看不到它,缓存会按整段配置 TTL 留着含已到期授权的结果
+        var nextExpiry = await GetNextGrantExpiryAsync(userId);
         var codes = await LoadFromDatabaseAsync(userId);
         var configured = cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : (TimeSpan?)null;
-        // 有将到期的单独授权时,缓存不能活过那一刻,否则到期后最长还按旧权限放行一个 TTL
-        var ttl = UserMenuGrantRules.CapTtl(configured, await GetNextGrantExpiryAsync(userId), Now);
+        var ttl = UserMenuGrantRules.CapTtl(configured, nextExpiry, Now);
         await cache.SetAsync(key, codes, ttl, cancellationToken);
         return codes;
     }

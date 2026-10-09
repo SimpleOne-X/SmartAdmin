@@ -63,9 +63,16 @@ public class MenuService(
     /// <summary>当前本地时间,单独授权是否到期按它判。</summary>
     protected DateTime Now => (time ?? TimeProvider.System).GetLocalNow().DateTime;
 
-    /// <summary>门户缓存 TTL:配置值;该用户有将到期的单独授权时按到期时刻封顶(超管不受单独授权影响,不查)。</summary>
-    private async Task<TimeSpan?> PortalTtlForAsync(long userId, bool isSuperAdmin) =>
-        isSuperAdmin ? PortalTtl : UserMenuGrantRules.CapTtl(PortalTtl, await GetNextGrantExpiryAsync(userId), Now);
+    /// <summary>
+    /// 该用户最早一条尚未到期的单独授权的到期时刻(超管不受单独授权影响,不查)。必须先于聚合取:
+    /// 聚合计入的授权到期时间都不早于它,缓存封到它就不会活过任何一条被计入的授权;
+    /// 先聚合再取的话,授权恰在两步之间到期,封顶查询看不到它,缓存会按整段配置 TTL 留着含已到期授权的结果。
+    /// </summary>
+    private async Task<DateTime?> PortalNextExpiryAsync(long userId, bool isSuperAdmin) =>
+        isSuperAdmin ? null : await GetNextGrantExpiryAsync(userId);
+
+    /// <summary>门户缓存 TTL:配置值,按 <paramref name="nextExpiry"/>(见 <see cref="PortalNextExpiryAsync"/>)封顶。</summary>
+    private TimeSpan? PortalTtlCappedBy(DateTime? nextExpiry) => UserMenuGrantRules.CapTtl(PortalTtl, nextExpiry, Now);
 
     /// <summary>令门户缓存(模块列表 + 菜单树)整体惰性失效——自增代际,旧键不再被读到。菜单/角色-菜单/用户-角色变更后调用。</summary>
     private Task BumpPortalAsync() => cache.IncrementAsync(CacheKeys.PortalGeneration);
@@ -78,8 +85,9 @@ public class MenuService(
         var cached = await cache.GetAsync<List<ModuleItem>>(key);
         if (cached is not null) return cached;                              // 命中(含缓存的空列表,与未缓存可区分)
 
+        var nextExpiry = await PortalNextExpiryAsync(userId, isSuperAdmin);   // 先取到期时刻,再聚合
         var result = await ComputeMyModulesAsync(userId, isSuperAdmin);
-        await cache.SetAsync(key, result, await PortalTtlForAsync(userId, isSuperAdmin));
+        await cache.SetAsync(key, result, PortalTtlCappedBy(nextExpiry));
         return result;
     }
 
@@ -112,8 +120,9 @@ public class MenuService(
         var cached = await cache.GetAsync<List<MenuNode>>(key);
         if (cached is not null) return cached;
 
+        var nextExpiry = await PortalNextExpiryAsync(userId, isSuperAdmin);   // 先取到期时刻,再聚合
         var result = await ComputeMyMenuTreeAsync(userId, isSuperAdmin, moduleId);
-        await cache.SetAsync(key, result, await PortalTtlForAsync(userId, isSuperAdmin));
+        await cache.SetAsync(key, result, PortalTtlCappedBy(nextExpiry));
         return result;
     }
 

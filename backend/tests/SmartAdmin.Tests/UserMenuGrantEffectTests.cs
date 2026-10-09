@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
 
@@ -136,5 +138,138 @@ public class UserMenuGrantEffectTests
 
         // 挪进被拒目录后,按钮成了被拒目录的子孙;缓存必须已被菜单更新失效
         Assert.DoesNotContain("GET:/api/v1/sys/position/page", await GrantTestKit.CodesOfAsync(f, uid));
+    }
+
+    // ── 缓存封顶:「最早到期」必须先于聚合取 ─────────────────────────────────
+    // 做法:聚合刚算完(授权此刻仍生效),时钟立刻越过授权的到期时刻,模拟授权恰在两步之间到期。
+    // 先取到期时刻再聚合:封顶用的到期时刻不晚于被计入的任何授权,缓存只剩 1 秒下限;
+    // 先聚合再取到期时刻:查询看不到刚到期的那条,缓存按配置的整段 TTL 保留含已到期授权的结果。
+    // 不睡眠、不依赖真实时间:时钟是注入的,TTL 取自写缓存时的入参。
+
+    private static AdminAppFactory ClockedFactory(FakeTimeProvider clock) => new()
+    {
+        Overrides = s =>
+        {
+            s.RemoveAll<TimeProvider>();
+            s.AddSingleton<TimeProvider>(clock);
+        },
+    };
+
+    private static void AssertCappedToFloor(TimeSpan? ttl) =>
+        Assert.True(ttl is { } t && t <= TimeSpan.FromSeconds(1), $"缓存 TTL 应被封到 1 秒以内,实际 {ttl?.ToString() ?? "永不过期"}");
+
+    [Fact]
+    public async Task Permission_cache_ttl_is_capped_by_expiry_read_before_aggregation()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var f = ClockedFactory(clock);
+        var (uid, _) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, uid, Ping, UserMenuEffect.Allow, clock.GetLocalNow().DateTime.AddMinutes(10));
+
+        using var scope = f.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var cache = new TtlRecordingCache(sp.GetRequiredService<ICacheProvider>());
+        var provider = new ExpiringDuringAggregationProvider(
+            clock, TimeSpan.FromMinutes(11),
+            sp.GetRequiredService<IRepository<SysUserRole>>(), sp.GetRequiredService<IRepository<SysRoleMenu>>(),
+            sp.GetRequiredService<IRepository<SysMenu>>(), cache, sp.GetRequiredService<AdminCacheOptions>());
+
+        var codes = await provider.GetPermissionCodesAsync(uid);
+
+        Assert.Contains(PingCode, codes);   // 聚合时授权仍生效
+        AssertCappedToFloor(cache.TtlOf(CacheKeys.UserPermissions(uid)));
+    }
+
+    [Fact]
+    public async Task Portal_modules_cache_ttl_is_capped_by_expiry_read_before_aggregation()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var f = ClockedFactory(clock);
+        var (uid, _) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, uid, PositionQuery, UserMenuEffect.Allow, clock.GetLocalNow().DateTime.AddMinutes(10));
+
+        using var scope = f.Services.CreateScope();
+        var cache = new TtlRecordingCache(f.Services.GetRequiredService<ICacheProvider>());
+        var menuService = NewExpiringMenuService(scope.ServiceProvider, clock, cache);
+
+        var modules = await menuService.GetMyModulesAsync(uid, false);
+
+        Assert.Equal([1L], modules.Select(m => m.Id));   // 聚合时授权仍生效
+        AssertCappedToFloor(cache.TtlOf($"portal:mod:{uid}:"));
+    }
+
+    [Fact]
+    public async Task Portal_menu_tree_cache_ttl_is_capped_by_expiry_read_before_aggregation()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var f = ClockedFactory(clock);
+        var (uid, _) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, uid, PositionQuery, UserMenuEffect.Allow, clock.GetLocalNow().DateTime.AddMinutes(10));
+
+        using var scope = f.Services.CreateScope();
+        var cache = new TtlRecordingCache(f.Services.GetRequiredService<ICacheProvider>());
+        var menuService = NewExpiringMenuService(scope.ServiceProvider, clock, cache);
+
+        var tree = await menuService.GetMyMenuTreeAsync(uid, false, 1);
+
+        Assert.Equal([OrgCatalog], tree.Select(n => n.Id));   // 聚合时授权仍生效
+        AssertCappedToFloor(cache.TtlOf($"portal:menu:{uid}:1:"));
+    }
+
+    private static ExpiringDuringAggregationMenuService NewExpiringMenuService(
+        IServiceProvider sp, FakeTimeProvider clock, ICacheProvider cache) =>
+        new(clock, TimeSpan.FromMinutes(11),
+            sp.GetRequiredService<IRepository<SysUserRole>>(), sp.GetRequiredService<IRepository<SysRoleMenu>>(),
+            sp.GetRequiredService<IRepository<SysMenu>>(), sp.GetRequiredService<IRepository<SysModule>>(),
+            sp.GetRequiredService<IRbacService>(), cache, sp.GetRequiredService<AdminCacheOptions>());
+}
+
+/// <summary>记下每次写入的键与过期时长,读写仍走真实缓存:要断言的是「缓存被封到了多久」,不是桩行为。</summary>
+internal sealed class TtlRecordingCache(ICacheProvider inner) : ICacheProvider
+{
+    private readonly ConcurrentQueue<(string Key, TimeSpan? Ttl)> _sets = new();
+
+    /// <summary>键以 <paramref name="keyPrefix"/> 开头的那一次写入的过期时长(必须恰好一次)。</summary>
+    public TimeSpan? TtlOf(string keyPrefix) =>
+        _sets.Single(x => x.Key.StartsWith(keyPrefix, StringComparison.Ordinal)).Ttl;
+
+    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => inner.GetAsync<T>(key, cancellationToken);
+
+    public Task SetAsync<T>(string key, T value, TimeSpan? expiry = null, CancellationToken cancellationToken = default)
+    {
+        _sets.Enqueue((key, expiry));
+        return inner.SetAsync(key, value, expiry, cancellationToken);
+    }
+
+    public Task RemoveAsync(string key, CancellationToken cancellationToken = default) => inner.RemoveAsync(key, cancellationToken);
+}
+
+/// <summary>聚合刚算完就把时钟推过授权的到期时刻:模拟授权恰在「聚合」与「封顶」两步之间到期。</summary>
+internal sealed class ExpiringDuringAggregationProvider(
+    FakeTimeProvider clock, TimeSpan advance,
+    IRepository<SysUserRole> userRoles, IRepository<SysRoleMenu> roleMenus, IRepository<SysMenu> menus,
+    ICacheProvider cache, AdminCacheOptions cacheOptions)
+    : RbacPermissionProvider(userRoles, roleMenus, menus, cache, cacheOptions, clock)
+{
+    protected override async Task<IReadOnlyCollection<long>> ApplyUserGrantsAsync(long userId, IReadOnlyCollection<long> roleMenuIds)
+    {
+        var effective = await base.ApplyUserGrantsAsync(userId, roleMenuIds);
+        clock.Advance(advance);
+        return effective;
+    }
+}
+
+/// <summary>同上,针对门户 <see cref="MenuService"/>。</summary>
+internal sealed class ExpiringDuringAggregationMenuService(
+    FakeTimeProvider clock, TimeSpan advance,
+    IRepository<SysUserRole> userRoles, IRepository<SysRoleMenu> roleMenus, IRepository<SysMenu> menus,
+    IRepository<SysModule> modules, IRbacService rbac, ICacheProvider cache, AdminCacheOptions cacheOptions)
+    : MenuService(userRoles, roleMenus, menus, modules, rbac, cache, cacheOptions, clock)
+{
+    protected override async Task<IReadOnlyCollection<long>> ApplyUserGrantsAsync(long userId, IReadOnlyCollection<long> roleMenuIds)
+    {
+        var effective = await base.ApplyUserGrantsAsync(userId, roleMenuIds);
+        clock.Advance(advance);
+        return effective;
     }
 }
