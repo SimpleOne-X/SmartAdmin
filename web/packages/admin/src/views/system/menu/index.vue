@@ -322,7 +322,7 @@ const columns: SmartTableColumn<MenuTreeNode>[] = [
     // 展开箭头与每层 26px 缩进钉死在这一列。默认会落到「首个无 type 的列」= 序号列,
     // 于是缩进把序号列里的数字一层层挤出可视区(展开后序号就看不见了);缩进也只有紧贴标题才读得通。
     tree: true,
-    minWidth: 240, // 让出让给缩进的宽度
+    width: 240, // 让出让给缩进的宽度
     fixed: 'left', // 横向滚动时不能丢失「这是哪一行」
     render: r =>
       // inline:必须行内 —— naive 的展开箭头是 inline-flex,默认块级 NSpace 会被挤到第二行。

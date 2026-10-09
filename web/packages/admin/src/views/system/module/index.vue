@@ -139,12 +139,15 @@ const columns: SmartTableColumn<ModuleRow>[] = [
   {
     title: () => t('module.code'),
     key: 'code',
+    width: 160,
+    ellipsis: { tooltip: true },
     search: {},
     render: r => h('span', { class: 'mono' }, r.code),
   },
   {
     title: () => t('module.name'),
     key: 'title',
+    ellipsis: { tooltip: true },
     // 窄档卡片以名称作标题(默认取第一个数据列 = 编码)
     card: 'title',
     search: {},
@@ -160,6 +163,7 @@ const columns: SmartTableColumn<ModuleRow>[] = [
   {
     title: () => t('module.defaultRoute'),
     key: 'defaultRoute',
+    ellipsis: { tooltip: true },
     render: r => cellText(r.defaultRoute),
   },
   {

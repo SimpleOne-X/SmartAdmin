@@ -123,7 +123,13 @@ void loadOperatorOptions()
 
 const columns: SmartTableColumn<SysOpLog>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { key: 'title', title: () => t('log.opName'), search: { actions: SEARCH_ACTIONS.fuzzy } },
+  {
+    key: 'title',
+    width: 220,
+    ellipsis: { tooltip: true },
+    title: () => t('log.opName'),
+    search: { actions: SEARCH_ACTIONS.fuzzy },
+  },
   { key: 'httpMethod', title: () => t('log.method'), width: 90 },
   {
     key: 'path',
@@ -134,6 +140,7 @@ const columns: SmartTableColumn<SysOpLog>[] = [
   },
   {
     key: 'success',
+    width: 90,
     title: () => t('log.result'),
     tag: true,
     search: { actions: SEARCH_ACTIONS.exact },
@@ -172,6 +179,8 @@ const columns: SmartTableColumn<SysOpLog>[] = [
   },
   {
     key: 'ip',
+    width: 140,
+    ellipsis: { tooltip: true },
     title: () => t('log.ip'),
     render: r => h('span', { class: 'mono muted' }, r.ip || '—'),
   },
@@ -179,6 +188,7 @@ const columns: SmartTableColumn<SysOpLog>[] = [
   // api 层拆成 StartTime/EndTime 并把结束日补到 23:59:59。
   {
     key: 'createTime',
+    width: 170,
     title: () => t('common.createTime'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.createTime)),

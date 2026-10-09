@@ -80,6 +80,7 @@ const columns: SmartTableColumn<SysNotice>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   {
     key: 'title',
+    ellipsis: { tooltip: true },
     title: () => t('notice.noticeTitle'),
     search: { actions: SEARCH_ACTIONS.fuzzy },
     render: r => h('span', { style: 'font-weight: 500' }, r.title),

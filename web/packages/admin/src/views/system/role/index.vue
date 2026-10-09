@@ -114,11 +114,14 @@ const columns: SmartTableColumn<SysRole>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   {
     key: 'code',
+    width: 180,
+    ellipsis: { tooltip: true },
     title: () => t('role.code'),
     render: r => h('span', { class: 'mono muted' }, r.code),
   },
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('role.name'),
     card: 'title', // 窄档卡片以角色名称为标题,编码作为字段
     search: { actions: SEARCH_ACTIONS.fuzzy },

@@ -157,7 +157,8 @@ const columns: SmartTableColumn<SysJob>[] = [
     key: 'name',
     title: () => t('job.name'),
     search: { actions: SEARCH_ACTIONS.fuzzy },
-    minWidth: 180,
+    width: 240,
+    ellipsis: { tooltip: true },
     card: 'title',
     render: r =>
       h('div', null, [
@@ -183,7 +184,7 @@ const columns: SmartTableColumn<SysJob>[] = [
   {
     key: 'trigger',
     title: () => t('job.trigger.kind'),
-    minWidth: 150,
+    width: 160,
     ellipsis: { tooltip: true },
     // cron 原文用等宽字体,间隔 / 一次性时刻用等宽数字
     render: r =>

@@ -76,11 +76,14 @@ const columns: SmartTableColumn<SysExceptionLog>[] = [
   },
   {
     key: 'ip',
+    width: 140,
+    ellipsis: { tooltip: true },
     title: () => t('log.ip'),
     render: r => h('span', { class: 'mono muted' }, r.ip || '—'),
   },
   {
     key: 'createTime',
+    width: 170,
     title: () => t('common.createTime'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.createTime)),

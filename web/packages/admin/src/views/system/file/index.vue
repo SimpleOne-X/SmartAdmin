@@ -80,6 +80,7 @@ const columns: SmartTableColumn<SysFile>[] = [
   },
   {
     key: 'createTime',
+    width: 170,
     title: () => t('file.uploadTime'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.createTime)),

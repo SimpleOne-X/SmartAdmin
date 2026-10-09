@@ -201,7 +201,8 @@ const groupColumns = computed<SmartTableColumn<AiUsageGroupRow>[]>(() => [
   {
     title: () => groupDimensionLabel.value,
     key: 'label',
-    minWidth: 160,
+    width: 160,
+    ellipsis: { tooltip: true },
     search: {}, // 静态数据:条件由 SmartTable 前端求值
     // 厂商 / 模型 / 场景是编码类文本,等宽;用户维度是姓名,保持正文
     render: r =>
@@ -242,7 +243,7 @@ const groupColumns = computed<SmartTableColumn<AiUsageGroupRow>[]>(() => [
   {
     title: () => t('aiUsage.share'),
     key: 'sharePercent',
-    minWidth: 200,
+    width: 200,
     render: r =>
       h('div', { class: 'share-cell' }, [
         h('div', { class: 'share-bar' }, [

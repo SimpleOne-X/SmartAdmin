@@ -314,10 +314,19 @@ async function saveBatch() {
 
 const columns: SmartTableColumn<MenuTreeNode>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { title: () => t('menu.title'), key: 'title', align: 'left', search: {} },
+  {
+    title: () => t('menu.title'),
+    key: 'title',
+    ellipsis: { tooltip: true },
+    align: 'left',
+    search: {},
+  },
   {
     title: () => t('menu.permission'),
     key: 'permission',
+    // 权限码是 `METHOD:/api/...` 的整条路由,单个 tag 就比默认列宽长,所以给足宽度,放不下的一律省略 + 悬浮提示
+    width: 360,
+    ellipsis: { tooltip: true },
     // 多码按钮逐条成 tag,一眼看出「查询」挂了哪几条路由
     render: r => {
       const codes = splitPermission(r.permission)

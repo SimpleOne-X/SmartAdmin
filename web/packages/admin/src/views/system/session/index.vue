@@ -48,9 +48,11 @@ const currentSid = computed(() => jwtClaim(userStore.accessToken, 'sid'))
 
 const columns: SmartTableColumn<OnlineSessionItem>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { key: 'account', title: () => t('session.account'), search: {} },
+  { key: 'account', ellipsis: { tooltip: true }, title: () => t('session.account'), search: {} },
   {
     key: 'ip',
+    width: 140,
+    ellipsis: { tooltip: true },
     title: () => t('session.ip'),
     search: {},
     render: r => h('span', { class: 'mono muted' }, r.ip || '—'),
@@ -64,12 +66,14 @@ const columns: SmartTableColumn<OnlineSessionItem>[] = [
   },
   {
     key: 'loginTime',
+    width: 170,
     title: () => t('session.loginTime'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.loginTime)),
   },
   {
     key: 'expiresAt',
+    width: 170,
     title: () => t('session.expiresAt'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.expiresAt)),

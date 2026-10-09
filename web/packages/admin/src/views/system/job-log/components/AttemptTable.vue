@@ -31,7 +31,12 @@ const columns: SmartTableColumn<SysJobLog>[] = [
         runStatusLabel(t, r.runStatus),
       ),
   },
-  { title: () => t('job.log.startTime'), key: 'startTime', render: r => fmtDateTime(r.startTime) },
+  {
+    title: () => t('job.log.startTime'),
+    key: 'startTime',
+    width: 170,
+    render: r => fmtDateTime(r.startTime),
+  },
   {
     title: () => t('job.log.elapsed'),
     key: 'elapsedMs',

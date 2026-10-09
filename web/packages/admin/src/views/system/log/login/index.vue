@@ -31,9 +31,15 @@ const filterSerializer = createFlatFilterSerializer({ ranges: ['createTime'] })
 
 const columns: SmartTableColumn<SysLoginLog>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { key: 'account', title: () => t('log.account'), search: { actions: SEARCH_ACTIONS.fuzzy } },
+  {
+    key: 'account',
+    ellipsis: { tooltip: true },
+    title: () => t('log.account'),
+    search: { actions: SEARCH_ACTIONS.fuzzy },
+  },
   {
     key: 'success',
+    width: 90,
     title: () => t('log.result'),
     tag: true,
     search: { actions: SEARCH_ACTIONS.exact },
@@ -69,6 +75,8 @@ const columns: SmartTableColumn<SysLoginLog>[] = [
   // IP 与时间用等宽 / 弱化色(.mono .muted .num 是全局工具类)
   {
     key: 'ip',
+    width: 140,
+    ellipsis: { tooltip: true },
     title: () => t('log.ip'),
     render: r => h('span', { class: 'mono muted' }, r.ip || '—'),
   },
@@ -82,6 +90,7 @@ const columns: SmartTableColumn<SysLoginLog>[] = [
   // 时间范围:"上周谁登录失败了"是登录日志最主要的用法
   {
     key: 'createTime',
+    width: 170,
     title: () => t('common.createTime'),
     render: r =>
       h('span', { class: 'num muted', style: 'white-space: nowrap' }, fmtDateTime(r.createTime)),

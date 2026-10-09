@@ -136,12 +136,15 @@ const typeColumns: SmartTableColumn<SysDictType>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   {
     key: 'code',
+    width: 180,
+    ellipsis: { tooltip: true },
     title: () => t('dict.code'),
     render: r => h('span', { class: 'mono muted' }, r.code),
   },
   // 窄档卡片以类型名称作标题(默认取第一个数据列 = 编码,不如名称好认)
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('dict.name'),
     card: 'title',
     search: { actions: SEARCH_ACTIONS.fuzzy },
@@ -299,10 +302,18 @@ const removeItem = (r: SysDictItem) =>
 const itemColumns: SmartTableColumn<SysDictItem>[] = [
   { type: 'selection' },
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { title: () => t('dict.itemLabel'), key: 'label', card: 'title', search: {} },
+  {
+    title: () => t('dict.itemLabel'),
+    key: 'label',
+    ellipsis: { tooltip: true },
+    card: 'title',
+    search: {},
+  },
   {
     title: () => t('dict.itemValue'),
     key: 'value',
+    width: 160,
+    ellipsis: { tooltip: true },
     search: {},
     render: r => h('span', { class: 'mono muted' }, r.value),
   },

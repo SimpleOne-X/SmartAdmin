@@ -112,7 +112,7 @@ const columns: SmartTableColumn<SysJobLog>[] = [
   {
     key: 'jobName',
     title: () => t('job.log.job'),
-    minWidth: 140,
+    width: 160,
     ellipsis: { tooltip: true },
     card: 'title',
   },

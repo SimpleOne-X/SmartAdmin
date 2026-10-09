@@ -316,12 +316,14 @@ const columns: SmartTableColumn<UserItem>[] = [
   },
   {
     key: 'account',
+    ellipsis: { tooltip: true },
     title: () => t('user.account'),
     search: { actions: SEARCH_ACTIONS.fuzzy },
     sorter: true,
   },
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('user.name'),
     card: 'title',
     search: { actions: SEARCH_ACTIONS.fuzzy },
@@ -329,6 +331,8 @@ const columns: SmartTableColumn<UserItem>[] = [
   },
   {
     key: 'phone',
+    width: 130,
+    ellipsis: { tooltip: true },
     title: () => t('user.phone'),
     sorter: true,
     render: r => (r.phone ? h('span', { class: 'num' }, r.phone) : dash()),
@@ -349,7 +353,12 @@ const columns: SmartTableColumn<UserItem>[] = [
     options: roleOptions,
     search: { actions: SEARCH_ACTIONS.exact, props: { clearable: true } },
   },
-  { key: 'orgName', title: () => t('user.org'), render: r => r.orgName || dash() },
+  {
+    key: 'orgName',
+    ellipsis: { tooltip: true },
+    title: () => t('user.org'),
+    render: r => r.orgName || dash(),
+  },
   {
     key: 'positionName',
     title: () => t('user.position'),
@@ -382,7 +391,13 @@ const columns: SmartTableColumn<UserItem>[] = [
         ? h(NTag, { type: 'warning', size: 'small', bordered: false }, () => t('user.superAdmin'))
         : dash(),
   },
-  { key: 'createTime', title: () => t('user.createTime'), format: 'datetime', sorter: true },
+  {
+    key: 'createTime',
+    width: 170,
+    title: () => t('user.createTime'),
+    format: 'datetime',
+    sorter: true,
+  },
   // 操作:编辑/删除外露;重置密码、解绑验证器进「更多」(放操作列末尾)。
   // width 须够「编辑+删除+更多」单行;wrap:false 禁止 NSpace 默认换行(否则「更多」掉到删除下一行)。
   {
