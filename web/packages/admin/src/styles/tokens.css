@@ -59,7 +59,8 @@
   --fill-strong: rgba(70, 90, 130, 0.14);
   --hover: rgba(60, 80, 120, 0.06);
   --pressed: rgba(60, 80, 120, 0.11);
-  --mask: rgba(241, 245, 251, 0.55); /* 遮罩 / 弹窗背景 */
+  /* 弹窗 / 抽屉遮罩:冷调深色蒙层(macOS 做法),把背后页面压暗、让白色弹层跳出来;浅色蒙层压不暗白底页面 */
+  --mask: rgba(16, 24, 44, 0.34);
   --seg-track: rgba(70, 90, 130, 0.12); /* 分段控件:轨道 / 滑块 */
   --seg-thumb: #ffffff;
   --switch-off: rgba(70, 90, 130, 0.28);
@@ -320,7 +321,7 @@
 
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
   --shadow-2: 0 24px 60px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(120, 160, 255, 0.18);
-  --shadow-3: 0 40px 100px -20px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(120, 160, 255, 0.22);
+  --shadow-3: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(120, 160, 255, 0.22);
 
   --glass-panel: rgba(14, 22, 42, 0.62);
   --glass-border: rgba(140, 175, 255, 0.2);

@@ -158,8 +158,11 @@ a {
   min-height: 0;
 }
 
-/* 弹窗卡:实底 + 重投影拉层级(弹层统一玻璃由下面的 backdrop-filter 组负责)。 */
+/* 弹窗卡:几乎不透明的实底 + 重投影拉层级(弹层统一玻璃由下面的 backdrop-filter 组负责)。
+   macOS 的 sheet 在亮色下是不透明的白,表单类弹窗底下透出页面内容会让字和输入框发灰、发糊,
+   所以弹窗卡不用 Naive modalColor 对应的半透明弹层色(--bg-elevated),改取 --glass-solid。 */
 .n-card.n-modal {
+  background-color: var(--glass-solid);
   box-shadow: var(--shadow-3);
 }
 
@@ -206,7 +209,8 @@ a {
   }
 }
 
-/* 遮罩统一走 --mask(亮色是画布色的 55%,暗色是深蓝黑的 60%) */
+/* 遮罩统一走 --mask(亮色是冷调深蓝黑的 34%,暗色是更深的蓝黑 58%);亮色下也必须是深色蒙层,
+   用画布色的浅蒙层压不暗背后的白底页面,弹窗会和它糊成一片 */
 .n-modal-mask,
 .n-drawer-mask {
   background-color: var(--mask) !important;

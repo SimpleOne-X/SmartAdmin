@@ -112,7 +112,7 @@ macOS 风格的企业后台:固定壁纸画布(浅色与登录页同味:底色 `
 | `bodyColor` | `--bg-app` |
 | `cardColor` | `--bg-card-glass` |
 | `tableColor` / `tableHeaderColor` | `transparent`(表格底 / 表头由卡片与 `--th-bg` 系列承担) |
-| `modalColor` / `popoverColor` | `--bg-elevated` |
+| `modalColor` / `popoverColor` | `--bg-elevated`(弹窗卡另在 `index.css` 里取近乎不透明的 `--glass-solid`,遮罩取 `--mask`:亮色也是深色蒙层,与 macOS 一致) |
 | `textColorBase` / `textColor1` | `--text-1` |
 | `textColor2` | `--text-2` |
 | `textColor3` / `placeholderColor` / `clearColor` | `--text-3` |
