@@ -11,6 +11,9 @@ import {
   setButtonChecked,
   setGroupChecked,
   setMenuChecked,
+  treeForRole,
+  modulesForRole,
+  SYSTEM_MODULE_ID,
 } from './grantMenuGroups'
 
 const node = (
@@ -210,5 +213,22 @@ describe('计数与展示字段', () => {
   it('countGrants:总数、已授权、页面数、按钮数(anchor 行自身不算页面)', () => {
     const groups = buildGroups(withMeta, new Set([350, 351, 301, 100]), ANCHOR)
     expect(countGrants(groups)).toEqual({ on: 4, total: 5, pages: 2, buttons: 2 })
+  })
+})
+
+describe('角色授权范围:系统模块只授内置角色', () => {
+  const top = (id: number, moduleId: number | null) =>
+    node(id, MenuType.Catalog, `c${id}`, [], { moduleId })
+  const scopeTree = [top(200, SYSTEM_MODULE_ID), top(900, 2), top(950, null)]
+  const modules = [{ id: SYSTEM_MODULE_ID }, { id: 2 }]
+
+  it('非内置角色去掉系统模块的顶级节点与应用', () => {
+    expect(treeForRole(scopeTree, false).map(n => n.id)).toEqual([900, 950])
+    expect(modulesForRole(modules, false).map(m => m.id)).toEqual([2])
+  })
+
+  it('内置角色原样', () => {
+    expect(treeForRole(scopeTree, true)).toBe(scopeTree)
+    expect(modulesForRole(modules, true)).toBe(modules)
   })
 })

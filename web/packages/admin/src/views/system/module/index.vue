@@ -81,6 +81,13 @@ const rules: FormRules = {
   },
 }
 const editingId = ref<number | null>(null)
+/** 正在编辑内置 system 模块:可转授开关固定关、置灰(后端读写都按 false)。 */
+const editingBuiltin = computed(() => editingId.value !== null && form.code === 'system')
+/** NSwitch 只收布尔,null(存量模块)按关显示。 */
+const delegatable = computed({
+  get: () => form.isDelegatable === true,
+  set: (v: boolean) => (form.isDelegatable = v),
+})
 const blank = (): ModuleInput => ({
   code: '',
   title: '',
@@ -90,6 +97,7 @@ const blank = (): ModuleInput => ({
   sort: 0,
   enabled: true,
   remark: '',
+  isDelegatable: true,
 })
 const form = reactive<ModuleInput>(blank())
 
@@ -103,6 +111,7 @@ const toInput = (r: ModuleRow): ModuleInput => ({
   sort: r.sort,
   enabled: r.enabled,
   remark: r.remark ?? '',
+  isDelegatable: r.isDelegatable ?? false,
 })
 
 function openAdd() {
@@ -171,6 +180,17 @@ const columns: SmartTableColumn<ModuleRow>[] = [
     key: 'apiPrefix',
     width: 120,
     render: r => cellText(r.apiPrefix),
+  },
+  {
+    title: () => t('module.delegatable'),
+    key: 'isDelegatable',
+    width: 100,
+    render: r =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: r.isDelegatable ? 'success' : 'default' },
+        () => t(r.isDelegatable ? 'common.yes' : 'common.no'),
+      ),
   },
   {
     title: () => t('module.sort'),
@@ -329,6 +349,19 @@ deriveHeaderFilters(columns)
       </n-form-item>
       <n-form-item :label="t('common.status')">
         <n-switch v-model:value="form.enabled" />
+      </n-form-item>
+      <n-form-item :label="t('module.delegatable')">
+        <n-space vertical :size="2" style="width: 100%">
+          <n-tooltip :disabled="!editingBuiltin">
+            <template #trigger>
+              <span style="display: inline-flex">
+                <n-switch v-model:value="delegatable" :disabled="editingBuiltin" />
+              </span>
+            </template>
+            {{ t('module.builtinNotDelegatable') }}
+          </n-tooltip>
+          <span class="hint">{{ t('module.delegatableHint') }}</span>
+        </n-space>
       </n-form-item>
       <n-form-item :label="t('module.remark')">
         <n-input v-model:value="form.remark as string" type="textarea" :autosize="{ minRows: 2 }" />

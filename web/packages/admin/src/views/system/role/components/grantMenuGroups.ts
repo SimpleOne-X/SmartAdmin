@@ -243,3 +243,18 @@ export function collectChecked(groups: CatalogGroup[]): number[] {
   }
   return ids
 }
+
+// ── 角色授权范围 ──
+
+/** 内置 system 模块的 Id(与后端 DefaultModuleSeed.BUILTIN_MODULE_ID 一致)。 */
+export const SYSTEM_MODULE_ID = 1
+
+/** 系统模块的菜单只能授给内置角色:非内置角色去掉挂在系统模块下的顶级节点(后端同样拒绝)。 */
+export const treeForRole = (tree: MenuTreeNode[], builtinRole: boolean): MenuTreeNode[] =>
+  builtinRole ? tree : tree.filter(n => n.moduleId !== SYSTEM_MODULE_ID)
+
+/** 同上:应用下拉里去掉系统模块。 */
+export const modulesForRole = <T extends { id: number }>(
+  modules: T[],
+  builtinRole: boolean,
+): T[] => (builtinRole ? modules : modules.filter(m => m.id !== SYSTEM_MODULE_ID))

@@ -254,6 +254,10 @@ export default {
     deleteConfirm: 'Delete app "{title}"?',
     disableConfirm: 'Disable app "{title}"? It will disappear from the portal',
     builtinNoDisable: 'The built-in app cannot be disabled',
+    delegatable: 'Delegatable',
+    delegatableHint:
+      "When on, administrators can grant or deny this app's menus to individual users (time-limited)",
+    builtinNotDelegatable: 'The built-in app is never delegatable',
     saved: 'Saved',
     deleted: 'Deleted',
   },
@@ -1291,6 +1295,8 @@ export default {
     grantSummary: 'Granted {on} / {total}',
     grantSummarySplit: '{pages} pages · {buttons} buttons',
     grantUnsaved: 'Unsaved changes',
+    systemMenusBuiltinOnly:
+      'System module menus can only be granted to built-in roles and are hidden here',
     dataScope: 'Data scope',
     scopeType: 'Scope type',
     customOrgs: 'Custom orgs',
