@@ -270,32 +270,32 @@ A top-level directory you create yourself under the "System" app (Id ≥ 1000) i
 It still belongs to the "System" app, though, which is permanently non-delegatable, so an ordinary admin cannot grant it to a user.
 To delegate it, re-parent the directory under your own app first.
 
-If someone later moves a page under a kernel directory, that page's grant already held by a new role is not reclaimed automatically.
-A super admin opens that role's grant dialog and saves once: the page no longer shows in the dialog, and a save submits only the grants that are visible, so it is taken back.
+If someone later moves a page under a kernel directory, or moves a kernel directory to another app and back to "System" (the seed also restores it on upgrade), the grants a new role holds on those menus in the meantime are not reclaimed automatically.
+A super admin opens that role's grant dialog and saves once: those menus no longer show in the dialog, and a save submits only the grants that are visible, so they are taken back.
 This restriction covers role grants only; a super admin can still grant a system menu to an individual user.
 
-::: warning Upgrading deletes System-menu grants held by new roles
+::: warning Upgrading deletes system-menu grants held by new roles
 On the first startup after upgrading from a database whose seed version is below 7, once the database is ready the kernel physically deletes the `sys_role_menu` rows of "non-built-in role × system menu".
 Directories you created yourself under the "System" app (Id ≥ 1000) are not touched.
 The deletion is irreversible, so back up that table before upgrading.
 Every row writes a Warning log line (role name, code, menu title, menu Id), and the affected users' permission-code cache is invalidated and the portal-menu cache is recomputed as a whole.
 An empty database, an ordinary restart, or seeding turned off (which skips the version gate) never runs it.
 
-- Projects that rely on a new role to reach System pages lose that access for those users after the upgrade;
+- Projects that rely on a new role to reach system pages lose that access for those users after the upgrade;
   switch them to the built-in "System Administrator" role.
 - Roles your own seed plants (Id ≥ 1000) count as non-built-in too.
-  On the upgrade startup the cleanup deletes the System menus already granted to them;
+  On the upgrade startup the cleanup deletes the system menus already granted to them;
   but a seed has no login context and isn't subject to the guard, so every later restart plants the missing rows again.
-  A project that grants System menus this way has to use a built-in role instead, or change its own seed.
+  A project that grants system menus this way has to use a built-in role instead, or change its own seed.
 - The cleanup runs once and is never retried.
   The version row is written as 7 before the cleanup runs, so if the cleanup fails the startup aborts with an exception.
   A failed lookup or a failed deletion leaves an Error log line saying no grant was deleted (a failed deletion also says the transaction was rolled back).
   When a deployment that skips table creation lacks `sys_user_menu`, the missing-table guard aborts the startup, but the cleanup is registered ahead of it and has already finished.
-  To recover, a super admin re-saves the grants of the roles involved on the role-grant page:
+  To recover, a super admin re-saves the grants of every non-built-in role on the role-grant page (after a failed deletion, the roles named in the log are enough):
   the dialog doesn't show system menus and a save submits only the grants that are visible, so saving takes them back.
 - If only the cache invalidation fails after the grants are deleted, it writes an Error log line and startup carries on.
   Clear "permission cache" and "portal menu cache" separately on the cache-management page.
-- During a rolling upgrade, replicas still running the old version can keep granting System menus to new roles.
+- During a rolling upgrade, replicas still running the old version can keep granting system menus to new roles.
   Those grants are not cleaned up, and once the upgrade finishes a super admin takes them back by re-saving in the same way.
 :::
 
