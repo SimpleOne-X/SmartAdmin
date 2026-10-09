@@ -72,7 +72,7 @@ public class PermissionRoutesEndpointTests
         var tree = await (await admin.GetAsync("/api/v1/sys/menu/tree")).ReadEnvelope();
         var menuId = FindByPermission(tree.GetProperty("data"), target);
         Assert.NotNull(menuId);
-        await admin.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds = new[] { menuId!.Value } });
+        await GrantTestKit.SetRoleMenusAsync(f, roleId, [menuId!.Value]);
 
         await admin.PostJson("/api/v1/sys/user",
             new { account = "readonly", password = "InitPass123", name = "只读用户", enabled = true, roleIds = new[] { roleId } });
