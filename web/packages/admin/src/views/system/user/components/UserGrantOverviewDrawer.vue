@@ -42,6 +42,9 @@ const statusLabel = (s: UserMenuGrantStatus) =>
   statusOptions.value.find(o => o.value === s)?.label ?? ''
 const dash = () => h('span', { class: 'faint' }, '—')
 
+// 这张表有 10 列,比普通列表宽得多。列宽:「授权理由」以外都写死,合计约 1060,理由列拿剩下的(最窄 120)。
+// 抽屉跟着视口铺满、最宽 1440(抽屉内边距与卡片占约 84),所以视口 ≥ 1270 左右表格不出横向滚动条;
+// 更窄时由表格自己横向滚动。「效果」列带筛选漏斗,窄于 102 会被表头撑开,宽度照实写。
 const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   // 只作搜索项:目标用户账号或姓名
@@ -54,6 +57,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'userName',
     title: () => t('userGrant.colUser'),
+    width: 140,
     ellipsis: { tooltip: true },
     card: 'title',
     render: r => `${r.userName}(${r.userAccount})`,
@@ -61,6 +65,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'menuTitle',
     title: () => t('userGrant.colMenu'),
+    width: 140,
     ellipsis: { tooltip: true },
     render: r =>
       [r.moduleTitle ? translateMenuTitle(r.moduleTitle) : null, translateMenuTitle(r.menuTitle)]
@@ -70,7 +75,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'effect',
     title: () => t('userGrant.colEffect'),
-    width: 90,
+    width: 102,
     options: effectOptions,
     search: { actions: SEARCH_ACTIONS.exact, props: { clearable: true } },
     render: r =>
@@ -87,7 +92,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'status',
     title: () => t('userGrant.colStatus'),
-    width: 110,
+    width: 108,
     options: statusOptions,
     search: { actions: SEARCH_ACTIONS.exact, props: { clearable: true } },
     render: r =>
@@ -98,7 +103,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'expireTime',
     title: () => t('userGrant.colExpire'),
-    width: 170,
+    width: 160,
     render: r => (r.expireTime ? r.expireTime.replace('T', ' ') : t('userGrant.expireLongTerm')),
   },
   // 只作搜索项:授权人账号或姓名
@@ -111,11 +116,11 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'grantorName',
     title: () => t('userGrant.colGrantor'),
-    width: 120,
+    width: 100,
     ellipsis: { tooltip: true },
     render: r => r.grantorName || dash(),
   },
-  { key: 'grantTime', title: () => t('userGrant.colGrantTime'), width: 170, format: 'datetime' },
+  { key: 'grantTime', title: () => t('userGrant.colGrantTime'), width: 160, format: 'datetime' },
   {
     key: 'remark',
     title: () => t('userGrant.colRemark'),
@@ -125,7 +130,7 @@ const columns: SmartTableColumn<UserMenuGrantPageItem>[] = [
   {
     key: 'op',
     title: () => t('common.operation'),
-    width: 100,
+    width: 84,
     fixed: 'right',
     hideInSetting: true,
     render: r =>
@@ -145,7 +150,7 @@ deriveHeaderFilters(columns)
 </script>
 
 <template>
-  <n-drawer v-model:show="show" placement="right" width="min(1120px, 96vw)">
+  <n-drawer v-model:show="show" placement="right" width="min(1440px, 100vw)">
     <n-drawer-content
       :title="t('userGrant.overview')"
       closable
