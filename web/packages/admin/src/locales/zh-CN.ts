@@ -1786,6 +1786,7 @@ export default {
       notFound: '角色不存在',
       codeExists: '角色编码已存在',
       notDelegatable: '目标角色不可转授',
+      systemMenuNotAssignable: '系统模块的菜单只能授给内置角色',
     },
     org: {
       notFound: '机构不存在',

@@ -199,6 +199,10 @@ public enum ErrorCode
     [MsgKey("error.user.outOfDataScope")]
     UserOutOfDataScope = 41005,
 
+    /// <summary>系统模块的菜单只能授给内置角色(种子里固定 Id 1–999 的角色),新建的角色授不了</summary>
+    [MsgKey("error.role.systemMenuNotAssignable")]
+    SystemMenuNotAssignable = 41009,
+
     // ── 42xxx 用户 / 组织 / 角色 / 菜单 ──────────────────────────────
 
     /// <summary>目标用户不存在;args 可携带 name</summary>

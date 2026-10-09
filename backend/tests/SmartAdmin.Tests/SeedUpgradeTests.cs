@@ -248,4 +248,53 @@ public class SeedUpgradeTests
                     .Where(x => x.Id == WorkbenchMenuId).ToListAsync());   // 没被重复插入
             });
     }
+
+    /// <summary>非内置角色(雪花号段的 Id,模拟界面上新建的角色),直接插库造存量。</summary>
+    private const long NewRoleId = 900_000_000_001;
+
+    private static async Task SeedNewRoleWithMenusAsync(ISqlSugarClient db)
+    {
+        await db.Insertable(new SysRole { Id = NewRoleId, Name = "运维助理", Code = "ops-helper", Enabled = true }).ExecuteCommandAsync();
+        await db.Insertable(new List<SysRoleMenu>
+        {
+            new() { RoleId = NewRoleId, MenuId = 301 },   // 系统模块
+            new() { RoleId = NewRoleId, MenuId = 110 },   // 业务中心
+            new() { RoleId = 1, MenuId = 301 },           // 内置「系统管理员」
+        }).ExecuteCommandAsync();
+    }
+
+    private static async Task<long[]> MenusOfRoleAsync(ISqlSugarClient db, long roleId) =>
+        [.. (await db.Queryable<SysRoleMenu>().Where(x => x.RoleId == roleId).Select(x => x.MenuId).ToListAsync()).Order()];
+
+    /// <summary>升级那一次:非内置角色上的系统模块菜单被删,业务菜单留着;内置角色不受影响。</summary>
+    [Fact]
+    public async Task Upgrade_removes_system_menus_from_non_builtin_roles_only()
+    {
+        await RestartWithAsync(
+            async db =>
+            {
+                await DowngradeVersionAsync(db);
+                await SeedNewRoleWithMenusAsync(db);
+            },
+            async db =>
+            {
+                long[] newRoleMenus = await MenusOfRoleAsync(db, NewRoleId);
+                long[] builtinMenus = await MenusOfRoleAsync(db, 1);
+                Assert.Equal([110L], newRoleMenus);
+                Assert.Contains(301L, builtinMenus);
+            });
+    }
+
+    /// <summary>平时重启(版本没变)不清理:清理只在从老版本升上来的那一次执行。</summary>
+    [Fact]
+    public async Task Restart_without_upgrade_keeps_role_menus()
+    {
+        await RestartWithAsync(
+            SeedNewRoleWithMenusAsync,
+            async db =>
+            {
+                long[] menus = await MenusOfRoleAsync(db, NewRoleId);
+                Assert.Equal([110L, 301L], menus);
+            });
+    }
 }

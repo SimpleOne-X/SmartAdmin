@@ -1,3 +1,4 @@
+using SqlSugar;
 using SmartAdmin.Core;
 using SmartAdmin.SqlSugar;
 
@@ -12,6 +13,7 @@ namespace SmartAdmin.Services;
 /// 由 <see cref="EnsureSuperAdmin"/> 兜底;角色<b>指派面</b>(把角色关联到用户)经 <see cref="IRoleGrantPolicy"/>
 /// 收口,非超管只能把"可转授"角色授予其数据范围内的用户。两个依赖均尾随可选:未注入(消费者精简子类/
 /// 手工构造的实例)时视为可信系统上下文,不加限制。
+/// 授权面另有一条:系统模块的菜单只能授给内置角色(见 <see cref="EnsureRoleMenusAssignableAsync"/>)。
 /// </para>
 /// </summary>
 public class RbacService(
@@ -34,7 +36,9 @@ public class RbacService(
     public virtual async Task SetRoleMenusAsync(long roleId, IReadOnlyCollection<long> menuIds)
     {
         EnsureSuperAdmin();   // 角色菜单授权超管专属
-        AdminException.ThrowIf(!await roles.AnyAsync(r => r.Id == roleId), ErrorCode.RoleNotFound);
+        var role = await roles.GetByIdAsync(roleId);
+        AdminException.ThrowIf(role is null, ErrorCode.RoleNotFound);
+        await EnsureRoleMenusAssignableAsync(role!, menuIds);
 
         var links = menuIds.Distinct().Select(mid => new SysRoleMenu { RoleId = roleId, MenuId = mid }).ToList();
         await ReplaceAsync(
@@ -45,6 +49,23 @@ public class RbacService(
         var affectedUsers = await userRoles.AsQueryable().Where(x => x.RoleId == roleId).Select(x => x.UserId).ToListAsync();
         await InvalidatePermissionsAsync(affectedUsers);
         await cache.IncrementAsync(CacheKeys.PortalGeneration);   // 授权变动改门户模块/菜单树 → 门户缓存整体失效
+    }
+
+    /// <summary>
+    /// 系统模块的菜单只能授给内置角色(<see cref="SysRole.IsBuiltin"/>):系统模块是管理面,除超管自己外只由内置角色持有。
+    /// 菜单所属模块按 ParentId 上溯到根目录取 ModuleId,所以读的是全表(含停用与软删的节点):
+    /// 中间隔着一个停用的目录时只读启用节点会断链,把下面的系统菜单误判成不属于系统模块;
+    /// 软删的菜单在回收站里,恢复后会带着授权回来,同样算系统菜单。
+    /// 系统 / 未认证上下文(种子、启动任务)视为可信,不受限,与 <see cref="EnsureSuperAdmin"/> 同一约定。
+    /// 读菜单走已有仓储的 <c>Db</c> 逃生舱口,不加构造参数。
+    /// </summary>
+    protected virtual async Task EnsureRoleMenusAssignableAsync(SysRole role, IReadOnlyCollection<long> menuIds)
+    {
+        if (role.IsBuiltin || menuIds.Count == 0 || currentUser is not { IsAuthenticated: true }) return;
+        var byId = (await roles.Db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync()).ToDictionary(m => m.Id);
+        AdminException.ThrowIf(
+            menuIds.Any(id => MenuTree.RootModuleId(id, byId) == DefaultModuleSeed.BUILTIN_MODULE_ID),
+            ErrorCode.SystemMenuNotAssignable);
     }
 
     /// <inheritdoc />
