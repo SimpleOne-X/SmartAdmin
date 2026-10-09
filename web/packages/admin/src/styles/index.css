@@ -86,28 +86,33 @@ a {
    选择器用 :where() 把特异度压到最低,登录卡等自带玻璃的卡片在自己的样式里直接覆盖即可。
    Naive 卡片有 1px 透明边框,实底会从边框下透出一圈白边:底色只铺到内边距(background-clip),
    描边用 ::before 画在边框那一圈上(macOS 面板边缘是细发丝线,没有亮白圈)。
-   弹窗卡(.n-modal)与嵌入卡(embedded)不画,它们有自己的层级表达。 */
-.n-card:where(:not(.n-modal):not(.n-card--embedded)) {
+   弹窗卡(.n-modal)与嵌入卡(embedded)不画,它们有自己的层级表达。
+   只画 bordered 的卡(Naive 给带边框的卡加 .n-card--bordered):页面传了 bordered: false 就是明确要「没有框」,
+   典型是卡片里嵌的表格(SmartTable 的 card-props)——外层卡已经有框,内层再画一圈就成了卡中卡。 */
+.n-card:where(.n-card--bordered:not(.n-modal):not(.n-card--embedded)) {
   position: relative;
   background-clip: padding-box;
   box-shadow: var(--glass-shadow-soft);
 }
 
-.n-card:where(:not(.n-modal):not(.n-card--embedded))::before {
+.n-card:where(.n-card--bordered:not(.n-modal):not(.n-card--embedded))::before {
   content: '';
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  padding: 1px;
+  /* 环的粗细用 border 而不是 padding:浏览器把 border 对齐到整数设备像素,125% / 150% 缩放下仍是 1 个设备像素的细线;
+     padding 是 1px 的布局长度(125% 下是 1.25 个设备像素),会被摊成两个像素宽,顶边就比两侧重、还和下面的内高光叠成双线 */
+  border: 1px solid transparent;
   pointer-events: none;
   background: linear-gradient(
-    180deg,
-    var(--edge-top) 0%,
-    var(--edge-mid) 30%,
-    var(--edge-bottom) 100%
-  );
+      180deg,
+      var(--edge-top) 0%,
+      var(--edge-mid) 30%,
+      var(--edge-bottom) 100%
+    )
+    border-box;
   -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0) padding-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
