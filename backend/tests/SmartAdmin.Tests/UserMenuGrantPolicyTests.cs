@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
+using SqlSugar;
 
 namespace SmartAdmin.Tests;
 
@@ -302,6 +304,47 @@ public class UserMenuGrantPolicyTests
         Assert.Single(await GrantTestKit.GrantRowsAsync(f, target));
     }
 
+    // 守卫对变更集是「每一条都校验」:下面三条都是第一条合法、问题出在后面,
+    // 只查第一条的实现会放行;任何一条被拒,整份变更集一行都不落库。
+
+    [Fact]
+    public async Task Every_menu_in_the_change_set_must_be_in_a_delegatable_module()
+    {
+        using var f = new AdminAppFactory();
+        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+
+        Assert.Equal(41006, await GrantTestKit.PutGrantsAsync(admin, target, [GrantTestKit.Deny(BizWorkbench), GrantTestKit.Deny(OrgQuery)]));
+        Assert.Empty(await GrantTestKit.GrantRowsAsync(f, target));
+    }
+
+    [Fact]
+    public async Task Every_allow_in_the_change_set_needs_an_expiry()
+    {
+        using var f = new AdminAppFactory();
+        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        var (_, bizPage) = await GrantTestKit.CreateCatalogWithPageAsync(f, BusinessModule);   // 另一个可转授业务菜单
+
+        Assert.Equal(41008, await GrantTestKit.PutGrantsAsync(admin, target,
+            [GrantTestKit.Allow(BizWorkbench, GrantTestKit.EndOfDay(5)), GrantTestKit.Allow(bizPage)]));
+        Assert.Empty(await GrantTestKit.GrantRowsAsync(f, target));
+    }
+
+    [Fact]
+    public async Task Removing_a_non_delegatable_record_rejects_the_whole_change_set()
+    {
+        using var f = new AdminAppFactory();
+        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, target, PositionQuery, UserMenuEffect.Deny);   // 超管留下的系统模块记录
+
+        Assert.Equal(41006, await GrantTestKit.PutGrantsAsync(admin, target, [GrantTestKit.Allow(BizWorkbench, GrantTestKit.EndOfDay(5))], [PositionQuery]));
+
+        var row = Assert.Single(await GrantTestKit.GrantRowsAsync(f, target));   // 业务那条没插入,系统那条没被删
+        Assert.Equal(PositionQuery, row.MenuId);
+    }
+
     [Fact]
     public async Task Invalid_change_sets_are_rejected()
     {
@@ -349,5 +392,72 @@ public class UserMenuGrantPolicyTests
         Assert.Equal([Ping], evt.Updated.Select(x => x.MenuId));
         Assert.Equal("排障", evt.Updated[0].Remark);
         Assert.Equal([PositionQuery], evt.RemovedMenuIds);
+    }
+
+    [Fact]
+    public async Task Saving_bumps_the_portal_generation()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        var before = await cache.GetAsync<long>(CacheKeys.PortalGeneration);
+
+        Assert.Equal(0, await GrantTestKit.PutGrantsAsync(super, target, [GrantTestKit.Allow(Ping)]));
+
+        Assert.Equal(before + 1, await cache.GetAsync<long>(CacheKeys.PortalGeneration));
+    }
+
+    [Fact]
+    public async Task Failed_write_rolls_back_and_neither_invalidates_cache_nor_publishes()
+    {
+        using var f = new AdminAppFactory();
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+        await GrantTestKit.InsertGrantAsync(f, target, PositionQuery, UserMenuEffect.Deny);
+        await GrantTestKit.CodesOfAsync(f, target);   // 预热权限码缓存
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        var bus = f.Services.GetRequiredService<IEventBus>();
+        Assert.NotNull(await cache.GetAsync<string[]>(CacheKeys.UserPermissions(target)));
+        var generationBefore = await cache.GetAsync<long>(CacheKeys.PortalGeneration);
+
+        // 事件总线是单读通道、按发布顺序派发:先发的事件一定早于哨兵到达订阅者,
+        // 等到哨兵就等于确认「此前该发的事件都已派发完」,不靠固定等待
+        const long sentinelUserId = -1;
+        var seen = new ConcurrentQueue<long>();
+        var sentinel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = bus.Subscribe<UserMenuGrantsChangedEvent>((e, ct) =>
+        {
+            seen.Enqueue(e.UserId);
+            if (e.UserId == sentinelUserId) sentinel.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        using (var scope = f.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            var grants = new UpdateFailsGrantRepository(sp.GetRequiredService<IRepository<SysUserMenu>>().Db);
+            var service = new UserMenuGrantService(
+                grants, sp.GetRequiredService<IRepository<SysUser>>(), sp.GetRequiredService<IRepository<SysMenu>>(),
+                sp.GetRequiredService<IUserMenuGrantPolicy>(), cache, bus, sp.GetRequiredService<TimeProvider>());
+
+            // 先插入业务那条(成功),再更新系统那条(抛异常):插入必须随事务一起回滚
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyChangesAsync(target,
+                [new UserMenuGrantUpsert { MenuId = BizWorkbench, Effect = UserMenuEffect.Allow },
+                 new UserMenuGrantUpsert { MenuId = PositionQuery, Effect = UserMenuEffect.Allow }], []));
+        }
+        await bus.PublishAsync(new UserMenuGrantsChangedEvent(sentinelUserId, null, [], [], []));
+        await sentinel.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var row = Assert.Single(await GrantTestKit.GrantRowsAsync(f, target));            // 回滚:库里还是原来那一行
+        Assert.Equal((PositionQuery, UserMenuEffect.Deny), (row.MenuId, row.Effect));
+        Assert.DoesNotContain(target, seen);                                             // 没发事件
+        Assert.NotNull(await cache.GetAsync<string[]>(CacheKeys.UserPermissions(target)));   // 权限码缓存没被失效
+        Assert.Equal(generationBefore, await cache.GetAsync<long>(CacheKeys.PortalGeneration));   // 门户代际没动
+    }
+
+    /// <summary>更新必抛异常的授权仓储:让「插入已成功、随后更新失败」的事务中途失败可复现。</summary>
+    private sealed class UpdateFailsGrantRepository(ISqlSugarClient db) : SqlSugarRepository<SysUserMenu>(db)
+    {
+        public override Task<int> UpdateAsync(SysUserMenu entity) => throw new InvalidOperationException("模拟写入中途失败");
     }
 }
