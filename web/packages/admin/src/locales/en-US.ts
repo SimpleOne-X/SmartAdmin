@@ -1339,7 +1339,7 @@ export default {
     grantSummarySplit: '{pages} pages · {buttons} buttons',
     grantUnsaved: 'Unsaved changes',
     systemMenusBuiltinOnly:
-      'System module menus can only be granted to built-in roles and are hidden here',
+      'Menus that ship with the system can only be granted to built-in roles and are hidden here',
     dataScope: 'Data scope',
     scopeType: 'Scope type',
     customOrgs: 'Custom orgs',
@@ -1881,7 +1881,8 @@ export default {
       notFound: 'Role not found',
       codeExists: 'Role code already exists',
       notDelegatable: 'Role is not delegatable',
-      systemMenuNotAssignable: 'System module menus can only be granted to built-in roles',
+      systemMenuNotAssignable:
+        'Menus that ship with the system can only be granted to built-in roles',
     },
     org: {
       notFound: 'Org not found',

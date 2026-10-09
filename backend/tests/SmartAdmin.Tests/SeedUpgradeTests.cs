@@ -257,7 +257,7 @@ public class SeedUpgradeTests
         await db.Insertable(new SysRole { Id = NewRoleId, Name = "运维助理", Code = "ops-helper", Enabled = true }).ExecuteCommandAsync();
         await db.Insertable(new List<SysRoleMenu>
         {
-            new() { RoleId = NewRoleId, MenuId = 301 },   // 系统模块
+            new() { RoleId = NewRoleId, MenuId = 301 },   // 系统菜单(内核目录)
             new() { RoleId = NewRoleId, MenuId = 110 },   // 业务中心
             new() { RoleId = 1, MenuId = 301 },           // 内置「系统管理员」
         }).ExecuteCommandAsync();
@@ -266,7 +266,7 @@ public class SeedUpgradeTests
     private static async Task<long[]> MenusOfRoleAsync(ISqlSugarClient db, long roleId) =>
         [.. (await db.Queryable<SysRoleMenu>().Where(x => x.RoleId == roleId).Select(x => x.MenuId).ToListAsync()).Order()];
 
-    /// <summary>升级那一次:非内置角色上的系统模块菜单被删,业务菜单留着;内置角色不受影响。</summary>
+    /// <summary>升级那一次:非内置角色上的系统菜单被删,业务菜单留着;内置角色不受影响。</summary>
     [Fact]
     public async Task Upgrade_removes_system_menus_from_non_builtin_roles_only()
     {

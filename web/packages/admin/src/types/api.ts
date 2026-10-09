@@ -499,7 +499,7 @@ export interface SysRole {
   enabled: boolean
   remark?: string | null
   isDelegatable?: boolean | null
-  /** 内置角色(种子里固定 Id 1–999):只有它们能被授系统模块的菜单。 */
+  /** 内置角色(种子里固定 Id 1–999):只有它们能被授系统菜单。 */
   isBuiltin?: boolean
   createTime?: string
 }

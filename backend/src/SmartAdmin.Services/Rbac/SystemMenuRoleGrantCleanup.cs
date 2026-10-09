@@ -6,11 +6,13 @@ using SmartAdmin.SqlSugar;
 namespace SmartAdmin.Services;
 
 /// <summary>
-/// 从「新建角色也能持有系统模块菜单」的老版本升级上来时,清一次存量:物理删掉非内置角色上授的系统模块菜单,
+/// 从「新建角色也能持有系统菜单」的老版本升级上来时,清一次存量:物理删掉非内置角色上授的系统菜单,
 /// 每一行写一条 Warning 日志留痕,再失效受影响用户的权限码缓存与门户代际(装了 Redis 时缓存跨重启存活)。
+/// 系统菜单指根目录是内核种子(Id ≤ <see cref="SmartSeedIds.KernelMax"/>)且挂在内置「系统」应用下的整棵子树(<see cref="MenuTree.IsKernelSystemMenu"/>);
+/// 消费者在「系统」应用下自建的目录(Id ≥ 1000)不是系统菜单,不清理。
 /// <para>只在种子版本从低于 <see cref="SinceSchemaVersion"/> 升上来的那一次执行;空库、平时重启、
 /// 关了种子(不走版本闸门)都不执行。删除不可恢复,所以日志要逐条列出删了哪个角色的哪个菜单。</para>
-/// <para>判「菜单属于系统模块」读的是全表(含停用与软删的节点),理由同 <c>RbacService.EnsureRoleMenusAssignableAsync</c>:
+/// <para>判「是不是系统菜单」读的是全表(含停用与软删的节点),理由同 <c>RbacService.EnsureRoleMenusAssignableAsync</c>:
 /// 只读启用节点会在停用的中间目录处断链而漏删,软删的菜单恢复后会带着授权回来。</para>
 /// <para>流程拆成「找出待删授权 → 记待删汇总 → 删除 → 记日志 → 失效缓存」几步,各自 <c>protected virtual</c>,可单独覆写。</para>
 /// <para>版本行先于钩子写成当前版本,所以这里不会重试:钩子失败后下次启动不再当作升级。因此失败要留下运维看得见的痕迹——
@@ -23,7 +25,7 @@ public class SystemMenuRoleGrantCleanup(
     ICacheProvider cache,
     ILogger<SystemMenuRoleGrantCleanup> logger) : IDatabaseReadyHook
 {
-    /// <summary>从这个种子版本起,系统模块的菜单只能授给内置角色。</summary>
+    /// <summary>从这个种子版本起,系统菜单只能授给内置角色。</summary>
     public const int SinceSchemaVersion = 7;
 
     /// <summary>分批删除时每批的行 Id 数,免得一条 <c>IN</c> 列表长到 SQL Server 吃不消。</summary>
@@ -66,7 +68,7 @@ public class SystemMenuRoleGrantCleanup(
         {
             logger.LogError(ex,
                 "SmartAdmin: 升级清理删除失败:事务已回滚,没有删除任何授权。种子版本已前进,不会自动重试,"
-                + "请超管在角色授权页对涉及角色重存一次授权(系统模块的菜单不会再显示,保存即收回):{Roles}",
+                + "请超管在角色授权页对涉及角色重存一次授权(系统菜单不会再显示,保存即收回):{Roles}",
                 DescribeRoles(stale));
             throw;
         }
@@ -85,12 +87,12 @@ public class SystemMenuRoleGrantCleanup(
         }
     }
 
-    /// <summary>找出非内置角色(Id &gt; 999)上授的系统模块菜单。菜单读全表(含停用与软删),角色名连软删的一起查。</summary>
+    /// <summary>找出非内置角色(Id &gt; 999)上授的系统菜单。菜单读全表(含停用与软删),角色名连软删的一起查。</summary>
     protected virtual async Task<StaleGrants> FindStaleGrantsAsync()
     {
         var menus = await db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync();
         var byId = menus.ToDictionary(m => m.Id);
-        List<long> systemMenuIds = [.. menus.Where(m => MenuTree.RootModuleId(m.Id, byId) == DefaultModuleSeed.BUILTIN_MODULE_ID).Select(m => m.Id)];
+        List<long> systemMenuIds = [.. menus.Where(m => MenuTree.IsKernelSystemMenu(m.Id, byId)).Select(m => m.Id)];
         if (systemMenuIds.Count == 0) return StaleGrants.None;
 
         var links = await db.Queryable<SysRoleMenu>()
@@ -108,7 +110,7 @@ public class SystemMenuRoleGrantCleanup(
 
     /// <summary>删除前先记一条汇总:待删多少条、涉及哪些角色。删除失败时,这是日志里唯一说明「本来要删什么」的地方。</summary>
     protected virtual void LogPendingGrants(StaleGrants stale) =>
-        logger.LogWarning("SmartAdmin: 升级清理待删除 {Count} 条非内置角色的系统模块菜单授权,涉及 {Roles} 个角色:{RoleNames}",
+        logger.LogWarning("SmartAdmin: 升级清理待删除 {Count} 条非内置角色的系统菜单授权,涉及 {Roles} 个角色:{RoleNames}",
             stale.Links.Count, stale.RoleIds.Count, DescribeRoles(stale));
 
     /// <summary>涉及角色的「名称(编码)」清单;角色已不存在的回落成 Id,太多时只列前 <see cref="MaxRolesListed"/> 个。</summary>
@@ -142,9 +144,9 @@ public class SystemMenuRoleGrantCleanup(
     protected virtual void LogDeletedGrants(StaleGrants stale, int deleted)
     {
         foreach (var link in stale.Links)
-            logger.LogWarning("SmartAdmin: 系统模块的菜单只能授给内置角色,升级清理删除角色 {Role} 上的菜单 {Menu}(Id {MenuId})",
+            logger.LogWarning("SmartAdmin: 系统菜单只能授给内置角色,升级清理删除角色 {Role} 上的菜单 {Menu}(Id {MenuId})",
                 stale.RoleNames.GetValueOrDefault(link.RoleId, link.RoleId.ToString()), stale.MenuTitles[link.MenuId], link.MenuId);
-        logger.LogWarning("SmartAdmin: 升级清理共删除 {Count} 条非内置角色的系统模块菜单授权,涉及 {Roles} 个角色", deleted, stale.RoleIds.Count);
+        logger.LogWarning("SmartAdmin: 升级清理共删除 {Count} 条非内置角色的系统菜单授权,涉及 {Roles} 个角色", deleted, stale.RoleIds.Count);
     }
 
     /// <summary>失效受影响用户的权限码缓存,并让门户代际自增(模块列表与菜单树随之重算)。</summary>

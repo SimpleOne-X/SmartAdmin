@@ -100,6 +100,43 @@ public class UserMenuGrantRulesTests
         Assert.Null(MenuTree.RootModuleId(999, byId));
     }
 
+    /// <summary>系统菜单 = 根目录挂在「系统」应用(ModuleId 1)且根目录 Id ≤ 999;整棵子树都算,消费者自建的根目录(≥ 1000)不算。</summary>
+    [Fact]
+    public void Kernel_system_menu_follows_root_module_and_root_id()
+    {
+        SysMenu[] menus =
+        [
+            M(300, 0, moduleId: 1), M(301, 300), M(1500, 301),         // 内核目录 → 内核页面 → 消费者页面
+            M(999, 0, moduleId: 1), M(1000, 0, moduleId: 1),           // 内核号段的上界与消费者号段的下界
+            M(1001, 1000), M(2000, 0, moduleId: 2), M(2001, 2000),     // 消费者目录下的页面;别的应用下的目录
+            M(3000, 0),                                                 // 没挂应用的根目录
+        ];
+        var byId = menus.ToDictionary(m => m.Id);
+
+        Assert.True(MenuTree.IsKernelSystemMenu(300, byId));
+        Assert.True(MenuTree.IsKernelSystemMenu(301, byId));
+        Assert.True(MenuTree.IsKernelSystemMenu(1500, byId));          // 挂在内核目录下的消费者页面仍是系统菜单
+        Assert.True(MenuTree.IsKernelSystemMenu(999, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(1000, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(1001, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(2000, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(2001, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(3000, byId));
+        Assert.False(MenuTree.IsKernelSystemMenu(404, byId));          // 菜单不存在
+    }
+
+    /// <summary>断链与成环的上溯规则同 RootModuleId:断链停在断点处的节点,成环有限步内收手。</summary>
+    [Fact]
+    public void Kernel_system_menu_walk_stops_on_broken_or_cyclic_chains()
+    {
+        var broken = new SysMenu[] { M(305, 99, moduleId: 1), M(1600, 98, moduleId: 1) }.ToDictionary(m => m.Id);
+        Assert.True(MenuTree.IsKernelSystemMenu(305, broken));          // 停在 305,它自己是内核号段且挂系统应用
+        Assert.False(MenuTree.IsKernelSystemMenu(1600, broken));        // 停在 1600:消费者号段
+
+        var cyclic = new SysMenu[] { M(1, 2, moduleId: 1), M(2, 1, moduleId: 1) }.ToDictionary(m => m.Id);
+        _ = MenuTree.IsKernelSystemMenu(1, cyclic);                     // 不死循环即可
+    }
+
     [Fact]
     public void Ancestor_lookup_excludes_the_node_itself_and_stops_on_broken_or_cyclic_chains()
     {

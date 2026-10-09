@@ -15,6 +15,7 @@ import {
   modulesForRole,
   isBuiltinRole,
   SYSTEM_MODULE_ID,
+  KERNEL_MAX_ID,
 } from './grantMenuGroups'
 
 const node = (
@@ -217,20 +218,45 @@ describe('计数与展示字段', () => {
   })
 })
 
-describe('角色授权范围:系统模块只授内置角色', () => {
+describe('角色授权范围:系统菜单只授内置角色', () => {
   const top = (id: number, moduleId: number | null) =>
     node(id, MenuType.Catalog, `c${id}`, [], { moduleId })
-  const scopeTree = [top(200, SYSTEM_MODULE_ID), top(900, 2), top(950, null)]
+  // 200 是内核目录;1200 是消费者在系统应用下自建的目录
+  const scopeTree = [
+    top(200, SYSTEM_MODULE_ID),
+    top(900, 2),
+    top(950, null),
+    top(1200, SYSTEM_MODULE_ID),
+  ]
   const modules = [{ id: SYSTEM_MODULE_ID }, { id: 2 }]
 
-  it('非内置角色去掉系统模块的顶级节点与应用', () => {
-    expect(treeForRole(scopeTree, false).map(n => n.id)).toEqual([900, 950])
-    expect(modulesForRole(modules, false).map(m => m.id)).toEqual([2])
+  it('内核目录的上界与后端 SmartSeedIds.KernelMax 一致', () => {
+    expect(KERNEL_MAX_ID).toBe(999)
+  })
+
+  it('非内置角色去掉挂在系统应用下的内核目录,保留消费者自建的目录', () => {
+    expect(treeForRole(scopeTree, false).map(n => n.id)).toEqual([900, 950, 1200])
+  })
+
+  it('内核号段的边界:999 去掉,1000 保留', () => {
+    const edge = [top(KERNEL_MAX_ID, SYSTEM_MODULE_ID), top(KERNEL_MAX_ID + 1, SYSTEM_MODULE_ID)]
+    expect(treeForRole(edge, false).map(n => n.id)).toEqual([KERNEL_MAX_ID + 1])
+  })
+
+  it('非内置角色:树里没有系统应用的节点时去掉系统应用', () => {
+    const kernelOnly = [top(200, SYSTEM_MODULE_ID), top(300, SYSTEM_MODULE_ID), top(900, 2)]
+    const visible = treeForRole(kernelOnly, false)
+    expect(modulesForRole(modules, false, visible).map(m => m.id)).toEqual([2])
+  })
+
+  it('非内置角色:树里还有消费者自建的系统应用目录时保留系统应用', () => {
+    const visible = treeForRole(scopeTree, false)
+    expect(modulesForRole(modules, false, visible)).toBe(modules)
   })
 
   it('内置角色原样', () => {
     expect(treeForRole(scopeTree, true)).toBe(scopeTree)
-    expect(modulesForRole(modules, true)).toBe(modules)
+    expect(modulesForRole(modules, true, scopeTree)).toBe(modules)
   })
 })
 

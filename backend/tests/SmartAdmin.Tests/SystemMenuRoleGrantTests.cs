@@ -8,7 +8,8 @@ using SmartAdmin.SqlSugar;
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 系统模块的菜单只能授给内置角色(种子里固定 Id 1–999 的角色)。界面上新建的角色授不了;
+/// 系统菜单(内置「系统」应用下内核种子目录的整棵子树)只能授给内置角色(种子里固定 Id 1–999 的角色)。界面上新建的角色授不了;
+/// 消费者在「系统」应用下自建的目录(Id ≥ 1000)不算系统菜单。
 /// 后台代码在无登录上下文里调服务不受限(与超管专属守卫同一约定)。
 /// 升级清理(<see cref="SystemMenuRoleGrantCleanup"/>)是破坏性的:这里的用例全部跑在测试自己的临时库里。
 /// </summary>
@@ -94,7 +95,7 @@ public class SystemMenuRoleGrantTests
     }
 
     /// <summary>
-    /// 系统菜单与根目录之间隔着一个被停用的页面:判「属于系统模块」要读全表(含停用节点),
+    /// 系统菜单与根目录之间隔着一个被停用的页面:判「是不是系统菜单」要读全表(含停用节点),
     /// 只读启用节点会在停用的那一层断链,把下面的按钮误判成「不属于任何模块」而放行。
     /// </summary>
     [Fact]
@@ -150,6 +151,50 @@ public class SystemMenuRoleGrantTests
         Assert.Contains(Ping, await scope.ServiceProvider.GetRequiredService<IRbacService>().GetRoleMenuIdsAsync(role));
     }
 
+    /// <summary>在内核目录(或其它已有菜单)下建一个启用的页面,返回它的 Id。</summary>
+    private static async Task<long> CreateChildPageAsync(AdminAppFactory f, long parentId)
+    {
+        using var s = f.Services.CreateScope();
+        return await s.ServiceProvider.GetRequiredService<IMenuService>().CreateAsync(new MenuInput
+        {
+            ParentId = parentId, Type = MenuType.Menu, Title = "消费者子页面", Permission = "", Sort = 99, Enabled = true,
+            Path = "/consumer-child/" + Guid.NewGuid().ToString("N")[..8], Component = "dashboard/biz", Visible = true,
+        });
+    }
+
+    /// <summary>
+    /// 消费者在「系统」应用下自建的目录(Id ≥ 1000)不是系统菜单:新建角色照常可授,授上的行原样保留。
+    /// 它们仍属于系统应用,所以仍随应用不可转授(见 UserMenuGrantPolicyTests.Consumer_catalog_under_system_app_is_not_delegatable),但角色授权不拦。
+    /// </summary>
+    [Fact]
+    public async Task Consumer_catalog_under_system_app_is_assignable_to_new_role()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+        var (catalog, page) = await GrantTestKit.CreateCatalogWithPageAsync(f, SystemModule);
+        Assert.True(catalog > SmartSeedIds.KernelMax);   // 前提:这是消费者号段的根目录,挂在「系统」应用下
+
+        Assert.Equal(0, await PutRoleMenusAsync(super, role, [catalog, page]));
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal(new[] { catalog, page }.Order(), menus);
+    }
+
+    /// <summary>消费者页面挂在内核目录下:整棵子树都按系统菜单处理,新建角色授不了。</summary>
+    [Fact]
+    public async Task Consumer_page_under_kernel_catalog_is_still_a_system_menu()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+        var child = await CreateChildPageAsync(f, ConfigPage);
+        Assert.True(child > SmartSeedIds.KernelMax);
+
+        Assert.Equal(41009, await PutRoleMenusAsync(super, role, [child]));
+        Assert.Equal(0, await PutRoleMenusAsync(super, BuiltinRole, [child]));   // 内置角色不受限
+    }
+
     // ───────── 升级清理钩子(直接以给定的版本现场调用;随版本重启的整条路径见 SeedUpgradeTests)─────────
 
     /// <summary>从版本 6 升上来:非内置角色的系统菜单(含停用目录下的)被删,业务菜单与内置角色的授权不动。</summary>
@@ -176,6 +221,34 @@ public class SystemMenuRoleGrantTests
         using var f = new AdminAppFactory();
         var role = await GrantTestKit.CreateRoleAsync(f, [Ping, BizWorkbench]);
         await SoftDeleteMenuAsync(f, Ping);
+
+        await RunCleanupAsync(f, UpgradeFromSix);
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal([BizWorkbench], menus);
+    }
+
+    /// <summary>消费者在「系统」应用下自建的目录不是系统菜单:升级清理不删它们的授权,内核系统菜单照删。</summary>
+    [Fact]
+    public async Task Cleanup_keeps_grants_on_consumer_catalog_under_system_app()
+    {
+        using var f = new AdminAppFactory();
+        var (catalog, page) = await GrantTestKit.CreateCatalogWithPageAsync(f, SystemModule);
+        var role = await GrantTestKit.CreateRoleAsync(f, [Ping, catalog, page, BizWorkbench]);
+
+        await RunCleanupAsync(f, UpgradeFromSix);
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal(new[] { BizWorkbench, catalog, page }.Order(), menus);   // 只有内核的 Ping 被删
+    }
+
+    /// <summary>消费者页面挂在内核目录下:整棵子树都是系统菜单,升级清理照删。</summary>
+    [Fact]
+    public async Task Cleanup_removes_grants_on_consumer_page_under_kernel_catalog()
+    {
+        using var f = new AdminAppFactory();
+        var child = await CreateChildPageAsync(f, ConfigPage);
+        var role = await GrantTestKit.CreateRoleAsync(f, [child, BizWorkbench]);
 
         await RunCleanupAsync(f, UpgradeFromSix);
 
@@ -229,11 +302,11 @@ public class SystemMenuRoleGrantTests
         return logger;
     }
 
-    /// <summary>系统模块下全部菜单的 Id(含停用与软删的节点,与清理的判定同口径)。</summary>
+    /// <summary>全部系统菜单的 Id(含停用与软删的节点,与清理的判定同口径)。</summary>
     private static async Task<long[]> SystemMenuIdsAsync(ISqlSugarClient db)
     {
         var byId = (await db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync()).ToDictionary(m => m.Id);
-        return [.. byId.Keys.Where(id => MenuTree.RootModuleId(id, byId) == SystemModule)];
+        return [.. byId.Keys.Where(id => MenuTree.IsKernelSystemMenu(id, byId))];
     }
 
     /// <summary>直接插库造授权行(角色不必真实存在),分批插免得单条语句过长。</summary>
@@ -246,7 +319,7 @@ public class SystemMenuRoleGrantTests
     private const long FakeRoleBase = 900_000_100_000;
 
     /// <summary>
-    /// 造足够多的系统模块授权(多个不存在的角色 × 全部系统菜单,保证要分成三批以上),外加第一个角色的一条业务菜单授权。
+    /// 造足够多的系统菜单授权(多个不存在的角色 × 全部系统菜单,保证要分成三批以上),外加第一个角色的一条业务菜单授权。
     /// 角色故意不建(清理按 sys_role_menu 的行删,不依赖角色表),日志里的角色名回落成 Id。返回系统授权的行数。
     /// </summary>
     private static async Task<int> SeedManySystemGrantsAsync(ISqlSugarClient db)
@@ -363,7 +436,7 @@ public class SystemMenuRoleGrantTests
 
     /// <summary>
     /// 缓存跨重启存活(装了 Redis 时):受影响用户已缓存的权限码与门户模块必须随清理失效,
-    /// 否则他们要等缓存过期才会失去系统模块入口。
+    /// 否则他们要等缓存过期才会失去系统菜单入口。
     /// </summary>
     [Fact]
     public async Task Cleanup_invalidates_cached_permissions_and_portal_of_affected_users()

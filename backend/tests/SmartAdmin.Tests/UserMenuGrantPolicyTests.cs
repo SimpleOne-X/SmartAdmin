@@ -228,6 +228,19 @@ public class UserMenuGrantPolicyTests
         Assert.Empty(await GrantTestKit.GrantRowsAsync(f, target));
     }
 
+    /// <summary>消费者在「系统」应用下自建的目录不是系统菜单(角色授权不拦),但属于系统应用,仍随应用不可转授。</summary>
+    [Fact]
+    public async Task Consumer_catalog_under_system_app_is_not_delegatable()
+    {
+        using var f = new AdminAppFactory();
+        var (_, page) = await GrantTestKit.CreateCatalogWithPageAsync(f, SystemModule);
+        var (admin, _, _) = await GrantTestKit.DelegatedAdminAsync(f);
+        var (target, _) = await GrantTestKit.CreateUserAsync(f, []);
+
+        Assert.Equal(41006, await GrantTestKit.PutGrantsAsync(admin, target, [GrantTestKit.Deny(page)]));
+        Assert.Empty(await GrantTestKit.GrantRowsAsync(f, target));
+    }
+
     [Fact]
     public async Task Closing_module_flag_keeps_existing_grants_but_blocks_edits()
     {

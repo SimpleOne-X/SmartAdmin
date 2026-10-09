@@ -211,7 +211,7 @@ public enum ErrorCode
     [MsgKey("error.perm.delegatedGrantExpiryInvalid")]
     DelegatedGrantExpiryInvalid = 41008,
 
-    /// <summary>系统模块的菜单只能授给内置角色(种子里固定 Id 1–999 的角色),新建的角色授不了</summary>
+    /// <summary>系统菜单(内置「系统」应用下内核种子目录的整棵子树)只能授给内置角色(种子里固定 Id 1–999 的角色),新建的角色授不了</summary>
     [MsgKey("error.role.systemMenuNotAssignable")]
     SystemMenuNotAssignable = 41009,
 

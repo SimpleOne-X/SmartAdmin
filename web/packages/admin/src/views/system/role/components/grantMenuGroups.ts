@@ -249,6 +249,9 @@ export function collectChecked(groups: CatalogGroup[]): number[] {
 /** 内置 system 模块的 Id(与后端 DefaultModuleSeed.BUILTIN_MODULE_ID 一致)。 */
 export const SYSTEM_MODULE_ID = 1
 
+/** 内核种子菜单 Id 的上界(与后端 SmartSeedIds.KernelMax 一致):根目录 Id 超过它,就是消费者自建的。 */
+export const KERNEL_MAX_ID = 999
+
 /**
  * 是不是内置角色。只有后端明确给 false 才算非内置:字段缺省(后端版本落后)时不做任何过滤,
  * 否则保存是全量替换,被隐藏的系统菜单 id 会从提交里消失,等于静默撤销内置角色的授权。
@@ -256,12 +259,22 @@ export const SYSTEM_MODULE_ID = 1
 export const isBuiltinRole = (role: { isBuiltin?: boolean | null }): boolean =>
   role.isBuiltin !== false
 
-/** 系统模块的菜单只能授给内置角色:非内置角色去掉挂在系统模块下的顶级节点(后端同样拒绝)。 */
+/**
+ * 系统菜单只能授给内置角色:非内置角色去掉系统菜单的顶级节点,即挂在系统应用下的内核目录(后端同样拒绝)。
+ * 消费者在系统应用下自建的目录(Id 超过 KERNEL_MAX_ID)不是系统菜单,保留。
+ */
 export const treeForRole = (tree: MenuTreeNode[], builtinRole: boolean): MenuTreeNode[] =>
-  builtinRole ? tree : tree.filter(n => n.moduleId !== SYSTEM_MODULE_ID)
+  builtinRole ? tree : tree.filter(n => !(n.moduleId === SYSTEM_MODULE_ID && n.id <= KERNEL_MAX_ID))
 
-/** 同上:应用下拉里去掉系统模块。 */
+/**
+ * 同上:应用下拉里去掉系统应用。visibleTree 是 treeForRole 过滤后的树,
+ * 里面还有系统应用的节点(消费者自建的目录)时保留系统应用,否则那些目录没有入口。
+ */
 export const modulesForRole = <T extends { id: number }>(
   modules: T[],
   builtinRole: boolean,
-): T[] => (builtinRole ? modules : modules.filter(m => m.id !== SYSTEM_MODULE_ID))
+  visibleTree: MenuTreeNode[],
+): T[] =>
+  builtinRole || visibleTree.some(n => n.moduleId === SYSTEM_MODULE_ID)
+    ? modules
+    : modules.filter(m => m.id !== SYSTEM_MODULE_ID)

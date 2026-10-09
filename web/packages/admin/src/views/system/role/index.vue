@@ -266,17 +266,17 @@ const menuTree = shallowRef<MenuTreeNode[]>([])
 const menuGranted = shallowRef<number[]>([])
 const menuRole = ref<SysRole | null>(null)
 const defaultModuleId = ref(UNASSIGNED)
-// 授权弹窗实际展示的应用:非内置角色不含系统模块
+// 授权弹窗实际展示的应用:非内置角色不含系统应用(除非它下面还有消费者自建的目录)
 const menuModules = shallowRef<ModuleRow[]>([])
 
 async function openMenus(r: SysRole) {
   try {
     const [tree, granted] = await Promise.all([menuApi.tree(), roleApi.getMenus(r.id)])
-    // 系统模块的菜单只能授给内置角色:非内置角色的弹窗里不出现系统模块(后端同样拒绝)
+    // 系统菜单只能授给内置角色:非内置角色的弹窗里不出现系统自带的目录(后端同样拒绝)
     const builtin = isBuiltinRole(r)
     menuRole.value = r
     menuTree.value = treeForRole(tree, builtin)
-    menuModules.value = modulesForRole(modules.value, builtin)
+    menuModules.value = modulesForRole(modules.value, builtin, menuTree.value)
     menuGranted.value = granted
     const preferred = auth.currentModuleId ?? menuModules.value[0]?.id ?? UNASSIGNED
     defaultModuleId.value = menuModules.value.some(m => m.id === preferred)

@@ -1314,7 +1314,7 @@ export default {
     grantSummary: '已授权 {on} / {total} 项',
     grantSummarySplit: '页面 {pages} · 按钮 {buttons}',
     grantUnsaved: '有未保存的修改',
-    systemMenusBuiltinOnly: '系统模块的菜单只能授给内置角色,这里不显示',
+    systemMenusBuiltinOnly: '系统自带的菜单只能授给内置角色,这里不显示',
     dataScope: '数据范围',
     scopeType: '范围类型',
     customOrgs: '自定义机构',
@@ -1836,7 +1836,7 @@ export default {
       notFound: '角色不存在',
       codeExists: '角色编码已存在',
       notDelegatable: '目标角色不可转授',
-      systemMenuNotAssignable: '系统模块的菜单只能授给内置角色',
+      systemMenuNotAssignable: '系统自带的菜单只能授给内置角色',
     },
     org: {
       notFound: '机构不存在',
