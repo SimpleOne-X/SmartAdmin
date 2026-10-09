@@ -434,7 +434,8 @@ public class SystemMenuRoleGrantTests
         var error = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
         Assert.Contains("授权已删除", error.Message);
         Assert.Contains("缓存", error.Message);
-        Assert.Contains("清授权缓存", error.Message);
+        Assert.Contains("权限缓存", error.Message);       // 缓存管理页里对应的两张卡片:权限缓存、门户菜单缓存
+        Assert.Contains("门户菜单缓存", error.Message);
         Assert.IsType<InvalidOperationException>(error.Exception);
         Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("共删除 1 条"));
     }
