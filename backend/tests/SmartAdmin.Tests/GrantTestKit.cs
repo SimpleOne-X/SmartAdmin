@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,5 +120,58 @@ internal static class GrantTestKit
     {
         using var s = f.Services.CreateScope();
         return await s.ServiceProvider.GetRequiredService<IPermissionProvider>().GetPermissionCodesAsync(userId);
+    }
+
+    /// <summary>本地时间,格式与前端提交的一致(不带时区后缀),免得序列化带上 offset。</summary>
+    public static string Local(DateTime t) => t.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+
+    /// <summary>今天 + <paramref name="days"/> 那一天的 23:59:59,即前端日期选择器提交的形态。</summary>
+    public static string EndOfDay(int days) => Local(DateTime.Today.AddDays(days + 1).AddSeconds(-1));
+
+    public static object Allow(long menuId, string? expire = null, string? remark = null) => new { menuId, effect = 1, expireTime = expire, remark };
+
+    public static object Deny(long menuId, string? expire = null, string? remark = null) => new { menuId, effect = 2, expireTime = expire, remark };
+
+    /// <summary>按变更集保存,返回信封里的业务码(0 = 成功)。</summary>
+    public static async Task<int> PutGrantsAsync(HttpClient c, long userId, object[] upserts, long[]? removes = null) =>
+        (await (await c.PutJson("/api/v1/sys/user/menu", new { userId, upserts, removes = removes ?? Array.Empty<long>() })).ReadEnvelope())
+            .GetProperty("code").GetInt32();
+
+    public static async Task<List<SysUserMenu>> GrantRowsAsync(AdminAppFactory f, long userId)
+    {
+        using var s = f.Services.CreateScope();
+        return await s.ServiceProvider.GetRequiredService<IRepository<SysUserMenu>>().AsQueryable().Where(g => g.UserId == userId).ToListAsync();
+    }
+
+    public static async Task<long> SuperAdminIdAsync(AdminAppFactory f)
+    {
+        using var s = f.Services.CreateScope();
+        return (await s.ServiceProvider.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.IsSuperAdmin == true))!.Id;
+    }
+
+    /// <summary>普通管理员:角色只授「用户-授权菜单」(239),数据范围默认全部。</summary>
+    public static async Task<(HttpClient Client, long Id, long RoleId)> DelegatedAdminAsync(
+        AdminAppFactory f, DataScopeType scope = DataScopeType.All, long[]? customOrgIds = null, long? orgId = null)
+    {
+        var role = await CreateRoleAsync(f, [239], scope, customOrgIds);
+        var (id, account) = await CreateUserAsync(f, [role], orgId);
+        return (await LoginAsync(f, account), id, role);
+    }
+
+    /// <summary>在指定模块下建一个顶级目录 + 其下一个页面。</summary>
+    public static async Task<(long CatalogId, long PageId)> CreateCatalogWithPageAsync(AdminAppFactory f, long moduleId)
+    {
+        using var s = f.Services.CreateScope();
+        var menus = s.ServiceProvider.GetRequiredService<IMenuService>();
+        var catalog = await menus.CreateAsync(new MenuInput
+        {
+            ParentId = 0, Type = MenuType.Catalog, Title = "授权测试目录", Permission = "", Sort = 50, Enabled = true, ModuleId = moduleId, Visible = true,
+        });
+        var page = await menus.CreateAsync(new MenuInput
+        {
+            ParentId = catalog, Type = MenuType.Menu, Title = "授权测试页面", Permission = "", Sort = 1, Enabled = true,
+            Path = "/grant-test/" + Guid.NewGuid().ToString("N")[..8], Component = "dashboard/biz", Visible = true,
+        });
+        return (catalog, page);
     }
 }
