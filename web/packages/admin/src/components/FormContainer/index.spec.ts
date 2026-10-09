@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, nextTick, type App } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -51,6 +51,50 @@ describe('FormContainer 全屏', () => {
     mount({ fullscreen: 'auto' })
     await nextTick()
     expect(document.body.querySelector('.smart-form--fullscreen')).toBeNull()
+  })
+})
+
+async function clickConfirm() {
+  await nextTick()
+  document.body.querySelector<HTMLButtonElement>('.n-button--primary-type')!.click()
+  await new Promise(r => setTimeout(r, 0))
+}
+
+describe('FormContainer 提交失败晃动', () => {
+  const proto = Element.prototype as unknown as { animate?: unknown }
+  const origAnimate = proto.animate
+  const animate = vi.fn(() => ({ cancel: vi.fn() }))
+  beforeEach(() => {
+    animate.mockClear()
+    proto.animate = animate
+  })
+  afterEach(() => {
+    proto.animate = origAnimate
+  })
+
+  it('onConfirm reject(表单校验不过)→ 卡片晃一下,且不关闭', async () => {
+    mount({ onConfirm: () => Promise.reject([[{ message: '必填' }]]) })
+    await clickConfirm()
+    expect(animate).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector('.n-card.n-modal')).not.toBeNull()
+  })
+
+  it('onConfirm 返回 false(业务拒绝)→ 同样晃', async () => {
+    mount({ onConfirm: () => false })
+    await clickConfirm()
+    expect(animate).toHaveBeenCalledTimes(1)
+  })
+
+  it('提交成功 → 不晃', async () => {
+    mount({ onConfirm: () => true })
+    await clickConfirm()
+    expect(animate).not.toHaveBeenCalled()
+  })
+
+  it('抽屉形态失败不晃(整块贴边,位移会露出缝)', async () => {
+    mount({ variant: 'drawer', onConfirm: () => Promise.reject(new Error('x')) })
+    await clickConfirm()
+    expect(animate).not.toHaveBeenCalled()
   })
 })
 

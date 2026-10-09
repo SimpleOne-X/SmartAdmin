@@ -64,7 +64,7 @@ SmartAdmin 内接入约定:
 
 | 组件 | 定位 | README |
 |---|---|---|
-| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭 | `src/components/FormContainer/README.md` |
+| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭;弹窗形态下提交失败(校验 reject / 返回 `false`)卡片会晃一下 | `src/components/FormContainer/README.md` |
 | StatusSwitch | 表格行内启停开关;悲观更新,失败自动回滚 | `src/components/StatusSwitch/README.md` |
 | TableTotal | 分页栏左侧的「共 N 条」,写在 SmartTable 的 `#pagination-prefix` 插槽里;每张分页表格都要有 | `src/components/TableTotal/README.md` |
 | DictSelect | 字典下拉,`$attrs` 全透传 n-select | `src/components/DictSelect/README.md` |

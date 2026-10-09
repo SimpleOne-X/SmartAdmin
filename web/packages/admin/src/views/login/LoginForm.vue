@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount, h } from 'vue'
+import { reactive, ref, computed, onMounted, onBeforeUnmount, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NAlert,
@@ -22,6 +22,7 @@ import { useAuthStore } from '#/stores/auth'
 import { useSite } from '#/composables/useSite'
 import { resetRouter } from '#/router'
 import { translateError } from '#/utils/error'
+import { shake } from '#/utils/shake'
 import {
   splitLoginProviders,
   PREVIEW_ALL_SSO_BRANDS,
@@ -230,14 +231,10 @@ async function enterHome() {
 }
 
 // 密码错 / 验证码错:表单左右抖一下(macOS 登录框的做法),比只弹 toast 更直接。
-// 先摘掉 class、等一帧再加,连续失败也能重播。
-const shaking = ref(false)
-async function shake() {
-  shaking.value = false
-  await nextTick()
-  requestAnimationFrame(() => {
-    shaking.value = true
-  })
+// 动画细节与「为什么不用 CSS class」见 utils/shake。
+const formEl = ref<HTMLElement>()
+function shakeForm() {
+  shake(formEl.value)
 }
 
 // 登录成功的收尾:先让页面淡出,再跳转。系统开了「减少动态效果」就不等。
@@ -340,7 +337,7 @@ async function onSubmit() {
       startCountdown(Number(e.args.resendSeconds ?? 60))
     } else {
       message.error(translateError(e))
-      void shake()
+      shakeForm()
     }
     await refreshCaptchaAfterUse()
   } finally {
@@ -378,7 +375,7 @@ async function onMfaSubmit() {
     )
   } catch (e) {
     message.error(translateError(e))
-    void shake()
+    shakeForm()
   } finally {
     loading.value = false
   }
@@ -396,7 +393,7 @@ async function onTotpSubmit() {
     )
   } catch (e) {
     message.error(translateError(e))
-    void shake()
+    shakeForm()
   } finally {
     loading.value = false
   }
@@ -456,7 +453,7 @@ async function onSmsSubmit() {
     await finishLogin(await authApi.smsLogin({ phone: smsModel.phone, code: smsModel.code }))
   } catch (e) {
     message.error(translateError(e))
-    void shake()
+    shakeForm()
   } finally {
     loading.value = false
   }
@@ -464,7 +461,7 @@ async function onSmsSubmit() {
 </script>
 
 <template>
-  <div class="login-form" :class="{ shake: shaking }" @animationend.self="shaking = false">
+  <div ref="formEl" class="login-form">
     <div v-if="showLogo" class="lf-brand">
       <!-- 站点 logo 的取值顺序(配置 → brand 选项 → 内置矢量标)统一在 SmartLogo 里 -->
       <SmartLogo :size="34" />
@@ -775,31 +772,6 @@ async function onSmsSubmit() {
 .login-form {
   width: 100%;
 }
-/* 登录失败:左右抖一下并逐渐收住(macOS 登录框的做法),不回弹到别处 */
-.login-form.shake {
-  animation: lf-shake 0.46s cubic-bezier(0.36, 0.07, 0.19, 0.97);
-}
-@keyframes lf-shake {
-  0%,
-  100% {
-    transform: none;
-  }
-  15% {
-    transform: translate3d(-9px, 0, 0);
-  }
-  30% {
-    transform: translate3d(8px, 0, 0);
-  }
-  45% {
-    transform: translate3d(-6px, 0, 0);
-  }
-  60% {
-    transform: translate3d(4px, 0, 0);
-  }
-  80% {
-    transform: translate3d(-2px, 0, 0);
-  }
-}
 /* 登录方式切换:旧内容淡出并轻微上移变虚 */
 .lf-swap-leave-active {
   transition:
@@ -811,11 +783,6 @@ async function onSmsSubmit() {
   opacity: 0;
   transform: translate3d(0, -6px, 0);
   filter: blur(4px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .login-form.shake {
-    animation: none;
-  }
 }
 .lf-pending-alert {
   margin-bottom: 16px;
