@@ -1881,6 +1881,7 @@ export default {
       notFound: 'Role not found',
       codeExists: 'Role code already exists',
       notDelegatable: 'Role is not delegatable',
+      systemMenuNotAssignable: 'System module menus can only be granted to built-in roles',
     },
     org: {
       notFound: 'Org not found',

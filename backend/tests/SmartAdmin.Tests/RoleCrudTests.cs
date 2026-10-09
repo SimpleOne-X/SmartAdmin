@@ -74,7 +74,7 @@ public class RoleCrudTests
 
         // 建角色 + 授菜单 + 配数据范围 + 挂到一个用户
         var roleId = (await (await c.PostJson("/api/v1/sys/role/add", new { name = "级联", code = "cascade", sort = 1, enabled = true })).ReadEnvelope()).GetProperty("data").GetInt64();
-        await c.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds = new[] { 200L } });
+        await GrantTestKit.SetRoleMenusAsync(f, roleId, [200L]);
         await c.PutJson("/api/v1/sys/role/datascope", new { roleId, scopeType = 3 });  // OrgAndChildren
         var userId = (await (await c.PostJson("/api/v1/sys/user", new { account = "role_cascade_u", password = "Test@123456", name = "级联用户", enabled = true, roleIds = new[] { roleId } })).ReadEnvelope()).GetProperty("data").GetProperty("id").GetInt64();
 

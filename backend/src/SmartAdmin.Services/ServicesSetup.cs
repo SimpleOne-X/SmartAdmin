@@ -255,6 +255,9 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultDataScopeSeed>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, DefaultJobSeed>());
 
+        // 系统模块菜单只授内置角色:从老版本升级上来的那一次清掉非内置角色上的存量
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, SystemMenuRoleGrantCleanup>());
+
         return services;
     }
 }

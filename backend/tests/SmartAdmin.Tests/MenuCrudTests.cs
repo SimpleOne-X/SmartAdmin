@@ -53,7 +53,7 @@ public class MenuCrudTests
         var roleId = (await (await admin.PostJson("/api/v1/sys/role/add",
             new { name = "移动端", code = "mobile", sort = 0, enabled = true })).ReadEnvelope())
             .GetProperty("data").GetInt64();
-        await admin.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds = new[] { buttonId } });
+        await GrantTestKit.SetRoleMenusAsync(f, roleId, [buttonId]);
         await admin.PostJson("/api/v1/sys/user",
             new { account = "pda", password = "Test@123456", name = "PDA", enabled = true, roleIds = new[] { roleId } });
 

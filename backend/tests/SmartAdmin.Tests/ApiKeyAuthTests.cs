@@ -144,7 +144,7 @@ public class ApiKeyAuthTests
         var machine = Machine(f, KEY_PDA);
         Assert.Equal(HttpStatusCode.Forbidden, (await machine.GetAsync("/api/v1/diag/machine-perm")).StatusCode);   // 还没授
 
-        await admin.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds = new[] { buttonId } });
+        await GrantTestKit.SetRoleMenusAsync(f, roleId, [buttonId]);
         var ok = await machine.GetAsync("/api/v1/diag/machine-perm");
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
         Assert.Equal("perm", (await ok.ReadEnvelope()).GetProperty("data").GetString());

@@ -47,6 +47,16 @@ internal static class GrantTestKit
         return role.Id;
     }
 
+    /// <summary>
+    /// 经服务给角色配菜单。无登录上下文 = 可信系统上下文,不受「系统模块菜单只授内置角色」限制;
+    /// 给那些锁别的行为、只是顺手要给新建角色配系统菜单的用例用。要测这条限制本身,走 HTTP。
+    /// </summary>
+    public static async Task SetRoleMenusAsync(AdminAppFactory f, long roleId, IReadOnlyCollection<long> menuIds)
+    {
+        using var s = f.Services.CreateScope();
+        await s.ServiceProvider.GetRequiredService<IRbacService>().SetRoleMenusAsync(roleId, menuIds);
+    }
+
     /// <summary>建一个启用的用户;<paramref name="roleIds"/> 为空即「没有任何角色」。</summary>
     public static async Task<(long Id, string Account)> CreateUserAsync(
         AdminAppFactory f, IReadOnlyCollection<long> roleIds, long? orgId = null)
