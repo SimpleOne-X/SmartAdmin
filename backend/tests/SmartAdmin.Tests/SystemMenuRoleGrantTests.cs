@@ -213,21 +213,114 @@ public class SystemMenuRoleGrantTests
         Assert.Equal([BizWorkbench], menus);
     }
 
+    /// <summary>用测试宿主的真实库与缓存、带日志捕获地跑一次清理钩子(<paramref name="make"/> 可换成覆写了某一步的子类)。</summary>
+    private static async Task<CapturingLogger<SystemMenuRoleGrantCleanup>> RunLoggedCleanupAsync(
+        AdminAppFactory f,
+        DatabaseReadyContext context,
+        Func<ISqlSugarClient, ICacheProvider, ILogger<SystemMenuRoleGrantCleanup>, SystemMenuRoleGrantCleanup>? make = null)
+    {
+        var logger = new CapturingLogger<SystemMenuRoleGrantCleanup>();
+        using var s = f.Services.CreateScope();
+        var sp = s.ServiceProvider;
+        var db = sp.GetRequiredService<ISqlSugarClient>();
+        var cache = sp.GetRequiredService<ICacheProvider>();
+        var hook = make is null ? new SystemMenuRoleGrantCleanup(db, cache, logger) : make(db, cache, logger);
+        await hook.OnDatabaseReadyAsync(context, CancellationToken.None);
+        return logger;
+    }
+
+    /// <summary>系统模块下全部菜单的 Id(含停用与软删的节点,与清理的判定同口径)。</summary>
+    private static async Task<long[]> SystemMenuIdsAsync(ISqlSugarClient db)
+    {
+        var byId = (await db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync()).ToDictionary(m => m.Id);
+        return [.. byId.Keys.Where(id => MenuTree.RootModuleId(id, byId) == SystemModule)];
+    }
+
+    /// <summary>直接插库造授权行(角色不必真实存在),分批插免得单条语句过长。</summary>
+    private static async Task InsertLinksAsync(ISqlSugarClient db, IEnumerable<SysRoleMenu> links)
+    {
+        foreach (var chunk in links.Chunk(500))
+            await db.Insertable(chunk.ToList()).ExecuteCommandAsync();
+    }
+
+    /// <summary>
+    /// 授权行多到要分好几批删:一个事务里的每一批都得删净,留一条就是留一条越权入口。
+    /// 角色故意不建(清理按 sys_role_menu 的行删,不依赖角色表),日志里的角色名回落成 Id。
+    /// </summary>
+    [Fact]
+    public async Task Cleanup_deletes_every_grant_across_several_batches()
+    {
+        const long fakeRoleBase = 900_000_100_000;
+        using var f = new AdminAppFactory();
+        using var s = f.Services.CreateScope();
+        var db = s.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+        long[] systemMenus = await SystemMenuIdsAsync(db);
+        var roleCount = 2200 / systemMenus.Length + 1;
+        var links = Enumerable.Range(0, roleCount)
+            .SelectMany(i => systemMenus.Select(m => new SysRoleMenu { RoleId = fakeRoleBase + i, MenuId = m }))
+            .ToList();
+        Assert.True(links.Count > 2 * 1000);   // 前提:确实要分成三批
+        links.Add(new SysRoleMenu { RoleId = fakeRoleBase, MenuId = BizWorkbench });
+        await InsertLinksAsync(db, links);
+
+        var logger = await RunLoggedCleanupAsync(f, UpgradeFromSix);
+
+        var left = await db.Queryable<SysRoleMenu>().Where(x => x.RoleId >= fakeRoleBase && x.RoleId < fakeRoleBase + 10_000).ToListAsync();
+        var only = Assert.Single(left);
+        Assert.Equal(BizWorkbench, only.MenuId);   // 业务菜单那一条留着
+        Assert.Equal(links.Count - 1, logger.Entries.Count(e => e.Message.Contains("升级清理删除角色")));   // 每删一行一条
+    }
+
+    /// <summary>内置与否的分界就在 999 / 1000:同样授了系统菜单,999 保留,1000(消费者种子号段)被删。</summary>
+    [Fact]
+    public async Task Cleanup_keeps_role_999_and_removes_role_1000()
+    {
+        using var f = new AdminAppFactory();
+        using var s = f.Services.CreateScope();
+        var db = s.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+        await db.Insertable(new List<SysRole>
+        {
+            new() { Id = 999, Name = "边界内置", Code = "edge-999", Enabled = true },
+            new() { Id = 1000, Name = "边界消费者", Code = "edge-1000", Enabled = true },
+        }).ExecuteCommandAsync();
+        await InsertLinksAsync(db, [
+            new SysRoleMenu { RoleId = 999, MenuId = Ping },
+            new SysRoleMenu { RoleId = 1000, MenuId = Ping },
+        ]);
+
+        await RunCleanupAsync(f, UpgradeFromSix);
+
+        long[] edge999 = await MenusOfRoleAsync(f, 999);
+        long[] edge1000 = await MenusOfRoleAsync(f, 1000);
+        Assert.Equal([Ping], edge999);
+        Assert.Empty(edge1000);
+    }
+
+    /// <summary>软删(在回收站里)的非内置角色上的系统授权也要清,恢复角色不能把越权带回来;日志里角色名照常可读。</summary>
+    [Fact]
+    public async Task Cleanup_removes_system_grants_of_soft_deleted_non_builtin_role()
+    {
+        using var f = new AdminAppFactory();
+        var role = await GrantTestKit.CreateRoleAsync(f, [Ping, BizWorkbench]);
+        using (var s = f.Services.CreateScope())
+            await s.ServiceProvider.GetRequiredService<ISqlSugarClient>().Updateable<SysRole>()
+                .SetColumns(x => new SysRole { IsDelete = true }).Where(x => x.Id == role).ExecuteCommandAsync();
+
+        var logger = await RunLoggedCleanupAsync(f, UpgradeFromSix);
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal([BizWorkbench], menus);
+        Assert.Contains(logger.Entries, e => e.Message.Contains("授权测试角色") && e.Message.Contains("连通性探针"));
+    }
+
     /// <summary>删除不可恢复,所以每一行授权一条 Warning(角色名、编码、菜单标题、菜单 Id),末尾再有一条汇总。</summary>
     [Fact]
     public async Task Cleanup_logs_one_warning_per_removed_grant()
     {
         using var f = new AdminAppFactory();
         await GrantTestKit.CreateRoleAsync(f, [Ping, ConfigQueryButton, BizWorkbench]);
-        var logger = new CapturingLogger<SystemMenuRoleGrantCleanup>();
 
-        using (var s = f.Services.CreateScope())
-        {
-            var sp = s.ServiceProvider;
-            var hook = new SystemMenuRoleGrantCleanup(
-                sp.GetRequiredService<ISqlSugarClient>(), sp.GetRequiredService<ICacheProvider>(), logger);
-            await hook.OnDatabaseReadyAsync(UpgradeFromSix, CancellationToken.None);
-        }
+        var logger = await RunLoggedCleanupAsync(f, UpgradeFromSix);
 
         var warnings = logger.Entries.Where(e => e.Level == LogLevel.Warning).Select(e => e.Message).ToList();
         Assert.Equal(3, warnings.Count);
@@ -242,18 +335,17 @@ public class SystemMenuRoleGrantTests
     public async Task Cleanup_with_nothing_to_remove_stays_silent()
     {
         using var f = new AdminAppFactory();
-        await GrantTestKit.CreateRoleAsync(f, [BizWorkbench]);
-        var logger = new CapturingLogger<SystemMenuRoleGrantCleanup>();
+        var role = await GrantTestKit.CreateRoleAsync(f, [BizWorkbench]);
+        var (userId, _) = await GrantTestKit.CreateUserAsync(f, [role]);
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        await cache.SetAsync(CacheKeys.UserPermissions(userId), "sentinel");   // 该用户的权限码缓存里放个哨兵
+        var generation = await cache.GetAsync<long>(CacheKeys.PortalGeneration);
 
-        using (var s = f.Services.CreateScope())
-        {
-            var sp = s.ServiceProvider;
-            var hook = new SystemMenuRoleGrantCleanup(
-                sp.GetRequiredService<ISqlSugarClient>(), sp.GetRequiredService<ICacheProvider>(), logger);
-            await hook.OnDatabaseReadyAsync(UpgradeFromSix, CancellationToken.None);
-        }
+        var logger = await RunLoggedCleanupAsync(f, UpgradeFromSix);
 
         Assert.Empty(logger.Entries);
+        Assert.Equal("sentinel", await cache.GetAsync<string>(CacheKeys.UserPermissions(userId)));   // 哨兵还在
+        Assert.Equal(generation, await cache.GetAsync<long>(CacheKeys.PortalGeneration));            // 代际没动
     }
 
     /// <summary>
