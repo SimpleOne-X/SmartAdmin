@@ -278,6 +278,13 @@ public class AdminSecurityOptions
     /// </summary>
     public string? DefaultInitialPassword { get; set; }
 
+    /// <summary>
+    /// 非超管做用户单独授权时,「允许」最长可授多少天,默认 90。普通管理员授出的允许必须带到期时间,
+    /// 到期日不晚于今天加这个天数;<b>0 = 不限</b>(不要求到期时间,也不设上限)。
+    /// 「拒绝」只会收紧权限,不受此限;超管不受此限。长期权限应当走角色,单独授权是临时例外。
+    /// </summary>
+    public int DelegatedGrantMaxDays { get; set; } = 90;
+
     // ── 有效能力判定 ──
 
     /// <summary>
