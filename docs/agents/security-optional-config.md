@@ -53,7 +53,7 @@
 | `SmsOtp:*` | 短信 OTP（与 TOTP **独立**，默认关） |
 | `DataProtection:*` | 信封主密钥（TOTP 种子等） |
 | `DefaultInitialPassword` | 默认初始口令；`null` = 随机 |
-| `DelegatedGrantMaxDays` | 普通管理员单独授权「允许」的最长天数，默认 90；0 = 不限 |
+| `DelegatedGrantMaxDays` | 普通管理员单独授权「允许」的最长天数，默认 90；`0` = 不限 |
 
 ---
 

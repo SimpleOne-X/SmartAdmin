@@ -103,9 +103,9 @@ Seeding is insert-only by default (existence checked by primary key), so seed ro
 ::: tip Built-in menus: structure belongs to the kernel, appearance to you
 An upgrade only refreshes the **structural columns** of built-in menus: parent, type, permission code, path, component, icon and module.
 The title, order, visibility and enabled flag you changed in the menu-management page stay as they are — a "File management" entry you hid does not come back. Menus you added yourself are unaffected.
-The module table (`sys_module`) only refreshes code, icon, landing route and route prefix; the title, order, enabled flag, remark and "delegatable" switch you changed stay as they are.
-The config center (`sys_config`) only refreshes display name, group, order and remark, never a value; dictionaries, users and role grants are your data — an upgrade doesn't touch a single row of it.
-The one upgrade from seed version 6 or earlier also deletes the System-module menus granted to non-built-in roles; see the upgrade notes in the changelog.
+The module table (`sys_module`) only refreshes code, icon, landing route and route prefix; the title, order, enabled flag, remark and ["delegatable" switch](/backend/auth-security#per-user-grants) you changed stay as they are.
+The config center (`sys_config`) only refreshes display name, group, order and remark, never a value; dictionaries, users and role grants are your data — an upgrade doesn't touch a single row of it, with one exception: the upgrade from seed version 6 or earlier.
+That one deletes the System-module menus granted to non-built-in roles, so back up `sys_role_menu` first; see the warning block under [Per-user grants](/backend/auth-security#per-user-grants) and the upgrade notes in the changelog.
 :::
 
 ## Post-go-live self-check

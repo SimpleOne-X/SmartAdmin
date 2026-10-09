@@ -223,7 +223,7 @@ Data scope still comes only from roles, so a user with no roles and only per-use
 Who can grant splits into two tiers:
 
 - A super admin can grant any menu, and an Allow may be open-ended.
-- An ordinary admin is a non-super-admin whose effective permission codes include `PUT:/api/v1/sys/user/menu`, and is bound by four constraints:
+- An ordinary admin is a non-super-admin whose effective permission codes include `PUT:/api/v1/sys/user/menu`. Tick the "User - Grant Menus" button on their role and they have it. Four constraints bind them:
   - The target user must be inside their data scope.
   - The target must not be an ordinary admin too.
     Permissions between admins are adjusted only by a super admin, so two admins cannot grant each other anything.
@@ -235,6 +235,7 @@ Who can grant splits into two tiers:
 Nobody can grant to themselves (`CannotOperateSelf`, 42029) or to a super admin (`SuperAdminProtected`, 42007), super admins included.
 
 "Delegatable" is a switch on the module (`SysModule.IsDelegatable`), set by a super admin on the module-management page.
+It is a different switch from the role's own "delegatable" flag (`SysRole.IsDelegatable`), which decides whether an ordinary admin may hand that role to others.
 Only `true` counts; `null` and `false` both mean not delegatable.
 Existing modules are `null` after an upgrade, so until a super admin turns a module's switch on, an ordinary admin can grant nothing inside it.
 The built-in "System" module is permanently non-delegatable: its switch is greyed out and any submitted value is ignored.
@@ -268,17 +269,18 @@ This restriction covers role grants only — a super admin can still grant a Sys
 ::: warning Upgrading deletes System-menu grants held by new roles
 On the first startup after upgrading from a database whose seed version is below 7, once the database is ready the kernel physically deletes the `sys_role_menu` rows of "non-built-in role × System-module menu".
 The deletion is irreversible, so back up that table before upgrading.
-Every row writes a Warning log line (role name, code, menu title, menu Id), and the affected users' permission-code cache and portal-menu cache are invalidated.
+Every row writes a Warning log line (role name, code, menu title, menu Id), and the affected users' permission-code cache is invalidated and the portal-menu cache is recomputed as a whole.
 An empty database, an ordinary restart, or seeding turned off (which skips the version gate) never runs it.
 
 - Projects that rely on a new role to reach System pages lose that access for those users after the upgrade;
   switch them to the built-in "System Administrator" role.
 - Roles your own seed plants (Id ≥ 1000) count as non-built-in too.
-  On the upgrade startup the hook deletes the System menus already granted to them;
+  On the upgrade startup the cleanup deletes the System menus already granted to them;
   but a seed has no login context and isn't subject to the guard, so every later restart plants the missing rows again.
   A project that grants System menus this way has to use a built-in role instead, or change its own seed.
 - The cleanup runs once and is never retried.
-  The version row is written as 7 before the cleanup runs, so if the cleanup fails the startup aborts with an exception and leaves an Error log line saying the transaction was rolled back and no grant was deleted.
+  The version row is written as 7 before the cleanup runs, so if the cleanup fails the startup aborts with an exception.
+  A failed deletion also leaves an Error log line saying the transaction was rolled back and no grant was deleted.
   To recover, a super admin re-saves the grants of the roles involved on the role-grant page:
   the dialog doesn't show System-module menus, so saving takes them back.
 - If only the cache invalidation fails after the grants are deleted, it writes an Error log line and startup carries on.
@@ -296,7 +298,8 @@ When a grant is rejected, match the error code to find the cause:
 | `41007` | `TargetIsDelegatedAdmin` | An ordinary admin grants to another ordinary admin; also when the target was later put into an admin role and the original granter tries to edit that user's records |
 | `41008` | `DelegatedGrantExpiryInvalid` | An ordinary admin's Allow has no expiry time, or its expiry date is later than today plus the maximum days |
 | `41009` | `SystemMenuNotAssignable` | A System-module menu is granted to a non-built-in role |
-| `42031` | `UserMenuGrantInvalid` | Save-time validation fails: the menu doesn't exist, the same menu appears twice in one change set, or the expiry time is already past |
+| `42015` | `MenuNotFound` | A menu being added or edited doesn't exist |
+| `42031` | `UserMenuGrantInvalid` | The change set itself is invalid: the same menu appears more than once (adds, edits and removals counted together, so a menu in both an edit and a removal counts), the effect is neither Allow nor Deny, the expiry time is not later than now (Allow and Deny alike), or the remark exceeds 200 characters |
 
 After a successful save the kernel publishes `UserMenuGrantsChangedEvent` through `IEventBus`, carrying the target user, the operator, and the details of what was added, changed and removed.
 The kernel never subscribes to it itself; a consumer that wants external auditing or alerting just subscribes.
@@ -306,7 +309,7 @@ A grant change takes effect on the API immediately:
 permission codes aren't in the JWT but are read from cache on every request, and saving a grant invalidates that user's cache.
 Expiry needs no background job, because the cache TTL is capped at the nearest expiry moment and the next request after it recomputes.
 The limitation is that a page the target user already has open won't refresh its sidebar and buttons live; they need to reload or sign in again.
-Role changes behave the same way today, since the kernel has no push channel for them.
+Role changes behave the same way, since the kernel has no push channel for them.
 
 The kernel wires per-user grants only into the default `RbacPermissionProvider` and `MenuService`.
 If a project replaces `IPermissionProvider` or `IMenuService` wholesale, its implementation knows nothing about `sys_user_menu`, and per-user grants have no effect.
