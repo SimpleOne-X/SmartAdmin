@@ -36,9 +36,11 @@ const user = ref<{ id: number; name: string } | null>(null)
 const tree = shallowRef<MenuTreeNode[]>([])
 const grants = shallowRef<UserMenuGrantItem[]>([])
 const effective = shallowRef<UserMenuEffective | null>(null)
-/** 打开时的快照;草稿另建一份,免得两边共用同一批对象、改一处两处都变。 */
-let baseline: Draft = new Map()
+/** 打开时的快照;草稿另建一份,免得两边共用同一批对象、改一处两处都变。每次换一份新 Map,依赖它的计算属性才会重算。 */
+const baseline = shallowRef<Draft>(new Map())
 const draft = reactive<Draft>(new Map())
+/** 打开请求的序号:慢的旧响应回来时序号已变,不许再写任何状态。 */
+let openSeq = 0
 
 /** 窄于此宽度弹窗几乎铺满视口(同角色页)。 */
 const COMPACT = 640
@@ -62,14 +64,14 @@ const footerStyle = { padding: '0' }
 const maxDate = computed(() => maxExpireDate(effective.value?.delegatedMaxDays, new Date()))
 const counts = computed(() => countDraft(draft))
 const dirty = computed(() => {
-  const d = diffDraft(baseline, draft)
+  const d = diffDraft(baseline.value, draft)
   return d.upserts.length + d.removes.length > 0
 })
 const readonlyText = computed(() => {
   const e = effective.value
   if (!e || e.targetEditable) return ''
   const key = e.readOnlyReason != null ? READONLY_REASON_KEYS[e.readOnlyReason] : undefined
-  return t('userGrant.readonly', { reason: key ? t(key) : '' })
+  return key ? t('userGrant.readonly', { reason: t(key) }) : t('userGrant.readonlyNoReason')
 })
 /** 默认停在当前所在的应用;不在清单里(如已被去掉)就落到第一个。 */
 const defaultModuleId = computed(() => {
@@ -78,10 +80,20 @@ const defaultModuleId = computed(() => {
   return current != null && modules.some(m => m.id === current) ? current : (modules[0]?.id ?? 0)
 })
 
+/** 清掉上一个用户留下的全部数据,加载期间底栏不会显示别人的数字。 */
+function reset() {
+  tree.value = []
+  grants.value = []
+  baseline.value = new Map()
+  draft.clear()
+  effective.value = null
+}
+
 async function open(target: { id: number; name: string }) {
+  const seq = ++openSeq
   user.value = target
   tab.value = 'grant'
-  effective.value = null
+  reset()
   show.value = true
   loading.value = true
   try {
@@ -90,28 +102,29 @@ async function open(target: { id: number; name: string }) {
       userApi.getMenuGrants(target.id),
       userApi.getEffectiveMenus(target.id),
     ])
+    if (seq !== openSeq) return
     tree.value = menuTree
     grants.value = records
-    baseline = draftFromGrants(records)
-    draft.clear()
+    baseline.value = draftFromGrants(records)
     for (const [id, entry] of draftFromGrants(records)) draft.set(id, entry)
     effective.value = eff
   } catch (e) {
+    if (seq !== openSeq) return
     message.error(translateError(e))
     show.value = false
   } finally {
-    loading.value = false
+    if (seq === openSeq) loading.value = false
   }
 }
 
 async function save() {
-  if (!user.value) return
-  const bad = invalidExpiry(baseline, draft, effective.value?.delegatedMaxDays, new Date())
+  if (saving.value || !user.value) return
+  const bad = invalidExpiry(baseline.value, draft, effective.value?.delegatedMaxDays, new Date())
   if (bad.length) {
     message.warning(t('userGrant.invalidExpiry', { count: bad.length }))
     return
   }
-  const { upserts, removes } = diffDraft(baseline, draft)
+  const { upserts, removes } = diffDraft(baseline.value, draft)
   if (!upserts.length && !removes.length) {
     show.value = false
     return

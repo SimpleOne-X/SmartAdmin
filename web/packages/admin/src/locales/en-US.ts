@@ -591,6 +591,7 @@ export default {
     noRoles:
       'This user has no role, so the data scope is "self only": granted pages open but show only data the user created.',
     readonly: 'View only: {reason}',
+    readonlyNoReason: 'View only',
     follow: 'Follow roles',
     allow: 'Allow',
     deny: 'Deny',

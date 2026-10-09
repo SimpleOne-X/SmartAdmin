@@ -281,3 +281,254 @@ describe('UserGrantMenuSheet 三态与保存', () => {
     expect(saveMock).toHaveBeenCalledWith(7, [], [120])
   })
 })
+
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (v: T) => void
+  reject: (e: unknown) => void
+}
+function deferred<T>(): Deferred<T> {
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+const cancelButton = () => qa('.n-button').find(b => b.textContent?.trim() === '取消')
+/** 某行里值为 text 的输入框(备注)。 */
+const inputOf = (title: string, text: string) =>
+  qa('input', rowOf(title)).find(i => i.getAttribute('value') === text)
+const grantOf = (menuId: number, effect: UserMenuEffect, remark: string): UserMenuGrantItem => ({
+  menuId,
+  effect,
+  expireTime: null,
+  remark,
+  grantTime: '2026-10-09T09:00:00',
+})
+
+/** 用户 7 的三个请求由测试手动放行,用户 8 的立刻返回。 */
+function slowUserSeven(grantsOf8: UserMenuGrantItem[] = [], effectiveOf8 = effectiveOf()) {
+  const slow = {
+    tree: deferred<MenuTreeNode[]>(),
+    grants: deferred<UserMenuGrantItem[]>(),
+    effective: deferred<UserMenuEffective>(),
+  }
+  treeMock.mockReturnValueOnce(slow.tree.promise).mockResolvedValueOnce(TREE)
+  grantsMock.mockImplementation(id => (id === 7 ? slow.grants.promise : Promise.resolve(grantsOf8)))
+  effectiveMock.mockImplementation(id =>
+    id === 7 ? slow.effective.promise : Promise.resolve(effectiveOf8),
+  )
+  return slow
+}
+
+describe('UserGrantMenuSheet 快速切换用户', () => {
+  it('用户 A 的请求慢于 B:最终展示 B 的数据,保存提交 B 的 userId,A 的记录不会混进变更集', async () => {
+    const slow = slowUserSeven(
+      [grantOf(112, UserMenuEffect.Allow, 'B的备注')],
+      effectiveOf({ userId: 8 }),
+    )
+    mount()
+    sheet.open({ id: 7, name: '张三' })
+    await settle()
+    cancelButton()!.click() // 加载期间允许关
+    await settle()
+    sheet.open({ id: 8, name: '李四' })
+    await settle()
+    expect(inputOf('订单导出', 'B的备注')).toBeTruthy()
+
+    // A 的响应此时才到
+    slow.tree.resolve(TREE)
+    slow.grants.resolve([grantOf(120, UserMenuEffect.Deny, 'A的备注')])
+    slow.effective.resolve(effectiveOf({ userId: 7, hasRoles: false }))
+    await settle()
+
+    expect(document.body.textContent).toContain('授权菜单 · 李四')
+    expect(inputOf('订单导出', 'B的备注')).toBeTruthy()
+    expect(inputOf('客户', 'A的备注')).toBeUndefined()
+    expect(document.body.textContent).not.toContain('该用户没有任何角色')
+
+    // 若 A 的草稿混进来,「客户」会是拒绝,改回跟随就会把 120 当 removes 交给 B
+    await pick('客户', '跟随角色')
+    await pick('订单查看', '拒绝')
+    saveButton()!.click()
+    await settle()
+    expect(saveMock).toHaveBeenCalledTimes(1)
+    expect(saveMock).toHaveBeenCalledWith(
+      8,
+      [{ menuId: 111, effect: UserMenuEffect.Deny, expireTime: null, remark: null }],
+      [],
+    )
+  })
+
+  it('旧请求失败:不弹错误、不关掉新用户的弹窗', async () => {
+    const slow = slowUserSeven()
+    mount()
+    sheet.open({ id: 7, name: '张三' })
+    await settle()
+    cancelButton()!.click()
+    await settle()
+    sheet.open({ id: 8, name: '李四' })
+    await settle()
+    expect(qa('.ugr')).toHaveLength(6)
+
+    slow.tree.reject(new Error('旧请求失败'))
+    slow.grants.resolve([])
+    slow.effective.resolve(effectiveOf())
+    await settle()
+
+    expect(document.body.textContent).not.toContain('旧请求失败')
+    expect(document.body.textContent).toContain('授权菜单 · 李四')
+    expect(qa('.ugr')).toHaveLength(6)
+    expect(saveButton()).toBeTruthy()
+  })
+
+  it('旧请求先回来而新用户还在加载:既不显示旧数据,也不提前结束加载态', async () => {
+    const slow = slowUserSeven()
+    grantsMock.mockImplementation(id => (id === 7 ? slow.grants.promise : new Promise(() => {})))
+    mount()
+    sheet.open({ id: 7, name: '张三' })
+    await settle()
+    cancelButton()!.click()
+    await settle()
+    sheet.open({ id: 8, name: '李四' })
+    await settle()
+
+    slow.tree.resolve(TREE)
+    slow.grants.resolve([grantOf(120, UserMenuEffect.Deny, 'A的备注')])
+    slow.effective.resolve(effectiveOf({ userId: 7 }))
+    await settle()
+
+    expect(qa('.ugr')).toHaveLength(0)
+    expect(document.querySelector('.ugs-spin .n-spin-content--spinning')).toBeTruthy()
+  })
+
+  it('打开新用户时立刻清掉上一个用户的草稿:加载期间底栏回到 0,不残留未保存提示', async () => {
+    await openSheet({ grants: [grantOf(120, UserMenuEffect.Deny, '先停用')] })
+    await pick('订单导出', '允许')
+    expect(document.body.textContent).toContain('允许 1 · 拒绝 1')
+    expect(document.body.textContent).toContain('有未保存的修改')
+    cancelButton()!.click()
+    await settle()
+
+    grantsMock.mockImplementation(() => new Promise(() => {}))
+    effectiveMock.mockImplementation(() => new Promise(() => {}))
+    treeMock.mockImplementation(() => new Promise(() => {}))
+    sheet.open({ id: 8, name: '李四' })
+    await settle()
+
+    expect(document.body.textContent).toContain('允许 0 · 拒绝 0')
+    expect(document.body.textContent).not.toContain('有未保存的修改')
+  })
+
+  it('上一个用户把记录全改回跟随角色后取消,再打开没有记录的用户:不残留「有未保存的修改」', async () => {
+    await openSheet({ grants: [grantOf(120, UserMenuEffect.Deny, '先停用')] })
+    await pick('客户', '跟随角色')
+    expect(document.body.textContent).toContain('有未保存的修改')
+    cancelButton()!.click()
+    await settle()
+
+    treeMock.mockResolvedValue(TREE)
+    grantsMock.mockResolvedValue([])
+    effectiveMock.mockResolvedValue(effectiveOf({ userId: 8 }))
+    sheet.open({ id: 8, name: '李四' })
+    await settle()
+
+    expect(qa('.ugr')).toHaveLength(6)
+    expect(document.body.textContent).not.toContain('有未保存的修改')
+  })
+})
+
+describe('UserGrantMenuSheet 只读说明', () => {
+  it.each([
+    ['没有给原因码', null],
+    ['原因码没有对应文案', 12345],
+  ])('%s:退到不带冒号的通用提示', async (_name, readOnlyReason) => {
+    await openSheet({ effective: effectiveOf({ targetEditable: false, readOnlyReason }) })
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('只能查看,不能修改')
+    expect(text).not.toContain('只能查看,不能修改:')
+  })
+})
+
+describe('UserGrantMenuSheet 保存的守卫', () => {
+  /** 往某行的备注框里输入。 */
+  async function typeRemark(title: string, value: string) {
+    const input = qa('input', rowOf(title)).find(
+      i => i.getAttribute('placeholder') === '授权理由(选填)',
+    ) as HTMLInputElement
+    input.value = value
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await settle()
+  }
+  const invalidHint = '有 1 条记录的到期日缺失或超出可选范围'
+
+  it('受限管理员改一条没有到期日的「允许」:提示到期日缺失,不发请求', async () => {
+    await openSheet({
+      effective: effectiveOf({ delegatedMaxDays: 30 }),
+      grants: [grantOf(112, UserMenuEffect.Allow, '长期')],
+    })
+    await typeRemark('订单导出', '改个备注')
+
+    saveButton()!.click()
+    await settle()
+    expect(document.body.textContent).toContain(invalidHint)
+    expect(saveMock).not.toHaveBeenCalled()
+    expect(saved).toBe(0)
+  })
+
+  it('到期日超出上限同样拦下', async () => {
+    await openSheet({
+      effective: effectiveOf({ delegatedMaxDays: 30 }),
+      grants: [
+        { ...grantOf(112, UserMenuEffect.Allow, '太远'), expireTime: '2099-01-01T23:59:59' },
+      ],
+    })
+    await typeRemark('订单导出', '改个备注')
+
+    saveButton()!.click()
+    await settle()
+    expect(document.body.textContent).toContain(invalidHint)
+    expect(saveMock).not.toHaveBeenCalled()
+  })
+
+  it('保存失败:弹错误,弹窗与草稿保留,可以再点一次保存', async () => {
+    await openSheet()
+    await pick('订单查看', '拒绝')
+    saveMock.mockRejectedValueOnce(new Error('保存失败了'))
+
+    saveButton()!.click()
+    await settle()
+    expect(document.body.textContent).toContain('保存失败了')
+    expect(saved).toBe(0)
+    expect(qa('.ugr')).toHaveLength(6)
+    expect(document.body.textContent).toContain('允许 0 · 拒绝 1')
+    expect(document.body.textContent).toContain('有未保存的修改')
+
+    saveButton()!.click()
+    await settle()
+    expect(saveMock).toHaveBeenCalledTimes(2)
+    expect(saveMock).toHaveBeenLastCalledWith(7, saveMock.mock.calls[0]![1], [])
+    expect(saved).toBe(1)
+  })
+
+  it('保存进行中再点保存:只提交一次', async () => {
+    await openSheet()
+    await pick('订单查看', '拒绝')
+    const pending = deferred<boolean>()
+    saveMock.mockReturnValueOnce(pending.promise)
+
+    saveButton()!.click()
+    await settle()
+    saveButton()!.click()
+    await settle()
+    expect(saveMock).toHaveBeenCalledTimes(1)
+
+    pending.resolve(true)
+    await settle()
+    expect(saved).toBe(1)
+  })
+})
