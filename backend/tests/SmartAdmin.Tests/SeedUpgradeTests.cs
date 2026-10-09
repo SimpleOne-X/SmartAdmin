@@ -118,7 +118,7 @@ public class SeedUpgradeTests
                 await db.Updateable<SysModule>()
                     .SetColumns(x => new SysModule
                     {
-                        Icon = "ph:old", ApiPrefix = "old",
+                        Code = "old-business", Icon = "ph:old", DefaultRoute = "/old", ApiPrefix = "old",
                         Title = "我的业务", Sort = 9, Enabled = false, Remark = "改过", IsDelegatable = false,
                     })
                     .Where(x => x.Id == BusinessModuleId)
@@ -127,6 +127,8 @@ public class SeedUpgradeTests
             async db =>
             {
                 var m = await db.Queryable<SysModule>().FirstAsync(x => x.Id == BusinessModuleId);
+                Assert.Equal("business", m.Code);                    // 结构列刷回:编码、落地路由也在白名单里
+                Assert.Equal("", m.DefaultRoute);
                 Assert.Equal("lucide:briefcase-business", m.Icon);   // 结构列刷回
                 Assert.Equal("biz", m.ApiPrefix);
                 Assert.Equal("我的业务", m.Title);                    // 超管的设置留着

@@ -102,7 +102,7 @@ public class CodeFirstNullableUpgradeTests
                 using var scope = v1.Services.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
                 db.DbMaintenance.DropColumn("sys_module", "IsDelegatable");
-                await db.Updateable<SysSchemaVersion>().SetColumns(x => new SysSchemaVersion { Version = "6" }).Where(x => x.Id == 1).ExecuteCommandAsync();
+                await db.Updateable<SysSchemaVersion>().SetColumns(x => new SysSchemaVersion { Version = "0.0.1" }).Where(x => x.Id == 1).ExecuteCommandAsync();
             }
 
             using var v2 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false };
@@ -112,6 +112,11 @@ public class CodeFirstNullableUpgradeTests
 
             var cols = db2.DbMaintenance.GetColumnInfosByTableName("sys_module", false).Select(c => c.DbColumnName).ToHashSet(StringComparer.OrdinalIgnoreCase);
             Assert.Contains("IsDelegatable", cols);
+
+            // 升级确实执行过(版本号从旧值落到 Current),下面的 Null 才不是空转通过
+            var version = await db2.Queryable<SysSchemaVersion>().FirstAsync(x => x.Id == 1);
+            Assert.Equal(SysSchemaVersion.Current, version.Version);
+
             var business = await db2.Queryable<SysModule>().FirstAsync(x => x.Id == 2);
             Assert.Null(business.IsDelegatable);
         }
