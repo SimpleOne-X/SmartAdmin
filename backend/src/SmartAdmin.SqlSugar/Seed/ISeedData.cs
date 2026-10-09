@@ -43,9 +43,9 @@ public interface ISeedData<out TEntity> : ISeedData where TEntity : PrimaryId, n
     /// <para><b>只有内核拥有的结构能开</b>(菜单树 <c>DefaultMenuSeed</c> / 模块 <c>DefaultModuleSeed</c>)。
     /// 凡是用户会在界面上改的数据——字典、用户(密码!)、角色(授权)——<b>绝不能整表开</b>,
     /// 否则用户存过的值会在升级时被静默回滚。这条边界是本机制的全部安全性所在。
-    /// 配置中心(<c>sys_config</c>)与菜单树都靠 <see cref="SyncColumns"/> 把可覆盖列锁在内核拥有的那几列:
+    /// 配置中心(<c>sys_config</c>)、菜单树与模块表都靠 <see cref="SyncColumns"/> 把可覆盖列锁在内核拥有的那几列:
     /// 配置只刷展示名/分组/排序/备注,<c>ConfigValue</c> 永不在内;菜单只刷挂载点/类型/权限码/路由/组件/图标/所属应用,
-    /// 用户在界面上改的标题/排序/可见/启用留着。</para>
+    /// 用户在界面上改的标题/排序/可见/启用留着;模块只刷编码/图标/落地路由/路由前缀,标题、排序、启用、备注、可转授留给超管。</para>
     /// <para>代价:不给 <see cref="SyncColumns"/> 而整行开同步的种子,用户对<b>内置行</b>的界面改动会在内核升级时丢失。
     /// 审计字段与软删标记不受影响(覆盖时排除)。</para>
     /// </summary>

@@ -8,6 +8,7 @@ namespace SmartAdmin.Services;
 /// (<see cref="SysMenu.ModuleId"/> 仅顶级目录设置),登录后一次只进一个应用、只加载该应用的菜单与路由。
 /// <para>模块<b>不是独立权限轴</b>:用户"拥有"某模块 = 被授权了该模块下任一菜单(派生自菜单授权,
 /// 见 <c>MenuService.GetMyModulesAsync</c>);模块只做运行时的侧边栏/路由分区,不改用户持有的 API 权限码。</para>
+/// <para>模块同时是委派授权的边界:见 <see cref="IsDelegatable"/>。</para>
 /// <para>内置 <c>system</c> 模块(<see cref="DefaultModuleSeed.BUILTIN_MODULE_ID"/>)不可删除。</para>
 /// </summary>
 [SugarTable("sys_module", TableDescription = "模块/应用")]
@@ -44,4 +45,13 @@ public class SysModule : BaseEntity
 
     [SugarColumn(Length = 256, IsNullable = true, ColumnDescription = "备注")]
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 可转授:非超管(普通管理员)能否把本模块里的菜单单独授给或拒给用户。可空,存量库补列时无损:
+    /// 数据库 NULL(存量模块)与显式 <c>false</c> 同判定为不可转授,只有显式 <c>true</c> 才放行——
+    /// 默认收紧,补列不会静默放宽。内置 system 模块固定不可转授(<c>ModuleService</c> 读写都按 false)。
+    /// 演进列必须可空:MSSQL 无法对有数据的表 ADD 无 DEFAULT 的 NOT NULL 列(同 <see cref="SysRole.IsDelegatable"/>)。
+    /// </summary>
+    [SugarColumn(IsNullable = true, ColumnDescription = "是否可转授(普通管理员可单独授权本模块菜单)")]
+    public bool? IsDelegatable { get; set; }
 }

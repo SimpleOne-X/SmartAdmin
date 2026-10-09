@@ -14,7 +14,7 @@ public class SysSchemaVersion : BaseEntity
     /// <para>内核给自己的表<b>加列</b>时同样要 bump:它参与 CodeFirstVersion 的门控键,
     /// 不 bump 的话钉了版本号的消费方升级后不会重扫,第一次写那张表才炸在"列不存在"上。</para>
     /// </summary>
-    public const string Current = "6";
+    public const string Current = "7";
 
     /// <summary>架构版本号,对应 <see cref="Current"/>。</summary>
     [SugarColumn(Length = 32, ColumnDescription = "架构版本")]
