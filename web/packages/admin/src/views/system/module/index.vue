@@ -81,6 +81,13 @@ const rules: FormRules = {
   },
 }
 const editingId = ref<number | null>(null)
+/** 正在编辑内置 system 模块:可转授开关固定关、置灰(后端读写都按 false)。 */
+const editingBuiltin = computed(() => editingId.value !== null && form.code === 'system')
+/** NSwitch 只收布尔,null(存量模块)按关显示;内置模块恒显示为关,不论后端返回什么。 */
+const delegatable = computed({
+  get: () => !editingBuiltin.value && form.isDelegatable === true,
+  set: (v: boolean) => (form.isDelegatable = v),
+})
 const blank = (): ModuleInput => ({
   code: '',
   title: '',
@@ -90,6 +97,7 @@ const blank = (): ModuleInput => ({
   sort: 0,
   enabled: true,
   remark: '',
+  isDelegatable: true,
 })
 const form = reactive<ModuleInput>(blank())
 
@@ -103,6 +111,8 @@ const toInput = (r: ModuleRow): ModuleInput => ({
   sort: r.sort,
   enabled: r.enabled,
   remark: r.remark ?? '',
+  // 内置模块恒为不可转授:编辑回填与行内改状态都提交 false,不把后端偶发的 true 带回去
+  isDelegatable: isBuiltin(r) ? false : (r.isDelegatable ?? false),
 })
 
 function openAdd() {
@@ -139,12 +149,15 @@ const columns: SmartTableColumn<ModuleRow>[] = [
   {
     title: () => t('module.code'),
     key: 'code',
+    width: 160,
+    ellipsis: { tooltip: true },
     search: {},
     render: r => h('span', { class: 'mono' }, r.code),
   },
   {
     title: () => t('module.name'),
     key: 'title',
+    ellipsis: { tooltip: true },
     // 窄档卡片以名称作标题(默认取第一个数据列 = 编码)
     card: 'title',
     search: {},
@@ -160,6 +173,7 @@ const columns: SmartTableColumn<ModuleRow>[] = [
   {
     title: () => t('module.defaultRoute'),
     key: 'defaultRoute',
+    ellipsis: { tooltip: true },
     render: r => cellText(r.defaultRoute),
   },
   {
@@ -167,6 +181,17 @@ const columns: SmartTableColumn<ModuleRow>[] = [
     key: 'apiPrefix',
     width: 120,
     render: r => cellText(r.apiPrefix),
+  },
+  {
+    title: () => t('module.delegatable'),
+    key: 'isDelegatable',
+    width: 100,
+    render: r =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: r.isDelegatable ? 'success' : 'default' },
+        () => t(r.isDelegatable ? 'common.yes' : 'common.no'),
+      ),
   },
   {
     title: () => t('module.sort'),
@@ -325,6 +350,19 @@ deriveHeaderFilters(columns)
       </n-form-item>
       <n-form-item :label="t('common.status')">
         <n-switch v-model:value="form.enabled" />
+      </n-form-item>
+      <n-form-item :label="t('module.delegatable')">
+        <n-space vertical :size="2" style="width: 100%">
+          <n-tooltip :disabled="!editingBuiltin">
+            <template #trigger>
+              <span style="display: inline-flex">
+                <n-switch v-model:value="delegatable" :disabled="editingBuiltin" />
+              </span>
+            </template>
+            {{ t('module.builtinNotDelegatable') }}
+          </n-tooltip>
+          <span class="hint">{{ t('module.delegatableHint') }}</span>
+        </n-space>
       </n-form-item>
       <n-form-item :label="t('module.remark')">
         <n-input v-model:value="form.remark as string" type="textarea" :autosize="{ minRows: 2 }" />

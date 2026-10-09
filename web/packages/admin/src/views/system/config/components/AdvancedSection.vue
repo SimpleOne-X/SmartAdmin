@@ -60,12 +60,13 @@ const columns: SmartTableColumn<SysConfig>[] = [
   },
   {
     key: 'groupCode',
+    ellipsis: { tooltip: true },
     title: () => t('config.group'),
     search: { actions: SEARCH_ACTIONS.exact },
     render: r => r.groupCode || '—',
   },
   { key: 'sort', title: () => t('config.sort'), width: 80 },
-  { key: 'createTime', title: () => t('common.createTime'), format: 'datetime' },
+  { key: 'createTime', width: 170, title: () => t('common.createTime'), format: 'datetime' },
   {
     key: 'op',
     title: () => t('common.operation'),

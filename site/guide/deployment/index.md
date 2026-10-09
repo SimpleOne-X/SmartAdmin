@@ -101,7 +101,11 @@ On the first seed write, if `SmartAdmin:Seed:AdminPassword` isn't explicitly con
 Seeding is insert-only by default (existence checked by primary key), so seed rows the kernel **adds** (a new menu, a new config item) flow into your database automatically after an upgrade — nothing to do. Rows the kernel **changes** (moving a permission button under a different page, adding an icon to a built-in module) are driven by the `sys_schema_version` version gate: once the kernel bumps the seed version, the next startup refreshes the built-in rows of the two structural tables — the menu tree and modules — back to the new shape, then writes the version number back.
 
 ::: tip Built-in menus: structure belongs to the kernel, appearance to you
-An upgrade only refreshes the **structural columns** of built-in menus: parent, type, permission code, path, component, icon and module. The title, order, visibility and enabled flag you changed in the menu-management page stay as they are — a "File management" entry you hid does not come back. Menus you added yourself are unaffected. The module table (`sys_module`) is still refreshed as whole rows. The config center (`sys_config`) only refreshes display name, group, order and remark, never a value; dictionaries, users and role grants are your data — an upgrade doesn't touch a single row of it.
+An upgrade only refreshes the **structural columns** of built-in menus: parent, type, permission code, path, component, icon and module.
+The title, order, visibility and enabled flag you changed in the menu-management page stay as they are — a "File management" entry you hid does not come back. Menus you added yourself are unaffected.
+The module table (`sys_module`) only refreshes code, icon, landing route and route prefix; the title, order, enabled flag, remark and ["delegatable" switch](/backend/auth-security#per-user-grants) you changed stay as they are.
+The config center (`sys_config`) only refreshes display name, group, order and remark, never a value; dictionaries, users and role grants are your data — an upgrade doesn't touch a single row of it, with one exception: the upgrade from seed version 6 or earlier.
+That one deletes the system menus granted to non-built-in roles (directories you created yourself under the "System" app are not affected), so back up `sys_role_menu` first; see the warning block under [Per-user grants](/backend/auth-security#per-user-grants) and the upgrade notes in the changelog.
 :::
 
 ## Post-go-live self-check

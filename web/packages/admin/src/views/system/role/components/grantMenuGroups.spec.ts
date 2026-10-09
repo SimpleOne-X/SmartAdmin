@@ -11,6 +11,16 @@ import {
   setButtonChecked,
   setGroupChecked,
   setMenuChecked,
+  treeForRole,
+  modulesForRole,
+  isBuiltinRole,
+  SYSTEM_MODULE_ID,
+  KERNEL_MAX_ID,
+  grantedInTree,
+  grantScopeForRole,
+  pruneSuperAdminOnly,
+  USER_PAGE_ID,
+  ROLE_PAGE_ID,
 } from './grantMenuGroups'
 
 const node = (
@@ -33,6 +43,9 @@ const node = (
 })
 
 const ANCHOR = '接口权限(无页面)'
+
+/** 树里所有节点 id,按先序。 */
+const ids = (nodes: MenuTreeNode[]): number[] => nodes.flatMap(n => [n.id, ...ids(n.children)])
 
 // 系统运维目录:一个页面(带两个按钮)+ 一个直挂目录的权限锚点(ping) —— 种子里就是这个形状
 const tree: MenuTreeNode[] = [
@@ -210,5 +223,241 @@ describe('计数与展示字段', () => {
   it('countGrants:总数、已授权、页面数、按钮数(anchor 行自身不算页面)', () => {
     const groups = buildGroups(withMeta, new Set([350, 351, 301, 100]), ANCHOR)
     expect(countGrants(groups)).toEqual({ on: 4, total: 5, pages: 2, buttons: 2 })
+  })
+})
+
+describe('角色授权范围:系统菜单只授内置角色', () => {
+  const top = (id: number, moduleId: number | null) =>
+    node(id, MenuType.Catalog, `c${id}`, [], { moduleId })
+  // 200 是内核目录;1200 是消费者在系统应用下自建的目录
+  const scopeTree = [
+    top(200, SYSTEM_MODULE_ID),
+    top(900, 2),
+    top(950, null),
+    top(1200, SYSTEM_MODULE_ID),
+  ]
+  const modules = [{ id: SYSTEM_MODULE_ID }, { id: 2 }]
+
+  it('内核目录的上界与后端 SmartSeedIds.KernelMax 一致', () => {
+    expect(KERNEL_MAX_ID).toBe(999)
+  })
+
+  it('非内置角色去掉挂在系统应用下的内核目录,保留消费者自建的目录', () => {
+    expect(treeForRole(scopeTree, false).map(n => n.id)).toEqual([900, 950, 1200])
+  })
+
+  it('内核号段的边界:999 去掉,1000 保留', () => {
+    const edge = [top(KERNEL_MAX_ID, SYSTEM_MODULE_ID), top(KERNEL_MAX_ID + 1, SYSTEM_MODULE_ID)]
+    expect(treeForRole(edge, false).map(n => n.id)).toEqual([KERNEL_MAX_ID + 1])
+  })
+
+  it('非内置角色:树里没有系统应用的节点时去掉系统应用', () => {
+    const kernelOnly = [top(200, SYSTEM_MODULE_ID), top(300, SYSTEM_MODULE_ID), top(900, 2)]
+    const visible = treeForRole(kernelOnly, false)
+    expect(modulesForRole(modules, false, visible).map(m => m.id)).toEqual([2])
+  })
+
+  it('非内置角色:树里还有消费者自建的系统应用目录时保留系统应用', () => {
+    const visible = treeForRole(scopeTree, false)
+    expect(modulesForRole(modules, false, visible)).toBe(modules)
+  })
+
+  it('非内置角色:树里还剩用户管理 / 角色管理时同样保留系统应用,弹窗里才有入口', () => {
+    const withUserPage = [
+      node(200, MenuType.Catalog, '组织管理', [node(230, MenuType.Menu, '用户管理')], {
+        moduleId: SYSTEM_MODULE_ID,
+      }),
+      top(900, 2),
+    ]
+    const visible = treeForRole(withUserPage, false)
+    expect(visible.map(n => n.id)).toEqual([200, 900])
+    expect(modulesForRole(modules, false, visible)).toBe(modules)
+  })
+
+  it('内置角色原样', () => {
+    expect(treeForRole(scopeTree, true)).toBe(scopeTree)
+    expect(modulesForRole(modules, true, scopeTree)).toBe(modules)
+  })
+})
+
+describe('pruneSuperAdminOnly:系统菜单只放开用户管理、角色管理', () => {
+  const btn = (id: number, title: string) => node(id, MenuType.Button, title)
+  const page = (id: number, title: string, children: MenuTreeNode[] = []) =>
+    node(id, MenuType.Menu, title, children)
+  // 种子形状:组织管理(200)下机构 210 / 岗位 220 / 用户 230 / 角色 240,系统运维(300)下配置 310 + 直挂的探针 301
+  const orgCatalog = () =>
+    node(
+      200,
+      MenuType.Catalog,
+      '组织管理',
+      [
+        page(210, '机构管理', [btn(211, '机构-查询')]),
+        page(220, '岗位管理', [btn(221, '岗位-查询')]),
+        page(230, '用户管理', [btn(231, '用户-查询'), btn(239, '用户-授权菜单')]),
+        page(240, '角色管理', [btn(241, '角色-查询'), btn(245, '角色-授权菜单')]),
+      ],
+      { moduleId: SYSTEM_MODULE_ID },
+    )
+  const opsCatalog = () =>
+    node(
+      300,
+      MenuType.Catalog,
+      '系统运维',
+      [page(310, '系统配置', [btn(311, '配置-查询')]), btn(301, '探针')],
+      {
+        moduleId: SYSTEM_MODULE_ID,
+      },
+    )
+  const workbench = () => node(100, MenuType.Menu, '工作台', [], { moduleId: SYSTEM_MODULE_ID })
+  const bizCatalog = () =>
+    node(900, MenuType.Catalog, '业务', [page(910, '业务页', [btn(911, '业务-查询')])], {
+      moduleId: 2,
+    })
+
+  it('放开的页面号与后端 DefaultMenuSeed.USER_PAGE_ID / ROLE_PAGE_ID 一致', () => {
+    expect(USER_PAGE_ID).toBe(230)
+    expect(ROLE_PAGE_ID).toBe(240)
+  })
+
+  it('组织管理只剩用户管理、角色管理(含各自按钮);机构、岗位及其按钮去掉', () => {
+    const out = pruneSuperAdminOnly([orgCatalog()])
+    expect(ids(out)).toEqual([200, 230, 231, 239, 240, 241, 245])
+  })
+
+  it('系统运维、系统应用的工作台这类整块超管专属的内核根目录 / 根页面整个去掉', () => {
+    expect(pruneSuperAdminOnly([workbench(), opsCatalog()])).toEqual([])
+  })
+
+  it('业务应用的目录、消费者在系统应用下自建的目录(Id ≥ 1000)原样保留', () => {
+    const consumer = node(1200, MenuType.Catalog, '自建', [page(1210, '自建页')], {
+      moduleId: SYSTEM_MODULE_ID,
+    })
+    const out = pruneSuperAdminOnly([
+      workbench(),
+      orgCatalog(),
+      opsCatalog(),
+      bizCatalog(),
+      consumer,
+    ])
+    expect(out.map(n => n.id)).toEqual([200, 900, 1200])
+    expect(ids(out)).toEqual([200, 230, 231, 239, 240, 241, 245, 900, 910, 911, 1200, 1210])
+  })
+
+  it('消费者挂在用户管理页下的节点跟着保留;挂在组织管理目录下的去掉', () => {
+    const org = orgCatalog()
+    org.children[2]!.children.push(btn(1231, '自建按钮'))
+    org.children.push(page(1250, '自建页'))
+    expect(ids(pruneSuperAdminOnly([org]))).toEqual([200, 230, 231, 239, 1231, 240, 241, 245])
+  })
+
+  it('不改传入的树,也不改节点本身(返回新的目录节点)', () => {
+    const input = [orgCatalog()]
+    const before = JSON.stringify(input)
+    const out = pruneSuperAdminOnly(input)
+    expect(JSON.stringify(input)).toBe(before)
+    expect(out[0]).not.toBe(input[0])
+  })
+
+  it('用户管理、角色管理两个页面都不在树里时,组织管理目录一并去掉(不留空壳)', () => {
+    const org = orgCatalog()
+    org.children = org.children.filter(c => c.id !== 230 && c.id !== 240)
+    expect(pruneSuperAdminOnly([org])).toEqual([])
+  })
+})
+
+describe('grantedInTree:只留树里看得见的已授权', () => {
+  const top = (id: number, moduleId: number, children: MenuTreeNode[] = []) =>
+    node(id, MenuType.Catalog, `c${id}`, children, { moduleId })
+  // 非内置角色看到的树:内核目录 200/300 已被 treeForRole 去掉,剩业务目录 900 和消费者在系统应用下自建的 1200
+  const visible = treeForRole(
+    [
+      top(200, SYSTEM_MODULE_ID, [node(210, MenuType.Menu, 'm210')]),
+      top(300, SYSTEM_MODULE_ID),
+      top(900, 2, [node(910, MenuType.Menu, 'm910', [node(911, MenuType.Button, 'b911')])]),
+      top(1200, SYSTEM_MODULE_ID, [node(1210, MenuType.Menu, 'm1210')]),
+    ],
+    false,
+  )
+
+  it('隐藏的内核系统菜单 id 被丢掉,树里的(含深层子孙)保留,顺序不变', () => {
+    expect(grantedInTree([911, 210, 300, 900, 200, 1210], visible)).toEqual([911, 900, 1210])
+  })
+
+  it('消费者在系统应用下自建的目录及其子孙保留', () => {
+    expect(grantedInTree([1200, 1210], visible)).toEqual([1200, 1210])
+  })
+
+  it('已授权里有树里根本没有的 id(已删除的菜单)同样丢掉', () => {
+    expect(grantedInTree([900, 424242], visible)).toEqual([900])
+  })
+
+  it('空输入', () => {
+    expect(grantedInTree([], visible)).toEqual([])
+    expect(grantedInTree([900], [])).toEqual([])
+    expect(grantedInTree([], [])).toEqual([])
+  })
+})
+
+describe('isBuiltinRole:只有后端明确说非内置才算非内置', () => {
+  it('true 是内置,false 是非内置', () => {
+    expect(isBuiltinRole({ isBuiltin: true })).toBe(true)
+    expect(isBuiltinRole({ isBuiltin: false })).toBe(false)
+  })
+
+  it('后端没带该字段(缺省 / null)按内置处理,不过滤', () => {
+    expect(isBuiltinRole({})).toBe(true)
+    expect(isBuiltinRole({ isBuiltin: null })).toBe(true)
+  })
+})
+
+describe('grantScopeForRole:打开授权弹窗时的树、应用与已授权三者口径一致', () => {
+  const top = (id: number, moduleId: number, children: MenuTreeNode[] = []) =>
+    node(id, MenuType.Catalog, `c${id}`, children, { moduleId })
+  const fullTree = [
+    top(200, SYSTEM_MODULE_ID, [node(210, MenuType.Menu, 'm210')]),
+    top(900, 2, [node(910, MenuType.Menu, 'm910')]),
+  ]
+  const modules = [{ id: SYSTEM_MODULE_ID }, { id: 2 }]
+  // 角色身上除了业务授权,还留着看不见的系统菜单 200 / 210
+  const granted = [910, 210, 200, 900]
+
+  it('非内置角色:树去掉内核目录、应用去掉系统、已授权只剩看得见的,不改直接保存不会回传隐藏的 id', () => {
+    const scope = grantScopeForRole({ isBuiltin: false }, fullTree, modules, granted)
+    expect(scope.tree.map(n => n.id)).toEqual([900])
+    expect(scope.modules.map(m => m.id)).toEqual([2])
+    expect(scope.granted).toEqual([910, 900])
+  })
+
+  it('非内置角色:用户管理 / 角色管理的已授权保留,同目录里机构管理的被收回(保存时不再回传)', () => {
+    const orgTree = [
+      top(200, SYSTEM_MODULE_ID, [
+        node(210, MenuType.Menu, '机构管理', [node(211, MenuType.Button, '机构-查询')]),
+        node(230, MenuType.Menu, '用户管理', [node(231, MenuType.Button, '用户-查询')]),
+        node(240, MenuType.Menu, '角色管理', [node(241, MenuType.Button, '角色-查询')]),
+      ]),
+      top(900, 2),
+    ]
+    const scope = grantScopeForRole(
+      { isBuiltin: false },
+      orgTree,
+      modules,
+      [200, 210, 211, 230, 231, 241],
+    )
+    expect(scope.tree.map(n => n.id)).toEqual([200, 900])
+    expect(scope.modules).toBe(modules)
+    expect(scope.granted).toEqual([200, 230, 231, 241])
+  })
+
+  it('内置角色:树、应用、已授权都原样,隐藏规则一概不套用', () => {
+    const scope = grantScopeForRole({ isBuiltin: true }, fullTree, modules, granted)
+    expect(scope.tree).toBe(fullTree)
+    expect(scope.modules).toBe(modules)
+    expect(scope.granted).toBe(granted)
+  })
+
+  it('后端没带 isBuiltin 字段时按内置处理,已授权不被求交', () => {
+    const scope = grantScopeForRole({}, fullTree, modules, granted)
+    expect(scope.tree).toBe(fullTree)
+    expect(scope.granted).toBe(granted)
   })
 })

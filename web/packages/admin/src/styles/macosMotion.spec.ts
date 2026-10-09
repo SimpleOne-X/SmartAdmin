@@ -35,17 +35,23 @@ describe('表格:列竖线和外框用 Naive 原生的', () => {
     )
   })
 
-  it('线色取 --hairline-strong:比 --separator 实,125% / 150% 缩放下亚像素偏移摊淡后仍看得见', () => {
+  it('线色标准是 --separator(亮色 0.16),不跟更实的 --hairline-strong 走(DESIGN.md §5「表格线色」)', () => {
     const root = document.documentElement
-    root.style.setProperty('--hairline-strong', 'rgba(1, 2, 3, 0.4)')
-    root.style.setProperty('--separator', 'rgba(9, 9, 9, 0.1)')
+    root.style.setProperty('--separator', 'rgba(1, 2, 3, 0.16)')
+    root.style.setProperty('--hairline-strong', 'rgba(4, 5, 6, 0.4)')
     try {
       const o = buildThemeOverrides({ dark: false, accent: '#0A84FF' })
-      expect(o.DataTable?.borderColor).toBe('rgba(1, 2, 3, 0.4)')
+      expect(o.DataTable?.borderColor).toBe('rgba(1, 2, 3, 0.16)')
     } finally {
-      root.style.removeProperty('--hairline-strong')
       root.style.removeProperty('--separator')
+      root.style.removeProperty('--hairline-strong')
     }
+  })
+
+  it('亮色 --separator 的透明度锁在 0.16:表格线的深浅由它决定,别随手调', () => {
+    const m = read('tokens.css').match(/--separator:\s*rgba\([^)]*,\s*([\d.]+)\)/)
+    expect(m, '找不到 :root 里的 --separator').not.toBeNull()
+    expect(Number(m![1])).toBe(0.16)
   })
 })
 
@@ -56,6 +62,33 @@ describe('表格工具条:勾选后的批量栏与正常态同高', () => {
     expect(css).toMatch(
       /\.smart-table-batch-info,\s*\.smart-table-toolbar\.smart-table-toolbar--batch:not\(\.smart-table-toolbar--batch-narrow\)\s*\.smart-table-toolbar-icons\s*\{\s*height:\s*var\(--control-h, 30px\);/,
     )
+  })
+})
+
+describe('提示气泡:和其它浮层同一套表面,随亮暗主题走', () => {
+  const css = read('tokens.css')
+
+  it('--tooltip-bg 亮 / 暗两套都是不透明实底(半透明会让底下行里的字透出来)', () => {
+    const all = [...css.matchAll(/--tooltip-bg:\s*([^;]+);/g)].map(m => m[1].trim())
+    expect(all, '亮色一处 + 暗色一处').toHaveLength(2)
+    for (const v of all) expect(v).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+
+  it('字色取 --text-1,不写死白色(白字只在深底下成立,亮色主题下就是白底白字)', () => {
+    const root = document.documentElement
+    root.style.setProperty('--tooltip-bg', '#fbfcff')
+    root.style.setProperty('--text-1', '#101828')
+    try {
+      const o = buildThemeOverrides({ dark: false, accent: '#0A84FF' })
+      expect(o.Tooltip?.color).toBe('#fbfcff')
+      expect(o.Tooltip?.textColor).toBe('#101828')
+      // Tooltip 底下的 Popover 会被全局 Popover 覆盖压过,peers 里必须同样给一份
+      expect(o.Tooltip?.peers?.Popover?.color).toBe('#fbfcff')
+      expect(o.Tooltip?.peers?.Popover?.textColor).toBe('#101828')
+    } finally {
+      root.style.removeProperty('--tooltip-bg')
+      root.style.removeProperty('--text-1')
+    }
   })
 })
 

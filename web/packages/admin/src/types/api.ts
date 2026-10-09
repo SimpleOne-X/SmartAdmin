@@ -141,6 +141,8 @@ export interface ModuleRow {
   sort: number
   enabled: boolean
   remark?: string | null
+  /** 可转授:普通管理员能否单独授权本应用的菜单(内置 system 恒为 false)。 */
+  isDelegatable?: boolean | null
   createTime?: string
 }
 
@@ -172,6 +174,102 @@ export interface ModuleInput {
   apiPrefix?: string | null
   sort: number
   enabled: boolean
+  remark?: string | null
+  /** 可转授:普通管理员能否单独授权本应用的菜单(内置 system 恒为 false)。 */
+  isDelegatable?: boolean | null
+}
+
+/** 用户单独授权的效果(后端 UserMenuEffect)。 */
+export enum UserMenuEffect {
+  Allow = 1,
+  Deny = 2,
+}
+
+/** 单独授权的有效期状态(后端 UserMenuGrantStatus;作筛选条件时 Active 含 7 天内到期)。 */
+export enum UserMenuGrantStatus {
+  Active = 1,
+  Expiring = 2,
+  Expired = 3,
+}
+
+/** 一条单独授权记录(后端 UserMenuGrantItem)。时间是本地时间串 yyyy-MM-ddTHH:mm:ss。 */
+export interface UserMenuGrantItem {
+  menuId: number
+  effect: UserMenuEffect
+  expireTime?: string | null
+  remark?: string | null
+  grantorId?: number | null
+  grantorName?: string | null
+  grantTime: string
+  updaterId?: number | null
+  updaterName?: string | null
+  updateTime?: string | null
+}
+
+/** 变更集里的一条新增或修改(后端 UserMenuGrantUpsert)。 */
+export interface UserMenuGrantUpsert {
+  menuId: number
+  effect: UserMenuEffect
+  expireTime?: string | null
+  remark?: string | null
+}
+
+/** 被拒节点里仍然有效的权限码与携带它的有效节点(后端 UserMenuLeakedCode)。 */
+export interface UserMenuLeakedCode {
+  code: string
+  carrierMenuIds: number[]
+}
+
+/** 一个菜单节点对目标用户是否有效、为什么(后端 UserMenuEffectiveNode)。 */
+export interface UserMenuEffectiveNode {
+  menuId: number
+  moduleId?: number | null
+  effective: boolean
+  roles: string[]
+  grant?: UserMenuEffect | null
+  expireTime?: string | null
+  expired: boolean
+  deniedByAncestor: boolean
+  grantable: boolean
+  leakedCodes: UserMenuLeakedCode[]
+}
+
+/** 授权弹窗的模块清单项(后端 UserMenuModuleItem)。 */
+export interface UserMenuModuleItem {
+  id: number
+  title: string
+  delegatable: boolean
+}
+
+/** 授权弹窗一次取齐的数据(后端 UserMenuEffectiveOutput)。readOnlyReason 是错误码。 */
+export interface UserMenuEffective {
+  userId: number
+  hasRoles: boolean
+  targetEditable: boolean
+  readOnlyReason?: number | null
+  delegatedMaxDays?: number | null
+  /** 委派授权的最晚到期日 yyyy-MM-dd(服务器本地日期 + 最长天数);不限时为空。日期选择器上限与保存前校验都按它算。 */
+  delegatedMaxDate?: string | null
+  modules: UserMenuModuleItem[]
+  nodes: UserMenuEffectiveNode[]
+}
+
+/** 单独授权一览的一行(后端 UserMenuGrantPageItem)。 */
+export interface UserMenuGrantPageItem {
+  id: number
+  userId: number
+  userAccount: string
+  userName: string
+  menuId: number
+  menuTitle: string
+  moduleId?: number | null
+  moduleTitle?: string | null
+  effect: UserMenuEffect
+  expireTime?: string | null
+  status: UserMenuGrantStatus
+  grantorId?: number | null
+  grantorName?: string | null
+  grantTime: string
   remark?: string | null
 }
 
@@ -403,6 +501,8 @@ export interface SysRole {
   enabled: boolean
   remark?: string | null
   isDelegatable?: boolean | null
+  /** 内置角色(种子里固定 Id 1–999):只有它们能被授系统菜单。 */
+  isBuiltin?: boolean
   createTime?: string
 }
 

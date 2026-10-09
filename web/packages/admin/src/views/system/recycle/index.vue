@@ -56,9 +56,11 @@ function refreshTab(type: string) {
 
 const columns: SmartTableColumn<RecycleBinItem>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
-  { key: 'name', title: () => t('recycle.name'), search: {} },
+  { key: 'name', ellipsis: { tooltip: true }, title: () => t('recycle.name'), search: {} },
   {
     key: 'code',
+    width: 180,
+    ellipsis: { tooltip: true },
     title: () => t('recycle.code'),
     search: {},
     // 编码可能为空(如岗位):空值画灰色的「—」

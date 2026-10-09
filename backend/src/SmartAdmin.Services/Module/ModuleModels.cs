@@ -26,4 +26,7 @@ public record ModuleInput
 
     /// <summary>备注</summary>
     public string? Remark { get; init; }
+
+    /// <summary>可转授(普通管理员能否单独授权本模块菜单)。更新时为 null = 保持原值;内置 system 模块传什么都按 false。</summary>
+    public bool? IsDelegatable { get; init; }
 }

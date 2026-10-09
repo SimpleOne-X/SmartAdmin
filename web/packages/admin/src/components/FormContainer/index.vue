@@ -5,6 +5,8 @@
 // 底栏两个按钮等分整行。弹窗形态不分档,仍是居中卡片。
 // onConfirm 协议:返回 Promise → 确认钮自动 loading;reject 或 resolve(false) → 不关闭
 // (n-form 校验放 onConfirm 首行,失败 reject 即挡住关闭);其余情况自动关。
+// 弹窗形态下,没提交成功(校验不过 / 业务拒绝)时卡片左右晃一下,像 macOS 拒绝输入的提示框,
+// 补足内联提示之外的就地反馈;抽屉与全屏形态不晃(整块贴边,位移会露出缝)。
 import { computed, onDeactivated, ref } from 'vue'
 import { NModal, NDrawer, NDrawerContent, NButton, NSpace } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -12,6 +14,7 @@ import { useWindowSize } from '@vueuse/core'
 import { useCompactScreen } from '#/composables/useCompactScreen'
 import { useShellBreakpoint } from '#/composables/useShellBreakpoint'
 import { useAppStore, type FormStyle } from '#/stores/app'
+import { shake } from '#/utils/shake'
 
 const show = defineModel<boolean>('show', { default: false })
 
@@ -59,6 +62,13 @@ const modalStyle = computed(() => (fullscreen.value ? undefined : { width: `${w.
 const canClose = computed(() => !loading.value)
 const maskClose = computed(() => (props.maskClosable ?? false) && !loading.value)
 
+// 卡片 teleport 到 body,拿不到它的 ref;在正文里放一个不可见的锚点,从锚点向上找到所在的卡片。
+const anchor = ref<HTMLElement>()
+function shakeCard() {
+  if (mode.value !== 'modal' || fullscreen.value) return
+  shake(anchor.value?.closest('.n-card.n-modal'))
+}
+
 async function handleConfirm() {
   if (!props.onConfirm) {
     show.value = false
@@ -67,8 +77,10 @@ async function handleConfirm() {
   loading.value = true
   try {
     if ((await props.onConfirm()) !== false) show.value = false
+    else shakeCard()
   } catch {
-    // 静默:n-form 校验失败已有内联提示;API 错误 toast 由业务 onConfirm 内负责。
+    // 静默:n-form 校验失败已有内联提示;API 错误 toast 由业务 onConfirm 内负责。这里只补一下晃动。
+    shakeCard()
   } finally {
     loading.value = false
   }
@@ -95,6 +107,7 @@ onDeactivated(() => {
     <template v-if="$slots['header-extra']" #header-extra>
       <slot name="header-extra" />
     </template>
+    <i ref="anchor" hidden aria-hidden="true" />
     <slot />
     <template #footer>
       <slot name="footer">

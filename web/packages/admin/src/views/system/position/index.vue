@@ -47,12 +47,15 @@ const columns: SmartTableColumn<SysPosition>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('position.name'),
     search: { actions: SEARCH_ACTIONS.fuzzy },
     sorter: true,
   },
   {
     key: 'code',
+    width: 180,
+    ellipsis: { tooltip: true },
     title: () => t('position.code'),
     sorter: true,
     render: r => h('span', { class: 'mono muted' }, r.code),
@@ -79,7 +82,13 @@ const columns: SmartTableColumn<SysPosition>[] = [
         },
       }),
   },
-  { key: 'createTime', title: () => t('common.createTime'), format: 'datetime', sorter: true },
+  {
+    key: 'createTime',
+    width: 170,
+    title: () => t('common.createTime'),
+    format: 'datetime',
+    sorter: true,
+  },
   {
     key: 'op',
     title: () => t('common.operation'),

@@ -19,6 +19,8 @@ const props = defineProps<{
   granted: number[]
   modules: ModuleRow[]
   defaultModuleId: number
+  /** 列表上方的一行说明(如范围限制);不给不显示 */
+  hint?: string
   onSave: (ids: number[]) => unknown | Promise<unknown>
 }>()
 
@@ -87,6 +89,7 @@ async function handleSave() {
     :footer-style="footerStyle"
   >
     <div class="gs" :class="{ 'is-narrow': compact }">
+      <p v-if="hint" class="gs-hint">{{ hint }}</p>
       <GrantMenuTable
         :tree="tree"
         :granted="granted"
@@ -125,6 +128,12 @@ async function handleSave() {
   flex-direction: column;
   min-height: 0;
   color: var(--text-1);
+}
+
+.gs-hint {
+  margin: 10px 20px 0;
+  font-size: 13px;
+  color: var(--text-2);
 }
 
 /* 底栏:永远可见,与列表之间一条发丝线 */

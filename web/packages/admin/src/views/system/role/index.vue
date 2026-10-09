@@ -25,6 +25,7 @@ import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import OrgTreeSelect from '#/components/OrgTreeSelect/index.vue'
 import UserPicker from '#/components/UserPicker/index.vue'
 import GrantMenuSheet from './components/GrantMenuSheet.vue'
+import { isBuiltinRole, grantScopeForRole } from './components/grantMenuGroups'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { roleApi, menuApi, moduleApi, userApi } from '#/api'
@@ -114,11 +115,14 @@ const columns: SmartTableColumn<SysRole>[] = [
   { type: 'index', title: () => t('common.rowNo'), width: 64, align: 'center' },
   {
     key: 'code',
+    width: 180,
+    ellipsis: { tooltip: true },
     title: () => t('role.code'),
     render: r => h('span', { class: 'mono muted' }, r.code),
   },
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('role.name'),
     card: 'title', // 窄档卡片以角色名称为标题,编码作为字段
     search: { actions: SEARCH_ACTIONS.fuzzy },
@@ -262,14 +266,23 @@ const menuTree = shallowRef<MenuTreeNode[]>([])
 const menuGranted = shallowRef<number[]>([])
 const menuRole = ref<SysRole | null>(null)
 const defaultModuleId = ref(UNASSIGNED)
+// 授权弹窗实际展示的应用:非内置角色不含系统应用(除非它下面还有消费者自建的目录)
+const menuModules = shallowRef<ModuleRow[]>([])
 
 async function openMenus(r: SysRole) {
   try {
     const [tree, granted] = await Promise.all([menuApi.tree(), roleApi.getMenus(r.id)])
+    // 系统菜单只能授给内置角色:非内置角色的弹窗里不出现系统自带的目录(后端同样拒绝),
+    // 角色身上看不见的系统菜单授权也不带进弹窗,保存时它们就不会被回传而得到 41009
+    const scope = grantScopeForRole(r, tree, modules.value, granted)
     menuRole.value = r
-    menuTree.value = tree
-    menuGranted.value = granted
-    defaultModuleId.value = auth.currentModuleId ?? modules.value[0]?.id ?? UNASSIGNED
+    menuTree.value = scope.tree
+    menuModules.value = scope.modules
+    menuGranted.value = scope.granted
+    const preferred = auth.currentModuleId ?? menuModules.value[0]?.id ?? UNASSIGNED
+    defaultModuleId.value = menuModules.value.some(m => m.id === preferred)
+      ? preferred
+      : (menuModules.value[0]?.id ?? UNASSIGNED)
     showMenus.value = true
   } catch (e) {
     message.error(translateError(e))
@@ -446,8 +459,9 @@ async function saveScope() {
     v-model:show="showMenus"
     :tree="menuTree"
     :granted="menuGranted"
-    :modules="modules"
+    :modules="menuModules"
     :default-module-id="defaultModuleId"
+    :hint="menuRole && !isBuiltinRole(menuRole) ? t('role.systemMenusBuiltinOnly') : undefined"
     :on-save="saveMenus"
   />
 

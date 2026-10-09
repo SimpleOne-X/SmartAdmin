@@ -40,12 +40,12 @@ SmartAdmin 内接入约定:
   - 工具栏:`:toolbar="TABLE_TOOLBAR"`(刷新 / **放大还原(`maximize`)** / 列设置三个内置图标,所有表格统一显示;密度按钮不放,密度只在「系统设置」里调;3.0 的 `toolbar` 没有全局配置,所以逐表传)。窄栏里的从表(字典类型列表)放大没有意义,可自己 `{ ...TABLE_TOOLBAR, maximize: false }`,但要登记进 `listSearch.spec.ts` 的 `MAXIMIZE_OFF_OK`。有导入 / 导出就 `{ ...TABLE_TOOLBAR, more: [...] }` 收进「更多 ▾」菜单(哪怕只有一项),选中走 `@more-select`;`more` 为空数组时按钮不出现。
   - **定高表格必须传 `:min-row-height="TABLE_MIN_ROW_HEIGHT"`**:库给虚拟滚动的行高下限是 40(紧凑)/ 48,本项目紧凑行实际约 33px,估高偏大会让滚到底少渲染最后几行(48 条只看到 45 条)。`listSearch.spec.ts` 守卫;行确实更高的页面可自己传更大的值(树表实测也只有约 35px,同样用这个常量)。
   - **分页栏左侧显示「共 N 条」**:每张分页表格写 `<template #pagination-prefix="{ itemCount }"><TableTotal :count="itemCount" /></template>`(`:pagination="false"` 的树表不用),`listSearch.spec.ts` 守卫这一条。
+  - **列宽与溢出(`views/tableColumns.spec.ts` 守卫)**:SmartTable 是 `table-layout: fixed`,没写 `width` 的列只分到约 120~150px,内容更长就会越界盖到隔壁列。所以每个数据列要么写 `width`(内容长度可预期:时间列 `170`、状态标签 `90`、IP / 等宽编码按最长值留足),要么写 `ellipsis: { tooltip: true }`(名称、标题、账号等自由文本,超出省略并悬浮提示);**不要写 `minWidth`**,固定布局只认 `width`,`minWidth` 写了也不生效。树表要给标题列写 `tree: true`,否则展开箭头和缩进会落到 64px 的序号列上,层级一深序号就被挤没(范例 `views/system/org`、`menu`)。
   - 业务按钮写 `#toolbar-right`,**不要写 `#toolbar`**:`#toolbar` 是工具栏左半,按钮会挤到搜索框左边。放进去的只能是「限定数据范围的控件」(菜单页的应用选择器、用户页窄档的机构按钮),不是业务按钮,例外登记在 `listSearch.spec.ts` 的 `LEFT_SLOT_OK`。批量操作写 `#batch`(勾选后工具栏换成批量栏,按钮出现即代表有勾选;`useBatchDelete` 的 `run` 接 `@click`,勾选态绑 `checked-row-keys`)。
   - 后端没有过滤能力的分页表:`createClientFilterFetcher(api, fields)` + `:filter-serializer="passthroughFilterSerializer"`(无条件走服务端分页,有条件取全量(上限 10000 条)前端求值,超过时提示只覆盖前 10000 条)。
   - 树表:静态过滤不递归 `children`(3.0 / 3.1 的行为:搜子行名整张表为空),用远程取数器 + `filterTree`,见上面「树形页」与 `views/system/org/index.vue`。
   - **不要裸用 `n-data-table`**:小表用 SmartTable 静态数据模式(`:data` + `row-key`,前端分页 / 求值搜索 / 窄档卡片 `card-on-narrow` 都是内置的),范例 `views/personal/sessions.vue`、`views/system/job-monitor`、`views/system/dict`(字典项表)。行拖拽排序用内置 `row-draggable` + `drag-handle` + `@row-drag-sort`。
   - 嵌在抽屉 / 弹窗里的小表(各次尝试、导入预览)不套整页标准:`:toolbar="false"`、不传 `search`、不写任何列的 `search`,并登记进 `listSearch.spec.ts` 的 `EMBEDDED`(范例 `views/system/job-log/components/AttemptTable.vue`)。
-  - 嵌入弹窗的表格(`UserPicker`)是唯一例外。
   - 写在模板注释里的 `<SmartTable` 也会被 `listSearch.spec.ts` 的正则当成一张表而误判,注释里别写带尖括号的标签名。
 - **别用 scoped 样式去调 SmartTable 内部**:包内 `inheritAttrs:false`,`class` 落在内层 `n-data-table` 上,而 scope id 落在 SmartTable 自己的根元素上,`.x :deep(.y)` 要求两者在同一元素,**永不命中**(比如拿它写 `min-height:0` 治横向滚动、写 `padding` 压空态高度,都不生效)。调内部样式走 `:theme-overrides`(经 attrs 透传给 `n-data-table`,只影响这一张表,如 `:theme-overrides="{ emptyPadding: '16px 0' }"`);实在要写 CSS 就用不带类名前缀的 `:deep(.y)`——编译成 `[data-v-xxx] .y`,起点是 SmartTable 根元素,能命中。
 - **搜索折叠**:`collapsible` 只对独立搜索卡片(`container: 'card'`,本项目不用)有效;条件构造器靠「更多条件」展开,不需要它。
@@ -53,7 +53,7 @@ SmartAdmin 内接入约定:
 - **已能用(透传)**:列宽拖拽(列 `resizable`)、合计行(`:summary`)、合并单元格(列 `rowSpan/colSpan`)——经 attrs/列透传,无需新 API。铺满父容器 + 虚拟滚动是 3.0 自带的 `fill-height`(整页列表一律用它,不写 `flex-height` + `virtual-scroll`)。
 - **弹窗 / 下拉表格选择**:用 `smart-naive-table` 自带的 `SmartSelectTable`(触发器像下拉框,点开是「搜索框 + 带分页的表格」,单选 / 多选、本地 `data` 或远程 `fetcher`),内核不自研选择表组件。
   远程 `fetcher` 收 `{ page, pageSize, keyword }`,所以后端入参要有关键字(编号或名称的或匹配);`v-model:value` 是主键,行对象走 `@pick`。完整用法见包 README 的「下拉表格选择 SmartSelectTable」一节。
-- **版本**:依赖 `^3.1.0`(peer,实际解析 3.1.0);列排序依赖后端 `SortField/SortOrder`(行拖拽是纯前端能力,本项目未接线,见上),改后端后 `npm run gen:api` 重生成 schema。
+- **版本**:依赖 `^3.1.1`(peer,实际解析 3.1.1);列排序依赖后端 `SortField/SortOrder`(行拖拽是纯前端能力,本项目未接线,见上),改后端后 `npm run gen:api` 重生成 schema。
 
 范例页:`src/views/system/user/index.vue`(标准列表 + 排序)、`position`(可编辑 Sort 排序)、`org`/`menu`(树)、`dict`(主从 + 窄栏条件搜索)。
 条件搜索范例:`system/log/op`(日期区间 + 隐藏选项列 + 导出)、`system/user`(路由预置 + 导出)、`system/job-log`(列改名 + 路由预置)。
@@ -64,7 +64,7 @@ SmartAdmin 内接入约定:
 
 | 组件 | 定位 | README |
 |---|---|---|
-| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭 | `src/components/FormContainer/README.md` |
+| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭;弹窗形态下提交失败(校验 reject / 返回 `false`)卡片会晃一下 | `src/components/FormContainer/README.md` |
 | StatusSwitch | 表格行内启停开关;悲观更新,失败自动回滚 | `src/components/StatusSwitch/README.md` |
 | TableTotal | 分页栏左侧的「共 N 条」,写在 SmartTable 的 `#pagination-prefix` 插槽里;每张分页表格都要有 | `src/components/TableTotal/README.md` |
 | DictSelect | 字典下拉,`$attrs` 全透传 n-select | `src/components/DictSelect/README.md` |
@@ -84,7 +84,7 @@ SmartAdmin 内接入约定:
 | DictRadio / DictCheckbox | 字典单选(按钮组)/ 字典多选(复选框组);`typeCode` 取数经 `stores/dict` 缓存,其余 `$attrs` 透传 n-radio-group / n-checkbox-group;与 DictSelect 同源同范式 | `src/components/DictRadio/README.md`、`src/components/DictCheckbox/README.md` |
 | RoleSelect | 角色选择器;基于 ApiSelect,`roleApi.page` 名称搜索,只列启用角色,value=角色 id,多选经 `$attrs` | `src/components/RoleSelect/README.md` |
 | JsonEditor | JSON 值编辑:textarea + 实时校验 + 一键格式化,零依赖;只给约定为 JSON 的配置字段用 | `src/components/JsonEditor/README.md` |
-| UserPicker | 授权用户选择器;机构树过滤 + 用户表格多选,确认后回传用户 Id 数组;宽 / 中档是 1100 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
+| UserPicker | 授权用户选择器;机构列表过滤 + 搜索框 + 点整行勾选的用户列表,确认后回传用户 Id 数组;宽 / 中档是 920 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
 | ErrorBoundary | 内容区渲染错误兜底;`onErrorCaptured` + 重试/回首页,chunk 失效自动重载一次。已包住 `layouts/default.vue` 的 `router-view`,页面作者不必再手动套 | `src/components/ErrorBoundary/README.md` |
 | TableZoomButton | 表格「放大/还原」按钮;形态与 SmartTable 工具栏按钮一致,状态由调用方的 `useTableZoom()` 持有,必须与表格一起进 `Teleport`。**已弃用,改用 `toolbar.maximize`**(内核页面的 `TABLE_TOOLBAR` 已统一开放大),下一个 .NET 大版本删除 | `src/components/TableZoomButton/README.md` |
 

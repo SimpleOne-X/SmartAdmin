@@ -2,18 +2,9 @@
 // 角色授权列表:目录卡片 → 页面行 → 按钮胶囊。分组与勾选联动在 grantMenuGroups.ts(纯函数,有单测),这里只管渲染。
 // 直接挂在目录下的按钮(无页面权限项,如只给移动端 / 第三方调的接口)渲染成该目录卡片里的一行,
 // 页面名位置显示「接口权限(无页面)」;勾选提交时只提交按钮 id,不需要为它们建假页面。
-// 控件都是 Naive 官方组件(NRadioGroup / NInput / NCheckbox / NTag / NTooltip);外层 GrantMenuSheet 管弹窗壳与底栏。
+// 控件都是 Naive 官方组件(NSelect / NInput / NCheckbox / NTag);外层 GrantMenuSheet 管弹窗壳与底栏。
 import { computed, reactive, ref, watch } from 'vue'
-import {
-  NButton,
-  NCheckbox,
-  NInput,
-  NRadioButton,
-  NRadioGroup,
-  NSelect,
-  NTag,
-  NTooltip,
-} from 'naive-ui'
+import { NButton, NCheckbox, NInput, NSelect, NTag } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import AppIcon from '#/components/AppIcon.vue'
 import { translateMenuTitle } from '#/locales/menuTitle'
@@ -36,8 +27,6 @@ import {
 } from './grantMenuGroups'
 
 const UNASSIGNED = 0
-/** 应用不多于这个数用分段控件,再多放不下,退回下拉。 */
-const SEGMENT_MAX = 4
 
 const props = defineProps<{
   tree: MenuTreeNode[]
@@ -97,7 +86,6 @@ const moduleOptions = computed(() => {
     options.push({ label: t('menu.moduleUnassigned'), value: UNASSIGNED })
   return options
 })
-const segmented = computed(() => moduleOptions.value.length <= SEGMENT_MAX)
 
 // ── 搜索过滤:目录名命中 → 整个目录;否则只留页面名 / 按钮名命中的行 ──
 interface GroupView {
@@ -195,25 +183,14 @@ const onScroll = (e: Event) => {
 <template>
   <div class="gt" :class="{ 'is-narrow': compact }">
     <div class="gt-toolbar" :class="{ 'is-scrolled': scrolled }">
-      <n-radio-group
-        v-if="segmented"
-        v-model:value="moduleId"
-        name="grant-module"
-        :size="ctlSize"
-        :aria-label="t('menu.module')"
-        :class="{ 'gt-seg-full': compact }"
-      >
-        <n-radio-button v-for="o in moduleOptions" :key="o.value" :value="o.value">
-          {{ o.label }}
-        </n-radio-button>
-      </n-radio-group>
       <n-select
-        v-else
         v-model:value="moduleId"
+        class="gt-module"
+        :class="{ 'is-full': compact }"
         :options="moduleOptions"
         :size="ctlSize"
         :placeholder="t('menu.module')"
-        style="width: 180px; flex: none"
+        :aria-label="t('menu.module')"
       />
       <n-input
         v-model:value="search"
@@ -287,33 +264,25 @@ const onScroll = (e: Event) => {
                 </n-checkbox>
               </div>
               <div class="gt-chips">
-                <n-tooltip
+                <n-tag
                   v-for="b in m.buttons"
                   :key="b.id"
-                  :disabled="!b.permission"
-                  placement="top"
+                  checkable
+                  round
+                  class="gt-chip"
+                  role="checkbox"
+                  tabindex="0"
+                  :aria-checked="b.checked"
+                  :bordered="false"
+                  :checked="b.checked"
+                  :size="ctlSize"
+                  @update:checked="(val: boolean) => onButton(v, m, b.id, val)"
+                  @keydown.enter="onChipKey($event, v, m, b.id)"
+                  @keydown.space="onChipKey($event, v, m, b.id)"
                 >
-                  <template #trigger>
-                    <n-tag
-                      checkable
-                      round
-                      class="gt-chip"
-                      role="checkbox"
-                      tabindex="0"
-                      :aria-checked="b.checked"
-                      :bordered="false"
-                      :checked="b.checked"
-                      :size="ctlSize"
-                      @update:checked="(val: boolean) => onButton(v, m, b.id, val)"
-                      @keydown.enter="onChipKey($event, v, m, b.id)"
-                      @keydown.space="onChipKey($event, v, m, b.id)"
-                    >
-                      <AppIcon v-if="b.checked" class="gt-chip-check" icon="ph:check" :size="13" />
-                      <MatchText :text="b.title" :query="query" />
-                    </n-tag>
-                  </template>
-                  <div class="gt-perm">{{ b.permission?.split(';').join('\n') }}</div>
-                </n-tooltip>
+                  <AppIcon v-if="b.checked" class="gt-chip-check" icon="ph:check" :size="13" />
+                  <MatchText :text="b.title" :query="query" />
+                </n-tag>
                 <span v-if="!m.buttons.length" class="gt-none">{{ t('role.noButtons') }}</span>
               </div>
               <span class="gt-rc" :class="{ full: isFull(menuButtonCount(m)) }">
@@ -356,14 +325,13 @@ const onScroll = (e: Event) => {
 .gt-toolbar.is-scrolled {
   box-shadow: 0 1px 0 var(--hairline);
 }
-/* 窄屏:分段控件独占一行、各段等分 */
-.gt-seg-full {
-  display: flex;
-  width: 100%;
+/* 应用切换下拉:宽屏固定宽度与搜索框同排,窄屏独占一行 */
+.gt-module {
+  flex: none;
+  width: 180px;
 }
-.gt-seg-full :deep(.n-radio-button) {
-  flex: 1;
-  text-align: center;
+.gt-module.is-full {
+  width: 100%;
 }
 
 /* 滚动区:整个弹窗里唯一纵向滚动的地方,头尾固定 */
@@ -528,11 +496,6 @@ const onScroll = (e: Event) => {
 }
 .gt-chip-check {
   margin-right: 3px;
-}
-/* 悬停提示:权限码,多条换行 */
-.gt-perm {
-  font-family: var(--font-mono);
-  white-space: pre-line;
 }
 
 .gt-empty {

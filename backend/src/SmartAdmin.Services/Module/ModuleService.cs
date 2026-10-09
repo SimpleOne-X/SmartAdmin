@@ -5,19 +5,25 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// <see cref="IModuleService"/> 默认实现。编码唯一查重纳入软删行(与 <c>OrgService</c> 同规矩,
-/// 避免撞库上唯一索引抛原生 500)。内置 system 模块按固定 Id 保护,不可删除、不可停用。
+/// 避免撞库上唯一索引抛原生 500)。内置 system 模块按固定 Id 保护,不可删除、不可停用;
+/// 内置 system 模块固定不可转授(读写都按 false)。
 /// </summary>
 public class ModuleService(IRepository<SysModule> modules, ICacheProvider cache) : IModuleService
 {
     /// <inheritdoc />
-    public virtual async Task<IReadOnlyList<SysModule>> ListAsync() =>
-        await modules.AsQueryable().OrderBy(m => m.Sort).OrderBy(m => m.Id).ToListAsync();
+    public virtual async Task<IReadOnlyList<SysModule>> ListAsync()
+    {
+        var list = await modules.AsQueryable().OrderBy(m => m.Sort).OrderBy(m => m.Id).ToListAsync();
+        foreach (var m in list) NormalizeDelegatable(m);
+        return list;
+    }
 
     /// <inheritdoc />
     public virtual async Task<SysModule> GetAsync(long id)
     {
         var module = await modules.GetByIdAsync(id);
         AdminException.ThrowIf(module is null, ErrorCode.ModuleNotFound);
+        NormalizeDelegatable(module!);
         return module!;
     }
 
@@ -38,6 +44,7 @@ public class ModuleService(IRepository<SysModule> modules, ICacheProvider cache)
             Sort = input.Sort,
             Enabled = input.Enabled,
             Remark = input.Remark,
+            IsDelegatable = input.IsDelegatable,
         };
         await modules.InsertAsync(entity);
         await cache.IncrementAsync(CacheKeys.PortalGeneration);   // 新模块改门户模块列表(超管即见)→ 门户缓存整体失效
@@ -63,6 +70,9 @@ public class ModuleService(IRepository<SysModule> modules, ICacheProvider cache)
         entity.Sort = input.Sort;
         entity.Enabled = input.Enabled;
         entity.Remark = input.Remark;
+        // 内置 system 模块承载全部管理页,固定不可转授;其余模块入参不带这个字段(老前端 / 自建管理页)时保持原值,不被清成不可转授
+        if (id == DefaultModuleSeed.BUILTIN_MODULE_ID) entity.IsDelegatable = false;
+        else if (input.IsDelegatable is not null) entity.IsDelegatable = input.IsDelegatable;
         await modules.UpdateAsync(entity);
         await cache.IncrementAsync(CacheKeys.PortalGeneration);   // 标题/图标/排序/启用变更改门户模块列表 → 门户缓存整体失效
     }
@@ -81,5 +91,11 @@ public class ModuleService(IRepository<SysModule> modules, ICacheProvider cache)
             ErrorCode.ModuleHasMenus);
         await modules.DeleteAsync(id);
         await cache.IncrementAsync(CacheKeys.PortalGeneration);   // 删模块改门户模块列表 → 门户缓存整体失效
+    }
+
+    /// <summary>内置 system 模块固定不可转授:库里存了什么都按 false 读。</summary>
+    private static void NormalizeDelegatable(SysModule m)
+    {
+        if (m.Id == DefaultModuleSeed.BUILTIN_MODULE_ID) m.IsDelegatable = false;
     }
 }

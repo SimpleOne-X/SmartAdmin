@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 执行记录详情抽屉里的「各次尝试」子表:同一次触发(fireInstanceId)下的首跑与各次重试。
 // 一次触发的尝试数个位数,静态数据模式即可;窄档的卡片列表是 SmartTable 内置的(card-on-narrow)。
-// 这是嵌在抽屉里的小表,不套整页列表的工具栏 / 条件构造器标准(同 UserPicker,见 listSearch.spec.ts 的 EMBEDDED)。
+// 这是嵌在抽屉里的小表,不套整页列表的工具栏 / 条件构造器标准(见 listSearch.spec.ts 的 EMBEDDED)。
 import { h } from 'vue'
 import { NTag } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -31,7 +31,12 @@ const columns: SmartTableColumn<SysJobLog>[] = [
         runStatusLabel(t, r.runStatus),
       ),
   },
-  { title: () => t('job.log.startTime'), key: 'startTime', render: r => fmtDateTime(r.startTime) },
+  {
+    title: () => t('job.log.startTime'),
+    key: 'startTime',
+    width: 170,
+    render: r => fmtDateTime(r.startTime),
+  },
   {
     title: () => t('job.log.elapsed'),
     key: 'elapsedMs',

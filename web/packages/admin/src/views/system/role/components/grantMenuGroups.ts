@@ -243,3 +243,101 @@ export function collectChecked(groups: CatalogGroup[]): number[] {
   }
   return ids
 }
+
+// ── 角色授权范围 ──
+
+/** 内置 system 模块的 Id(与后端 DefaultModuleSeed.BUILTIN_MODULE_ID 一致)。 */
+export const SYSTEM_MODULE_ID = 1
+
+/** 内核种子菜单 Id 的上界(与后端 SmartSeedIds.KernelMax 一致):根目录 Id 超过它,就是消费者自建的。 */
+export const KERNEL_MAX_ID = 999
+
+/**
+ * 是不是内置角色。只有后端明确给 false 才算非内置:字段缺省(后端版本落后)时不做任何过滤,
+ * 否则保存是全量替换,被隐藏的系统菜单 id 会从提交里消失,等于静默撤销内置角色的授权。
+ */
+export const isBuiltinRole = (role: { isBuiltin?: boolean | null }): boolean =>
+  role.isBuiltin !== false
+
+/** 放开的两个系统页面:用户管理、角色管理(与后端 DefaultMenuSeed.USER_PAGE_ID / ROLE_PAGE_ID 一致)。 */
+export const USER_PAGE_ID = 230
+export const ROLE_PAGE_ID = 240
+const OPEN_PAGE_IDS: readonly number[] = [USER_PAGE_ID, ROLE_PAGE_ID]
+
+/**
+ * 去掉超管专属的系统菜单:内核系统菜单里只留「用户管理」「角色管理」两个页面(整棵子树,含按钮)
+ * 和承载它们的目录(组织管理),其余一概去掉(后端同样拒绝,见 MenuTree.IsSuperAdminOnlyMenu)。
+ * 只处理内核的系统根节点;业务应用的、消费者在系统应用下自建的目录(Id 超过 KERNEL_MAX_ID)不是系统菜单,原样保留。
+ * 内核目录下不在那两个页面之下的节点(机构、岗位、直挂按钮、消费者自己加的页面)去掉,目录里一个都没剩就整个去掉;
+ * 目录节点返回新对象,不改传入的树。
+ */
+export function pruneSuperAdminOnly(tree: MenuTreeNode[]): MenuTreeNode[] {
+  const keep = (n: MenuTreeNode): MenuTreeNode | null => {
+    if (OPEN_PAGE_IDS.includes(n.id)) return n
+    if (n.type !== MenuType.Catalog) return null
+    const children = n.children.map(keep).filter((c): c is MenuTreeNode => c !== null)
+    return children.length ? { ...n, children } : null
+  }
+  return tree.flatMap(n => {
+    if (n.moduleId !== SYSTEM_MODULE_ID || n.id > KERNEL_MAX_ID) return [n]
+    const kept = keep(n)
+    return kept ? [kept] : []
+  })
+}
+
+/**
+ * 系统菜单里除用户管理、角色管理外只能授给内置角色:非内置角色的树里去掉其余的系统菜单(后端同样拒绝)。
+ * 消费者在系统应用下自建的目录(Id 超过 KERNEL_MAX_ID)不是系统菜单,保留。
+ */
+export const treeForRole = (tree: MenuTreeNode[], builtinRole: boolean): MenuTreeNode[] =>
+  builtinRole ? tree : pruneSuperAdminOnly(tree)
+
+/**
+ * 同上:应用下拉里去掉系统应用。visibleTree 是 treeForRole 过滤后的树,
+ * 里面还有系统应用的节点(用户管理 / 角色管理所在的目录,或消费者自建的目录)时保留系统应用,否则那些节点没有入口。
+ */
+export const modulesForRole = <T extends { id: number }>(
+  modules: T[],
+  builtinRole: boolean,
+  visibleTree: MenuTreeNode[],
+): T[] =>
+  builtinRole || visibleTree.some(n => n.moduleId === SYSTEM_MODULE_ID)
+    ? modules
+    : modules.filter(m => m.id !== SYSTEM_MODULE_ID)
+
+/**
+ * 已授权 id 里出现在树(含全部子孙)中的那部分,保持原顺序。
+ * 非内置角色的弹窗看不到系统自带的目录,角色身上若还留着那些授权(升级清理失败、关了种子、滚动升级窗口、
+ * 菜单被挪到内核目录下),它们不在树里;保存是全量替换,把它们原样提交会被后端以 41009 拒绝。
+ * 打开弹窗时先求交,保存提交的就只有看得见的授权,看不见的系统菜单随之收回。
+ */
+export function grantedInTree(granted: number[], tree: MenuTreeNode[]): number[] {
+  const inTree = new Set<number>()
+  const walk = (nodes: MenuTreeNode[]) => {
+    for (const n of nodes) {
+      inTree.add(n.id)
+      walk(n.children)
+    }
+  }
+  walk(tree)
+  return granted.filter(id => inTree.has(id))
+}
+
+/**
+ * 打开某个角色的授权弹窗时,弹窗该展示的树、应用与已授权 id。
+ * 三者必须同口径(树隐藏了系统菜单,应用下拉与已授权也要跟着收),收在一处,页面只管调用。
+ */
+export function grantScopeForRole<M extends { id: number }>(
+  role: { isBuiltin?: boolean | null },
+  tree: MenuTreeNode[],
+  modules: M[],
+  granted: number[],
+): { tree: MenuTreeNode[]; modules: M[]; granted: number[] } {
+  const builtin = isBuiltinRole(role)
+  const visibleTree = treeForRole(tree, builtin)
+  return {
+    tree: visibleTree,
+    modules: modulesForRole(modules, builtin, visibleTree),
+    granted: builtin ? granted : grantedInTree(granted, visibleTree),
+  }
+}

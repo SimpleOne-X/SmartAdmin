@@ -31,6 +31,15 @@ namespace SmartAdmin.Services;
 /// </remarks>
 public class DefaultMenuSeed : ISeedData<SysMenu>
 {
+    /// <summary>「组织管理」目录:用户管理、角色管理的父目录,授权上只是承载它们的壳。</summary>
+    public const long ORG_CATALOG_ID = 200;
+
+    /// <summary>「用户管理」页面。内核系统菜单里只有它与 <see cref="ROLE_PAGE_ID"/> 可以授给非内置角色(见 <see cref="MenuTree.IsSuperAdminOnlyMenu"/>)。</summary>
+    public const long USER_PAGE_ID = 230;
+
+    /// <summary>「角色管理」页面。</summary>
+    public const long ROLE_PAGE_ID = 240;
+
     /// <summary>菜单树的<b>结构</b>是内核拥有的:内核升级时把已有节点的结构列刷回种子值(挪挂载点、改图标/路由/权限码
     /// 都靠这个到老库)。只刷 <see cref="SyncColumns"/> 里那几列,用户在菜单管理页改过的标题、排序、可见、启用照常留着。
     /// 见 <see cref="ISeedData{T}.SyncOnUpgrade"/>。</summary>
@@ -88,6 +97,8 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         new SysMenu { Id = 236, ParentId = 230, Type = MenuType.Button, Title = "用户-启停", Permission = "PUT:/api/v1/sys/user/{id}/enabled", Sort = 6, Enabled = true },
         new SysMenu { Id = 237, ParentId = 230, Type = MenuType.Button, Title = "用户-导入", Permission = Codes("POST:/api/v1/sys/user/import/preview", "POST:/api/v1/sys/user/import/validate", "POST:/api/v1/sys/user/import/error-report", "POST:/api/v1/sys/user/import/commit"), Sort = 7, Enabled = true },
         new SysMenu { Id = 238, ParentId = 230, Type = MenuType.Button, Title = "用户-导出", Permission = "GET:/api/v1/sys/user/export", Sort = 8, Enabled = true },
+        // 单独授权:弹窗要读菜单树;回显、提交、一览拆开授没有意义,同「角色-授权菜单」的归法。
+        new SysMenu { Id = 239, ParentId = 230, Type = MenuType.Button, Title = "用户-授权菜单", Permission = Codes("GET:/api/v1/sys/menu/tree", "GET:/api/v1/sys/user/{id}/menus", "GET:/api/v1/sys/user/{id}/menus/effective", "PUT:/api/v1/sys/user/menu", "GET:/api/v1/sys/user/menu-grants/page"), Sort = 9, Enabled = true },
 
         // 角色管理页(SysRoleController:CRUD + 授菜单 + 配数据范围 + 授用户)。
         // 三个授权抽屉各自是一颗按钮:回显(GET)与提交(PUT)一起授,授权菜单抽屉还要读菜单树。

@@ -28,7 +28,7 @@ public class MultiCodeMenuTests
         var roleId = (await (await admin.PostJson("/api/v1/sys/role/add",
             new { name = $"多码-{tag}", code = $"multi-code-{tag}", sort = 0, enabled = true })).ReadEnvelope())
             .GetProperty("data").GetInt64();
-        await admin.PutJson("/api/v1/sys/role/menu", new { roleId, menuIds });
+        await GrantTestKit.SetRoleMenusAsync(f, roleId, menuIds);
 
         var userId = (await (await admin.PostJson("/api/v1/sys/user",
             new { account = $"mc-{tag}", password = "InitPass123", name = $"多码-{tag}", enabled = true, roleIds = new[] { roleId } }))

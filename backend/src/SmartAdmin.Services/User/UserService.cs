@@ -42,6 +42,14 @@ public class UserService(
     /// <summary>数据范围守卫(系统表不受全局过滤器管,机构与用户可见性都收口在它)。</summary>
     protected IDataScopeGuard Guard => scopeGuard ?? new DataScopeGuard(users, currentUser, dataScope);
 
+    /// <summary>
+    /// 超管账号对已登录的非超管不可见:按 Id 取到超管一律当作不存在,既不透露它存在,也不给任何改动它的入口
+    /// (重置密码再以超管登录,就是把用户管理权限变成最高权限)。无登录上下文(种子、后台任务)视为可信。
+    /// 列表与导出的同一条规则在 <see cref="IDataScopeGuard.ScopeUsers"/>;这里管的是列表之外按 Id 直达的那几个入口。
+    /// </summary>
+    protected virtual bool IsHiddenFromCaller(SysUser user) =>
+        user.IsSuperAdmin && currentUser is { IsAuthenticated: true, IsSuperAdmin: false };
+
     // 生成随机初始口令的字符集:去掉易混字符(0/O、1/l/I),含大小写+数字+符号。
     private const string PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
 
@@ -176,7 +184,7 @@ public class UserService(
     public virtual async Task<UserDetail> GetAsync(long id)
     {
         var u = await users.GetByIdAsync(id);
-        AdminException.ThrowIf(u is null, ErrorCode.UserNotFound);
+        AdminException.ThrowIf(u is null || IsHiddenFromCaller(u), ErrorCode.UserNotFound);
         var roleIds = await rbac.GetUserRoleIdsAsync(id);
         return new UserDetail
         {
@@ -254,7 +262,7 @@ public class UserService(
     public virtual async Task UpdateAsync(long id, UpdateUserInput input)
     {
         var user = await users.GetByIdAsync(id);
-        AdminException.ThrowIf(user is null, ErrorCode.UserNotFound);
+        AdminException.ThrowIf(user is null || IsHiddenFromCaller(user), ErrorCode.UserNotFound);
         // 超管护栏(与 SetEnabledAsync/DeleteAsync 同源):不可经普通更新面停用/降权超管——
         // 否则被授予用户更新权限码的下位者(或超管误操作)可把 Enabled 置 false + 清空角色,把最高账号锁死。
         AdminException.ThrowIf(user!.IsSuperAdmin && !input.Enabled, ErrorCode.SuperAdminProtected);
@@ -291,7 +299,7 @@ public class UserService(
     public virtual async Task DeleteAsync(long id)
     {
         var user = await users.GetByIdAsync(id);
-        AdminException.ThrowIf(user is null, ErrorCode.UserNotFound);
+        AdminException.ThrowIf(user is null || IsHiddenFromCaller(user), ErrorCode.UserNotFound);
         AdminException.ThrowIf(user!.IsSuperAdmin, ErrorCode.SuperAdminProtected);
         // 不能删自己
         AdminException.ThrowIf(currentUser?.UserId == id, ErrorCode.CannotOperateSelf);
@@ -310,6 +318,8 @@ public class UserService(
         if (ids.Count == 0) return;
         var idList = ids.ToList();
         var targets = await users.AsQueryable().Where(u => idList.Contains(u.Id)).ToListAsync();
+        // 批次里有对调用者不可见的超管:整批当作不存在,一个都不删(与单删同源语义)。
+        AdminException.ThrowIf(targets.Any(IsHiddenFromCaller), ErrorCode.UserNotFound);
         // 超管护栏先于自操作护栏:批次含超管时返回更具体的 SuperAdminProtected(与单删同源语义)。
         AdminException.ThrowIf(targets.Any(u => u.IsSuperAdmin), ErrorCode.SuperAdminProtected);
         // 批删同样不能把自己删掉
@@ -330,7 +340,7 @@ public class UserService(
     public virtual async Task<string> ResetPasswordAsync(long id, string? newPassword)
     {
         var user = await users.GetByIdAsync(id);
-        AdminException.ThrowIf(user is null, ErrorCode.UserNotFound);
+        AdminException.ThrowIf(user is null || IsHiddenFromCaller(user), ErrorCode.UserNotFound);
 
         // 仅校验显式提供的口令;未提供时走随机/默认强口令(同 AddAsync 约定)
         if (!string.IsNullOrEmpty(newPassword)) await policy.ValidatePasswordAsync(newPassword);
@@ -357,7 +367,7 @@ public class UserService(
     public virtual async Task SetEnabledAsync(long id, bool enabled)
     {
         var user = await users.GetByIdAsync(id);
-        AdminException.ThrowIf(user is null, ErrorCode.UserNotFound);
+        AdminException.ThrowIf(user is null || IsHiddenFromCaller(user), ErrorCode.UserNotFound);
         AdminException.ThrowIf(!enabled && user!.IsSuperAdmin, ErrorCode.SuperAdminProtected);
         // 不能启停自己
         AdminException.ThrowIf(currentUser?.UserId == id, ErrorCode.CannotOperateSelf);

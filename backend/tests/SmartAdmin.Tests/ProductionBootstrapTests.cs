@@ -91,4 +91,79 @@ public class ProductionBootstrapTests
         Assert.Contains("Avatar", ex.Message);                         // 哪一列 —— 驱动层错误给不了这个
         Assert.Contains("EnableCodeFirstInProduction", ex.Message);    // 怎么办
     }
+
+    /// <summary>
+    /// 关着建表闸门升级、库里缺 sys_user_menu:缺列检查只看已存在的表,缺整张表它不报;
+    /// 而这张表在每个非超管请求的鉴权路径上。必须启动时点名拦下,不能起来以后每个非超管请求都 500。
+    /// </summary>
+    [Fact]
+    public void Production_with_missing_user_menu_table_fails_at_startup_naming_the_table()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"smart-nogrant-{Guid.NewGuid():N}.db");
+        var noSeed = new Dictionary<string, string?> { ["SmartAdmin:Database:EnableSeed"] = "false" };
+
+        using (var v1 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true, Settings = noSeed })
+        {
+            _ = v1.CreateClient();
+            using var scope = v1.Services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ISqlSugarClient>().DbMaintenance.DropTable("sys_user_menu");
+        }
+
+        using var f = new AdminAppFactory { DbPath = dbPath, EnvironmentName = "Production", FreshDatabase = true, Settings = noSeed };
+        var ex = Assert.Throws<InvalidOperationException>(() => f.CreateClient());
+
+        Assert.Contains("sys_user_menu", ex.Message);
+        Assert.Contains("EnableCodeFirstInProduction", ex.Message);
+    }
+
+    /// <summary>
+    /// 版本行先于库就绪钩子写成当前版本,所以升级清理只有这一次机会。库里缺 sys_user_menu、缺表守卫把启动拦下时,
+    /// 清理必须已经跑完:守卫抛错会中断后面的钩子,清理排在它后面就被静默永久跳过,存量系统菜单授权继续生效。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_cleanup_runs_before_the_missing_table_guard_aborts_the_startup()
+    {
+        const long NewRoleId = 900_000_000_002, KernelPage = 301, BusinessPage = 110;
+        var dbPath = Path.Combine(Path.GetTempPath(), $"smart-cleanbeforeguard-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            // 1) 老库:版本 6、缺 sys_user_menu,非内置角色身上有一条内核系统菜单授权和一条业务菜单授权
+            using (var v1 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true })
+            {
+                _ = v1.CreateClient();
+                using var scope = v1.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+                await db.Updateable<SysSchemaVersion>()
+                    .SetColumns(x => new SysSchemaVersion { Version = "6" }).Where(x => x.Id == 1).ExecuteCommandAsync();
+                await db.Insertable(new SysRole { Id = NewRoleId, Name = "运维助理", Code = "ops-helper", Enabled = true }).ExecuteCommandAsync();
+                await db.Insertable(new List<SysRoleMenu>
+                {
+                    new() { RoleId = NewRoleId, MenuId = KernelPage },
+                    new() { RoleId = NewRoleId, MenuId = BusinessPage },
+                }).ExecuteCommandAsync();
+                db.DbMaintenance.DropTable("sys_user_menu");
+            }
+
+            // 2) 生产启动,建表闸门关、种子开:守卫拦下启动
+            using (var prod = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, EnvironmentName = "Production", FreshDatabase = true })
+            {
+                var ex = Assert.Throws<InvalidOperationException>(() => prod.CreateClient());
+                Assert.Contains("sys_user_menu", ex.Message);
+            }
+
+            // 3) DBA 建好表后再启动(这里用开着建表闸门的启动代替):版本已是 7,不会再当升级;
+            //    第 2 步里清理已经跑过,系统菜单授权没了,业务菜单授权还在
+            using var v3 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true };
+            _ = v3.CreateClient();
+            using var scope3 = v3.Services.CreateScope();
+            var db3 = scope3.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+            long[] menus = [.. (await db3.Queryable<SysRoleMenu>().Where(x => x.RoleId == NewRoleId).Select(x => x.MenuId).ToListAsync()).Order()];
+            Assert.Equal([BusinessPage], menus);
+        }
+        finally
+        {
+            TestDb.Cleanup(dbPath, dbPath);
+        }
+    }
 }

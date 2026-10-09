@@ -48,7 +48,7 @@ const columns: SmartTableColumn<NoticeMineItem>[] = [
         r.isRead ? t('notice.read') : t('notice.unread'),
       ),
   },
-  { key: 'title', title: () => t('notice.noticeTitle'), search: {} },
+  { key: 'title', ellipsis: { tooltip: true }, title: () => t('notice.noticeTitle'), search: {} },
   {
     key: 'type',
     title: () => t('notice.type'),

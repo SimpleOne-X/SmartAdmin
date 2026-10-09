@@ -195,9 +195,25 @@ public enum ErrorCode
     [MsgKey("error.role.notDelegatable")]
     RoleNotDelegatable = 41004,
 
-    /// <summary>目标用户超出当前用户的数据范围,不能为其授予角色</summary>
+    /// <summary>目标用户超出当前用户的数据范围,不能对其授权(授予角色或单独授权)</summary>
     [MsgKey("error.user.outOfDataScope")]
     UserOutOfDataScope = 41005,
+
+    /// <summary>菜单所属模块不可转授:非超管只能对「可转授」模块里的菜单做单独授权(新增、修改、移除都算)</summary>
+    [MsgKey("error.perm.menuNotGrantable")]
+    MenuNotGrantable = 41006,
+
+    /// <summary>目标用户也是管理员(能做单独授权):管理员之间的单独授权只由超管调整</summary>
+    [MsgKey("error.perm.targetIsDelegatedAdmin")]
+    TargetIsDelegatedAdmin = 41007,
+
+    /// <summary>非超管授出的「允许」必须设到期时间,且到期日不晚于今天加最长天数;args 携带 maxDays</summary>
+    [MsgKey("error.perm.delegatedGrantExpiryInvalid")]
+    DelegatedGrantExpiryInvalid = 41008,
+
+    /// <summary>系统菜单(内置「系统」应用下内核种子目录的整棵子树)只能授给内置角色(种子里固定 Id 1–999 的角色),新建的角色授不了;「用户管理」「角色管理」两个页面除外</summary>
+    [MsgKey("error.role.systemMenuNotAssignable")]
+    SystemMenuNotAssignable = 41009,
 
     // ── 42xxx 用户 / 组织 / 角色 / 菜单 ──────────────────────────────
 
@@ -320,6 +336,10 @@ public enum ErrorCode
     /// <summary>目标机构不在当前用户的数据范围内(机构/用户管理越权写入)</summary>
     [MsgKey("error.org.outOfScope")]
     OrgOutOfScope = 42030,
+
+    /// <summary>单独授权的变更集不合法:同一菜单出现多次、效果取值不对、到期时间不晚于当前时间或备注超长</summary>
+    [MsgKey("error.user.menuGrantInvalid")]
+    UserMenuGrantInvalid = 42031,
 
     // ── 43xxx 字典 / 配置 ────────────────────────────────────────────
 

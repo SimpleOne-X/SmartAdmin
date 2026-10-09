@@ -32,10 +32,13 @@ import ImportWizard, { type ImportWizardApi } from '#/components/ImportWizard/in
 import ExportColumnsModal from '#/components/ExportColumnsModal/index.vue'
 import UserFormModal from './components/UserFormModal.vue'
 import ResetPasswordModal from './components/ResetPasswordModal.vue'
+import UserGrantMenuSheet from './components/UserGrantMenuSheet.vue'
+import UserGrantOverviewDrawer from './components/UserGrantOverviewDrawer.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
 import { mfaApi, userApi, positionApi, roleApi, orgApi } from '#/api'
 import { useAuthStore } from '#/stores/auth'
+import { useUserStore } from '#/stores/user'
 import { translateError } from '#/utils/error'
 import {
   SEARCH_ACTIONS,
@@ -63,6 +66,10 @@ const { checkedKeys, run: batchDelete } = useBatchDelete({
 // 新增/编辑弹窗 + 重置密码弹窗(表单/校验/保存均在各自组件内,父页只传下拉选项 + 收 saved/passwordGenerated)。
 const userFormRef = ref<InstanceType<typeof UserFormModal> | null>(null)
 const resetModalRef = ref<InstanceType<typeof ResetPasswordModal> | null>(null)
+// 授权菜单弹窗(用户单独授权);超管那一行和自己那一行不出入口(后端同样拒绝)
+const grantSheetRef = ref<InstanceType<typeof UserGrantMenuSheet> | null>(null)
+const userStore = useUserStore()
+const myId = computed(() => userStore.userInfo?.userId)
 
 const clearMfaLoading = ref(false)
 
@@ -211,9 +218,19 @@ const initial = (name?: string | null) => (name || '?').slice(0, 1)
 const importShow = ref(false)
 const exportShow = ref(false)
 const exporting = ref(false)
+// 单独授权一览抽屉(全系统的授权例外在一张表里复核)
+const grantOverviewShow = ref(false)
+const grantOverviewRef = ref<InstanceType<typeof UserGrantOverviewDrawer> | null>(null)
 
-// 导入 / 导出收进表格内置的「更多」菜单(统一标准:业务按钮只留高频动作)。
-// 没有任何权限时 more 为空数组,按钮不出现,不会露出一个空菜单;权限码与原按钮的 v-auth 一字不差。
+// 授权菜单弹窗保存成功:用户表刷新;一览抽屉开着时也刷新,「去调整」改过的记录马上反映在列表里。
+// 抽屉没开就不拉:下次打开本来就会重新取数。
+function onGrantSaved() {
+  tableRef.value?.refresh()
+  if (grantOverviewShow.value) grantOverviewRef.value?.refresh()
+}
+
+// 导入 / 导出、单独授权一览收进表格内置的「更多」菜单(统一标准:业务按钮只留高频动作)。
+// 没有任何权限时 more 为空数组,按钮不出现,不会露出一个空菜单;导入 / 导出的权限码与原按钮的 v-auth 一字不差。
 const toolbarMore = computed(() =>
   [
     authStore.hasPerm('POST:/api/v1/sys/user/import/preview')
@@ -222,6 +239,9 @@ const toolbarMore = computed(() =>
     authStore.hasPerm('GET:/api/v1/sys/user/export')
       ? { label: t('export.button'), key: 'export' }
       : null,
+    authStore.hasPerm('GET:/api/v1/sys/user/menu-grants/page')
+      ? { label: t('userGrant.overview'), key: 'grantOverview' }
+      : null,
   ].filter((o): o is { label: string; key: string } => o !== null),
 )
 // 引用稳定的 toolbar 配置:不要把 `{ ...TABLE_TOOLBAR, more }` 直接写进模板,那样每次重渲染都会新建一个对象
@@ -229,6 +249,7 @@ const toolbar = computed(() => ({ ...TABLE_TOOLBAR, more: toolbarMore.value }))
 function onMoreSelect(key: string | number) {
   if (key === 'import') importShow.value = true
   else if (key === 'export') exportShow.value = true
+  else if (key === 'grantOverview') grantOverviewShow.value = true
 }
 
 /** 与后端 UserExportProfile.Columns 对齐(前端无列清单端点,照档案硬编码)。 */
@@ -316,12 +337,14 @@ const columns: SmartTableColumn<UserItem>[] = [
   },
   {
     key: 'account',
+    ellipsis: { tooltip: true },
     title: () => t('user.account'),
     search: { actions: SEARCH_ACTIONS.fuzzy },
     sorter: true,
   },
   {
     key: 'name',
+    ellipsis: { tooltip: true },
     title: () => t('user.name'),
     card: 'title',
     search: { actions: SEARCH_ACTIONS.fuzzy },
@@ -329,6 +352,8 @@ const columns: SmartTableColumn<UserItem>[] = [
   },
   {
     key: 'phone',
+    width: 130,
+    ellipsis: { tooltip: true },
     title: () => t('user.phone'),
     sorter: true,
     render: r => (r.phone ? h('span', { class: 'num' }, r.phone) : dash()),
@@ -349,7 +374,12 @@ const columns: SmartTableColumn<UserItem>[] = [
     options: roleOptions,
     search: { actions: SEARCH_ACTIONS.exact, props: { clearable: true } },
   },
-  { key: 'orgName', title: () => t('user.org'), render: r => r.orgName || dash() },
+  {
+    key: 'orgName',
+    ellipsis: { tooltip: true },
+    title: () => t('user.org'),
+    render: r => r.orgName || dash(),
+  },
   {
     key: 'positionName',
     title: () => t('user.position'),
@@ -382,7 +412,13 @@ const columns: SmartTableColumn<UserItem>[] = [
         ? h(NTag, { type: 'warning', size: 'small', bordered: false }, () => t('user.superAdmin'))
         : dash(),
   },
-  { key: 'createTime', title: () => t('user.createTime'), format: 'datetime', sorter: true },
+  {
+    key: 'createTime',
+    width: 170,
+    title: () => t('user.createTime'),
+    format: 'datetime',
+    sorter: true,
+  },
   // 操作:编辑/删除外露;重置密码、解绑验证器进「更多」(放操作列末尾)。
   // width 须够「编辑+删除+更多」单行;wrap:false 禁止 NSpace 默认换行(否则「更多」掉到删除下一行)。
   {
@@ -393,6 +429,9 @@ const columns: SmartTableColumn<UserItem>[] = [
     hideInSetting: true,
     render: r => {
       const rawMoreOptions: (DropdownOption | null)[] = [
+        authStore.hasPerm('PUT:/api/v1/sys/user/menu') && !r.isSuperAdmin && r.id !== myId.value
+          ? { key: 'grantMenus', label: t('userGrant.action'), icon: menuIcon('ph:list-checks') }
+          : null,
         authStore.hasPerm('PUT:/api/v1/sys/user/{id}/password')
           ? { key: 'resetPassword', label: t('user.resetPassword'), icon: menuIcon('ph:key') }
           : null,
@@ -446,6 +485,8 @@ const columns: SmartTableColumn<UserItem>[] = [
                 onSelect: (key: string) => {
                   if (key === 'resetPassword') resetModalRef.value?.openReset(r)
                   else if (key === 'clearMfa') void clearUserMfa(r)
+                  else if (key === 'grantMenus')
+                    grantSheetRef.value?.open({ id: r.id, name: r.name })
                 },
               },
               () =>
@@ -619,6 +660,14 @@ deriveHeaderFilters(columns)
   />
 
   <ResetPasswordModal ref="resetModalRef" />
+
+  <UserGrantMenuSheet ref="grantSheetRef" @saved="onGrantSaved" />
+
+  <UserGrantOverviewDrawer
+    ref="grantOverviewRef"
+    v-model:show="grantOverviewShow"
+    @adjust="u => grantSheetRef?.open(u)"
+  />
 
   <ImportWizard
     v-model:show="importShow"

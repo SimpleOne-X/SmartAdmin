@@ -177,6 +177,10 @@ A force-logout on a session that never existed still returns success idempotentl
 
 The decision is funnelled into `IDataScopeGuard` (an out-of-scope org assertion, the scope predicate for user queries, and the set of in-scope user ids), shared by the user, org, position, file, log and session services alike. Centralizing it in one place is what lets logs and sessions enforce the same boundary too: without it, a sub-admin granted the log-viewing permission could read the whole company's operation records, parameter JSON included, and force-logout anyone.
 
+A super admin account is the exception: it is invisible to a signed-in non-super-admin, even when the data scope is "all". The user list and export leave it out. Reading, editing, resetting the password, enabling or disabling and deleting it by Id are all treated as "user not found" (`42001`). The read endpoints of individual grants return `41005`.
+
+A data scope only speaks about orgs and can't tell who is a super admin, so this rule ignores the scope. It lives in `ScopeUsers` and `IsUserInScopeAsync` on `IDataScopeGuard`, and the endpoints that address a user by Id check it once more in `UserService.IsHiddenFromCaller`. Without it, an ordinary admin holding the "User - Reset password" button could reset the super admin's password and sign in as the super admin.
+
 The in-scope user id set **includes soft-deleted users**. Logs and sessions are historical fact, and what someone did before they left shouldn't vanish because their account was soft-deleted.
 
 ## Extension point

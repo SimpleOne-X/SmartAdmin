@@ -115,7 +115,17 @@ public static class ServicesSetup
         services.TryAddScoped<IPermissionProvider, RbacPermissionProvider>();
         services.TryAddScoped<IRoleGrantPolicy, RoleGrantPolicy>();   // 角色授予的唯一判定出口,RbacService 收口调用
         services.TryAddScoped<IRbacService, RbacService>();
+        // 库就绪钩子按登记顺序执行,下面两个的顺序不能换:守卫缺表时抛错会中断后面所有的钩子,
+        // 而种子版本行已先写成当前版本,排在守卫后面的升级清理就错过了唯一一次机会,以后再也不会运行。
+        // 清理不读写 sys_user_menu,不依赖守卫要确认的那张表。
+        // 系统菜单只授内置角色:从老版本升级上来的那一次清掉非内置角色上的存量
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, SystemMenuRoleGrantCleanup>());
+        // 单独授权表在鉴权热路径上:建表被跳过时库就绪即确认它在,缺了点名拦下而不是放进程起来再 500
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, UserMenuGrantTableGuard>());
         services.TryAddScoped<IRoleService, RoleService>();   // 角色生命周期 CRUD(授权/数据范围仍走 IRbacService)
+        // 用户单独授权:守卫是委派授权的唯一判定出口,服务的保存与读接口都经它
+        services.TryAddScoped<IUserMenuGrantPolicy, UserMenuGrantPolicy>();
+        services.TryAddScoped<IUserMenuGrantService, UserMenuGrantService>();
 
         // 数据范围解析(招牌能力):合并用户多角色范围,结果按用户缓存
         services.TryAddScoped<IDataScopeProvider, DataScopeProvider>();
@@ -216,12 +226,12 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, UserRecycleBinType>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, RoleRecycleBinType>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, JobRecycleBinType>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, MenuRecycleBinType>());
         services.AddRecycleBinType<SysOrg>("org", e => e.Name, e => e.Code);
         services.AddRecycleBinType<SysPosition>("position", e => e.Name, e => e.Code);
         services.AddRecycleBinType<SysModule>("module", e => e.Title, e => e.Code);
         services.AddRecycleBinType<SysConfig>("config", e => e.Name, e => e.ConfigKey);
         services.AddRecycleBinType<SysDictType>("dict", e => e.Name, e => e.Code);
-        services.AddRecycleBinType<SysMenu>("menu", e => e.Title, e => e.Permission);
 
         // 个人中心:当前用户对自己账号的读改(看/改资料、验旧改密)
         services.TryAddScoped<IPersonalService, PersonalService>();

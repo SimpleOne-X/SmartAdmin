@@ -1,3 +1,4 @@
+using SqlSugar;
 using SmartAdmin.Core;
 using SmartAdmin.SqlSugar;
 
@@ -12,6 +13,7 @@ namespace SmartAdmin.Services;
 /// 由 <see cref="EnsureSuperAdmin"/> 兜底;角色<b>指派面</b>(把角色关联到用户)经 <see cref="IRoleGrantPolicy"/>
 /// 收口,非超管只能把"可转授"角色授予其数据范围内的用户。两个依赖均尾随可选:未注入(消费者精简子类/
 /// 手工构造的实例)时视为可信系统上下文,不加限制。
+/// 授权面另有一条:除「用户管理」「角色管理」外的系统菜单只能授给内置角色(见 <see cref="EnsureRoleMenusAssignableAsync"/>)。
 /// </para>
 /// </summary>
 public class RbacService(
@@ -34,7 +36,9 @@ public class RbacService(
     public virtual async Task SetRoleMenusAsync(long roleId, IReadOnlyCollection<long> menuIds)
     {
         EnsureSuperAdmin();   // 角色菜单授权超管专属
-        AdminException.ThrowIf(!await roles.AnyAsync(r => r.Id == roleId), ErrorCode.RoleNotFound);
+        var role = await roles.GetByIdAsync(roleId);
+        AdminException.ThrowIf(role is null, ErrorCode.RoleNotFound);
+        await EnsureRoleMenusAssignableAsync(role!, menuIds);
 
         var links = menuIds.Distinct().Select(mid => new SysRoleMenu { RoleId = roleId, MenuId = mid }).ToList();
         await ReplaceAsync(
@@ -45,6 +49,25 @@ public class RbacService(
         var affectedUsers = await userRoles.AsQueryable().Where(x => x.RoleId == roleId).Select(x => x.UserId).ToListAsync();
         await InvalidatePermissionsAsync(affectedUsers);
         await cache.IncrementAsync(CacheKeys.PortalGeneration);   // 授权变动改门户模块/菜单树 → 门户缓存整体失效
+    }
+
+    /// <summary>
+    /// 超管专属的系统菜单只能授给内置角色(<see cref="SysRole.IsBuiltin"/>):它们是管理面,除超管自己外只由内置角色持有。
+    /// 系统菜单指根目录是内核种子(Id ≤ <see cref="SmartSeedIds.KernelMax"/>)且挂在内置「系统」应用下的整棵子树,
+    /// 其中「用户管理」「角色管理」两个页面(连同「组织管理」目录壳)放开,新建角色可以持有,
+    /// 判定见 <see cref="MenuTree.IsSuperAdminOnlyMenu"/>;消费者在「系统」应用下自建的目录不算,新建角色照常可授。
+    /// 判定读的是全表(含停用与软删的节点):中间隔着一个停用的目录时只读启用节点会断链,把下面的系统菜单误判成普通菜单;
+    /// 软删的菜单在回收站里,恢复后会带着授权回来,同样算系统菜单。
+    /// 系统 / 未认证上下文(种子、启动任务)视为可信,不受限,与 <see cref="EnsureSuperAdmin"/> 同一约定。
+    /// 读菜单走已有仓储的 <c>Db</c> 逃生舱口,不加构造参数。
+    /// </summary>
+    protected virtual async Task EnsureRoleMenusAssignableAsync(SysRole role, IReadOnlyCollection<long> menuIds)
+    {
+        if (role.IsBuiltin || menuIds.Count == 0 || currentUser is not { IsAuthenticated: true }) return;
+        var byId = (await roles.Db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync()).ToDictionary(m => m.Id);
+        AdminException.ThrowIf(
+            menuIds.Any(id => MenuTree.IsSuperAdminOnlyMenu(id, byId)),
+            ErrorCode.SystemMenuNotAssignable);
     }
 
     /// <inheritdoc />
@@ -145,9 +168,16 @@ public class RbacService(
         // 菜单 → 授它的角色(sys_role_menu) → 挂这些角色的用户(sys_user_role) → 失效其权限缓存。
         // 菜单 CRUD 低频,过量失效无害(下次请求按新授权重算);软删菜单不清 sys_role_menu,故删后此扇出仍能命中受影响用户。
         var roleIds = await roleMenus.AsQueryable().Where(x => x.MenuId == menuId).Select(x => x.RoleId).ToListAsync();
-        if (roleIds.Count == 0) return;
-        var affectedUsers = await userRoles.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.UserId).ToListAsync();
-        await InvalidatePermissionsAsync(affectedUsers);
+        List<long> affected = roleIds.Count == 0
+            ? []
+            : await userRoles.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.UserId).ToListAsync();
+
+        // 再加上所有有单独授权记录的用户:拒绝会扩展到子孙,挪父节点会改变扩展结果,精确圈定代价高;
+        // 单独授权是例外,这个集合小,过量失效无害。
+        affected.AddRange(await roleMenus.Db.Queryable<SysUserMenu>().Select(g => g.UserId).Distinct().ToListAsync());
+
+        if (affected.Count == 0) return;
+        await InvalidatePermissionsAsync(affected.Distinct());
     }
 
     /// <inheritdoc />

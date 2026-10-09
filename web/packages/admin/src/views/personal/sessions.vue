@@ -53,10 +53,11 @@ const columns: SmartTableColumn<MySessionItem>[] = [
     // 搜索按原始 UA 字符串「包含」求值(输入 Chrome / Windows 都能命中);单元格显示解析后的「浏览器 · 系统」
     key: 'userAgent',
     title: () => t('session.device'),
+    width: 240,
     search: {},
     render: r =>
       h('div', { class: 'device-cell' }, [
-        h('span', uaSummary(r.userAgent)),
+        h('span', { class: 'device-text', title: uaSummary(r.userAgent) }, uaSummary(r.userAgent)),
         r.isCurrent
           ? h(NTag, { type: 'success', size: 'small', bordered: false }, () => t('session.current'))
           : null,
@@ -125,5 +126,16 @@ deriveHeaderFilters(columns)
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+/* 设备名放不下时收成省略号,「当前设备」标签始终完整显示 */
+:deep(.device-text) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:deep(.device-cell .n-tag) {
+  flex: none;
 }
 </style>

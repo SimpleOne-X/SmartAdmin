@@ -202,6 +202,133 @@ For example, `Admin`, `ADMIN`, and `admin ` (trailing space) all resolve to the 
 
 **Blocking account enumeration** (`AuthService.ValidateUserAsync`): "account doesn't exist" and "wrong password" both throw `ErrorCode.PasswordWrong` (indistinguishable in the response), and when the account doesn't exist, an equivalent-cost dummy hash still runs — making response timing indistinguishable too, closing both side channels at once.
 
+## Per-user grants
+
+Roles carry the routine permissions; per-user grants are for exceptions: you mark a single menu node for a single user as "Allow" or "Deny", optionally with an expiry time.
+The effective menu is computed as (menus granted by enabled roles ∪ active Allows) − active Denies and their descendants, keeping only enabled nodes.
+
+"Active" means the grant has no expiry time, or its expiry time hasn't passed yet.
+Deny wins, and it reaches descendants:
+deny a page and the buttons under it go with it, so you never end up with the page gone but its button endpoints still callable.
+The rule is implemented exactly once, in `UserMenuGrantRules`, and permission aggregation, the portal menu and the grant UI all call it.
+Super admins still get everything, take no part in the computation, and cannot be given grants.
+
+A Deny lands on the node, not on the permission code.
+Several buttons sharing one endpoint is common, so denying one of them leaves the endpoint callable as long as another effective node still carries that code.
+The grant UI lists such leaked endpoints together with the nodes that carry them, so an admin doesn't assume an endpoint is closed when it isn't.
+
+Per-user grants cover features, never data.
+Data scope still comes only from roles, so a user with no roles and only per-user grants can open pages and call endpoints but sees nothing beyond the rows they created themselves.
+
+Who can grant splits into two tiers:
+
+- A super admin can grant any menu, and an Allow may be open-ended.
+- An ordinary admin is a non-super-admin whose effective permission codes include `PUT:/api/v1/sys/user/menu`. Tick the "User - Grant Menus" button on their role and they have it. Four constraints bind them:
+  - The target user must be inside their data scope.
+  - The target must not be an ordinary admin too.
+    Permissions between admins are adjusted only by a super admin, so two admins cannot grant each other anything.
+  - Every entry in the change set must sit in a menu whose module is delegatable.
+    Adds, edits and removals all count, and so do Allows and Denies; the admin does not need to hold those menus themselves.
+  - An Allow must carry an expiry time, and its date can be no later than today plus the number of days `DelegatedGrantMaxDays` gives (below).
+    A Deny only tightens permissions, so it needs no expiry.
+
+Nobody can grant to themselves (`CannotOperateSelf`, 42029) or to a super admin (`SuperAdminProtected`, 42007), super admins included.
+
+"Delegatable" is a switch on the module (`SysModule.IsDelegatable`), set by a super admin on the module-management page.
+It is a different switch from the role's own "delegatable" flag (`SysRole.IsDelegatable`), which decides whether an ordinary admin may hand that role to others.
+Only `true` counts; `null` and `false` both mean not delegatable.
+Existing modules are `null` after an upgrade, so until a super admin turns a module's switch on, an ordinary admin can grant nothing inside it.
+The built-in "System" module is permanently non-delegatable: its switch is greyed out and any submitted value is ignored.
+In a fresh database the sample module "Business Center" is delegatable by default.
+A menu's module is found by walking up `ParentId` to the root and taking the root's `ModuleId`;
+a menu that sits under no module counts as non-delegatable.
+
+Inside a delegatable module the granter is no longer restricted entry by entry:
+an ordinary admin can turn a Deny set by a super admin into an Allow within the time limit, or delete a permanent Allow set by a super admin.
+Turning a module's "delegatable" switch off is not a revocation.
+Existing grants keep working; ordinary admins just can no longer change them.
+To lock or pull back a grant, a super admin turns the switch off first and then handles that record personally.
+
+| Config key | Default | Description |
+| --- | --- | --- |
+| `SmartAdmin:Security:DelegatedGrantMaxDays` | `90` | When an ordinary admin grants an Allow, the latest expiry date is this many days after today, judged by date |
+
+"Today" is the server's local date.
+The date-picker limit and the pre-save check in the grant dialog use the day the server computed (`delegatedMaxDate` in the `menus/effective` response), never the browser's date.
+The range is 0 to 3650; a value outside it makes startup fail, and a negative value is never treated as "unlimited".
+`0` means unlimited: no expiry time is required and there is no upper bound.
+Super admins are not subject to this setting.
+
+Role grants have a rule of their own: apart from User Management and Role Management, system menus can be granted only to built-in roles.
+A system menu is a directory the kernel seed plants under the built-in "System" app (Id ≤ 999, such as Organization or System Operations) together with everything below it, including pages you hang under those directories.
+A built-in role is one whose Id is fixed in the kernel seed, 1–999, such as "System Administrator".
+Roles created in the UI, and roles your own seed plants (Id ≥ 1000), are not built in.
+When a super admin grants a non-built-in role on the role-grant page, only the kernel's own User Management and Role Management are shown, the other system menus aren't, and the endpoint rejects them with 41009 (`SystemMenuNotAssignable`).
+The guard only stops calls that carry a login context; seeds, startup tasks and other code with no login context are unrestricted.
+
+The two pages User Management and Role Management (buttons included, and any node you hang below them) and the Organization directory that carries them are open: a new role can be granted them, and an ordinary admin relies on them to maintain users and roles.
+The Org and Position pages in the same directory, and any page you hang directly under the Organization directory, can still go only to built-in roles.
+The write endpoints for a role's menus and data scope have a super-admin-only guard of their own, so opening these two pages doesn't let a new role change anyone's grants.
+
+A top-level directory you create yourself under the "System" app (Id ≥ 1000) is not a system menu, and a new role can be granted it as usual.
+It still belongs to the "System" app, though, which is permanently non-delegatable, so an ordinary admin cannot grant it to a user.
+To delegate it, re-parent the directory under your own app first.
+
+If someone later moves a page under a kernel directory, or moves a kernel directory to another app and back to "System" (the seed also restores it on upgrade), the grants a new role holds on those menus in the meantime are not reclaimed automatically.
+A super admin opens that role's grant dialog and saves once: those menus no longer show in the dialog, and a save submits only the grants that are visible, so they are taken back.
+This restriction covers role grants only. The individual-grant dialog likewise lists only User Management and Role Management, but the endpoint doesn't block: a super admin can still grant a system menu to an individual user through the API.
+
+::: warning Upgrading deletes system-menu grants held by new roles
+On the first startup after upgrading from a database whose seed version is below 7, once the database is ready the kernel physically deletes the `sys_role_menu` rows of "non-built-in role × super-admin-only system menu", with User Management, Role Management and the Organization directory shell excepted.
+Directories you created yourself under the "System" app (Id ≥ 1000) are not touched.
+The deletion is irreversible, so back up that table before upgrading.
+Every row writes a Warning log line (role name, code, menu title, menu Id), and the affected users' permission-code cache is invalidated and the portal-menu cache is recomputed as a whole.
+An empty database, an ordinary restart, or seeding turned off (which skips the version gate) never runs it.
+
+- Projects that rely on a new role to reach system pages other than User Management and Role Management lose that access for those users after the upgrade;
+  switch them to the built-in "System Administrator" role.
+- Roles your own seed plants (Id ≥ 1000) count as non-built-in too.
+  On the upgrade startup the cleanup deletes the system menus already granted to them;
+  but a seed has no login context and isn't subject to the guard, so every later restart plants the missing rows again.
+  A project that grants system menus this way has to use a built-in role instead, or change its own seed.
+- The cleanup runs once and is never retried.
+  The version row is written as 7 before the cleanup runs, so if the cleanup fails the startup aborts with an exception.
+  A failed lookup or a failed deletion leaves an Error log line saying no grant was deleted (a failed deletion also says the transaction was rolled back).
+  When a deployment that skips table creation lacks `sys_user_menu`, the missing-table guard aborts the startup, but the cleanup is registered ahead of it and has already finished.
+  To recover, a super admin re-saves the grants of every non-built-in role on the role-grant page (after a failed deletion, the roles named in the log are enough):
+  the dialog doesn't show those system menus and a save submits only the grants that are visible, so saving takes them back.
+- If only the cache invalidation fails after the grants are deleted, it writes an Error log line and startup carries on.
+  Clear "permission cache" and "portal menu cache" separately on the cache-management page.
+- During a rolling upgrade, replicas still running the old version can keep granting system menus to new roles.
+  Those grants are not cleaned up, and once the upgrade finishes a super admin takes them back by re-saving in the same way.
+:::
+
+When a grant is rejected, match the error code to find the cause:
+
+| Code | Name | Appears when |
+| --- | --- | --- |
+| `41005` | `UserOutOfDataScope` | The target user is outside the granter's data scope; reading that user's grants and effective permissions is rejected the same way |
+| `41006` | `MenuNotGrantable` | A menu in the change set belongs to a module that isn't delegatable |
+| `41007` | `TargetIsDelegatedAdmin` | An ordinary admin grants to another ordinary admin; also when the target was later put into an admin role and the original granter tries to edit that user's records |
+| `41008` | `DelegatedGrantExpiryInvalid` | An ordinary admin's Allow has no expiry time, or its expiry date is later than today plus the maximum days |
+| `41009` | `SystemMenuNotAssignable` | A system menu other than User Management or Role Management is granted to a non-built-in role |
+| `42015` | `MenuNotFound` | A menu being added or edited doesn't exist |
+| `42031` | `UserMenuGrantInvalid` | The change set itself is invalid: the same menu appears more than once (adds, edits and removals counted together, so a menu in both an edit and a removal counts), the effect is neither Allow nor Deny, the expiry time is not later than now (Allow and Deny alike), or the remark exceeds 200 characters |
+
+After a successful save the kernel publishes `UserMenuGrantsChangedEvent` through `IEventBus`, carrying the target user, the operator, and the details of what was added, changed and removed.
+The kernel never subscribes to it itself; a consumer that wants external auditing or alerting just subscribes.
+See [Event bus](./event-bus.md) for how.
+
+A grant change takes effect on the API immediately:
+permission codes aren't in the JWT but are read from cache on every request, and saving a grant invalidates that user's cache.
+Expiry needs no background job, because the cache TTL is capped at the nearest expiry moment and the next request after it recomputes.
+The limitation is that a page the target user already has open won't refresh its sidebar and buttons live; they need to reload or sign in again.
+Role changes behave the same way, since the kernel has no push channel for them.
+
+The kernel wires per-user grants only into the default `RbacPermissionProvider` and `MenuService`.
+If a project replaces `IPermissionProvider` or `IMenuService` wholesale, its implementation knows nothing about `sys_user_menu`, and per-user grants have no effect.
+To support them, read that table yourself and call `UserMenuGrantRules` to compute the effective menu.
+
 ## Sessions and force-logout
 
 Sessions are managed by `SessionService`: the copy in the database is the source of truth, and the cached copy exists only to spare the hot path one query. Refresh tokens are stored as a SHA-256 hash and nothing else, and every timestamp is UTC. At login, a GUID v7 is generated as the `sessionId`, written into the token's `sid` claim, and used as the stable anchor for listing online users and for force-logout.

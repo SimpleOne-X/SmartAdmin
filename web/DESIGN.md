@@ -68,6 +68,10 @@ macOS 风格的企业后台:固定壁纸画布(浅色与登录页同味:底色 `
 ## 5. 组件规范
 
 - **按钮层级**:主按钮 `--acc-solid`(hover → `--acc-hover`,pressed → `--acc-pressed`,字色 `--on-acc`)/ 次要 `secondary`(`--fill` 灰底、无描边)/ 文本 / 危险 `--err` / 禁用。没写 `type` 的默认按钮(如表格库里的「搜索」「更多」)在主题覆盖里渲染成与 `secondary` 同色同无描边,整站只剩一种次按钮。默认高 30(`--control-h`)。
+- **表格线色**:表格的列竖线、外框、行线统一取 `--separator`(亮色 `rgba(55, 75, 115, 0.16)`,暗色 `0.22`),主题里写在 `DataTable.borderColor`,不另设表格专用线色令牌。
+  `--hairline-strong`(0.26)在 100% 缩放下偏重,所以表格线不用它;`macosMotion.spec.ts` 守着线色来源和 0.16 这个值。
+  已知代价:系统缩放 125% / 150% 时,虚拟滚动的行带有亚像素偏移,线会被摊到两个像素上变淡,这是接受的,不靠加深线色补。
+- **提示气泡**(`Tooltip`):和下拉 / 弹层同一套浮层表面,随亮暗主题走,不做亮暗都黑的特例。底色 `--tooltip-bg`(亮色近白、暗色比卡片略亮的深蓝)必须是不透明实底,字色取 `--text-1`,阴影是 `--hairline-strong` 描边加 `--shadow-1`;主题里 `Tooltip` 与 `peers.Popover` 要各给一份(全局 `Popover` 覆盖会压过前者)。
 - **表格密度**:舒适 / 紧凑两档(运行时可切,存 `app.density`,打到 `<html data-density>`);紧凑档收紧页内边距与行高(`--row-h` = `--table-row-h` 32);卡片间距不随密度变(见下条);数值列 `tabular-nums`。
 - **卡片间距**:全站只有一个值 `--gap-card` = 8px,等于壳层面板(侧栏 / 顶栏 / 内容区)之间的间距,对齐 macOS 的 8pt 网格。顶栏到首张卡片、卡片与卡片(上下、左右)、左右分栏之间都用它;页面根容器不加顶部留白,所以自然滚动页和满屏列表页的首张卡片位置一致,切换页面不跳。卡片内部 padding 不用这个令牌。
 - **状态反馈**:标签 = 语义色文字 + `-bg` 浅底 + 圆点;空 / 加载 / 错误态统一走 Naive 内建占位。
@@ -85,6 +89,8 @@ macOS 风格的企业后台:固定壁纸画布(浅色与登录页同味:底色 `
   **取值标准是原值亮度落在 0.14–0.36**,不是看色相好不好看:这一段 `solid()` 之后色相不跑偏,而且 6 个色的主按钮一律深底白字。亮度 > 0.5 的色(薄荷、亮青、黄)会走「保留原色配深字」的分支,换强调色主按钮字色就从白翻成黑,所以一个都不收。**加新候选色前先算 `solid()` 的结果**。色块预览取 `solid(color)`(与开关 / 主按钮同一套压暗规则),深青 / 墨绿压暗幅度大,所以显示名不叫青色 / 绿色。浅色 / 深色共用同一个强调色值;品牌 Logo 的固定靛蓝 `#646CFF` 不随强调色变。
   - 石墨(近中性)只让控件去色:色场(登录页 `--desk-*`、应用内 `--ambient-*`)退回默认蓝,否则整屏灰成一块;但 `--login-accent-2` 仍走石墨本色。
 - **英雄元素(仅登录页 / 欢迎横幅 / 头像)**:主按钮渐变 `btnGrad` + 发光 `glowSh`;**应用内常规按钮走 Naive 平面主色**,不满屏渐变。
+- **内容卡片的边**(`index.css`):`::before` 的渐变描边环是顶边高光的**唯一来源**,卡片投影(`--glass-shadow-soft`)不再带 `inset` 内高光,否则顶边变成两条线。环的粗细必须用 `border`(浏览器对齐到整数设备像素),不要用 `padding`(125% / 150% 缩放下是 1.25 / 1.5 个设备像素,会被摊成两像素宽)。只画 `.n-card--bordered` 的卡;`bordered: false` 的卡(嵌在卡片里的表格)不画框也不投影。
+- **暗色实心主按钮的辉光**(`index.css`):只给实心款,10px 收敛辉光 + 一圈淡亮内描边,辉光再亮也留得住边。判据是 Naive 只给实心 / ghost / dashed 渲染 `.n-button__border`,所以用 `:has(> .n-button__border)` 筛,**不要按 `.n-button--primary-type` 一刀切**:文字款(表格操作列)和淡色底的 secondary(查询钮)套上辉光会糊成一团、边消失。secondary 主色钮改画一圈 45% 强调色细描边。
 
 ## 6. 可访问性
 
@@ -108,7 +114,7 @@ macOS 风格的企业后台:固定壁纸画布(浅色与登录页同味:底色 `
 | `bodyColor` | `--bg-app` |
 | `cardColor` | `--bg-card-glass` |
 | `tableColor` / `tableHeaderColor` | `transparent`(表格底 / 表头由卡片与 `--th-bg` 系列承担) |
-| `modalColor` / `popoverColor` | `--bg-elevated` |
+| `modalColor` / `popoverColor` | `--bg-elevated`(弹窗卡另在 `index.css` 里取近乎不透明的 `--glass-solid`,遮罩取 `--mask`:亮色也是深色蒙层,与 macOS 一致) |
 | `textColorBase` / `textColor1` | `--text-1` |
 | `textColor2` | `--text-2` |
 | `textColor3` / `placeholderColor` / `clearColor` | `--text-3` |

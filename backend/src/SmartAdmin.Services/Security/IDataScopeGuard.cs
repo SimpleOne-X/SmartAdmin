@@ -9,7 +9,8 @@ namespace SmartAdmin.Services;
 /// <para>为什么需要它:全局查询过滤器只认 <c>IOrgScoped</c>(业务表继承 <c>DataEntity</c> 即自动受控),
 /// 而内核自己的 <c>Sys*</c> 表一律继承 <c>BaseEntity</c>——过滤器对它们一行都不生效。于是"谁能看见哪些用户/
 /// 哪些日志/哪些会话"只能各服务手写,写漏一个就是一处越权面——操作日志、在线会话、通知列表都经它收口。</para>
-/// <para>超管与不受限范围一律放行;<c>null</c> 机构视为在范围内(根级/未分配,沿用既有语义)。</para>
+/// <para>超管与不受限范围一律放行;<c>null</c> 机构视为在范围内(根级/未分配,沿用既有语义)。
+/// 唯一的例外是超管账号本身:它对已登录的非超管不可见,范围是「全部」也一样(见 <see cref="ScopeUsers"/>)。</para>
 /// </summary>
 public interface IDataScopeGuard
 {
@@ -22,7 +23,10 @@ public interface IDataScopeGuard
     /// <summary>机构不在范围内即抛 <see cref="ErrorCode.OrgOutOfScope"/>。</summary>
     void EnsureOrgInScope(long? orgId);
 
-    /// <summary>给用户查询叠上范围条件:机构在范围内,或(范围含"仅本人"时)就是调用者自己。</summary>
+    /// <summary>
+    /// 给用户查询叠上范围条件:机构在范围内,或(范围含"仅本人"时)就是调用者自己。
+    /// 另有一条与数据范围无关的:已登录的非超管看不到超管账号,范围是「全部」也一样。
+    /// </summary>
     ISugarQueryable<SysUser> ScopeUsers(ISugarQueryable<SysUser> users);
 
     /// <summary>
@@ -31,7 +35,10 @@ public interface IDataScopeGuard
     /// </summary>
     Task<List<long>?> ResolveScopedUserIdsAsync();
 
-    /// <summary>目标用户是否在调用者范围内(不受限恒真;用户不存在返回 false)。</summary>
+    /// <summary>
+    /// 目标用户是否在调用者范围内(不受限恒真;用户不存在返回 false)。
+    /// 已登录的非超管看不到超管账号,所以目标是超管时对其恒假,范围是「全部」也一样。
+    /// </summary>
     Task<bool> IsUserInScopeAsync(long userId);
 }
 
@@ -47,6 +54,12 @@ public class DataScopeGuard(
     /// <inheritdoc />
     public virtual bool IsUnrestricted => currentUser?.IsSuperAdmin == true || Scope.IsUnrestricted;
 
+    /// <summary>
+    /// 超管账号是否对当前调用者隐藏:已登录的非超管一律看不到,与数据范围无关(范围「全部」只管机构,不管这一条)。
+    /// 后台任务、种子等无登录上下文视为可信,不隐藏。
+    /// </summary>
+    protected virtual bool HidesSuperAdmins => currentUser is { IsAuthenticated: true, IsSuperAdmin: false };
+
     /// <inheritdoc />
     public virtual bool IsOrgInScope(long? orgId) =>
         IsUnrestricted || orgId is null || Scope.OrgIds.Contains(orgId.Value);
@@ -58,6 +71,8 @@ public class DataScopeGuard(
     /// <inheritdoc />
     public virtual ISugarQueryable<SysUser> ScopeUsers(ISugarQueryable<SysUser> query)
     {
+        // 写成 `== false` 而非 `!u.IsSuperAdmin`:同下,SqlServer 的谓词上下文不接受裸布尔
+        if (HidesSuperAdmins) query = query.Where(u => u.IsSuperAdmin == false);
         if (IsUnrestricted) return query;
 
         var orgIds = Scope.OrgIds.ToList();
@@ -82,7 +97,7 @@ public class DataScopeGuard(
     /// <inheritdoc />
     public virtual async Task<bool> IsUserInScopeAsync(long userId)
     {
-        if (IsUnrestricted) return true;
+        if (IsUnrestricted && !HidesSuperAdmins) return true;
         return await ScopeUsers(users.AsQueryable().ClearFilter<ISoftDelete>()).AnyAsync(u => u.Id == userId);
     }
 }

@@ -204,8 +204,11 @@ const columns: SmartTableColumn<Tree<SysOrg>>[] = [
   {
     title: () => t('org.name'),
     key: 'name',
+    // 树的缩进和展开箭头落在这一列:不指定时 Naive 取第一个没有 type 的列,正好是 64px 宽的序号列,
+    // 层级一深序号就被缩进挤出列外
+    tree: true,
     align: 'left',
-    minWidth: 260,
+    width: 260,
     fixed: 'left',
     ellipsis: { tooltip: true },
     search: { actions: SEARCH_ACTIONS.fuzzy },

@@ -21,6 +21,7 @@ namespace SmartAdmin.Tests;
 public class SeedUpgradeTests
 {
     private const long WorkbenchMenuId = 100;    // DefaultMenuSeed:工作台(根级菜单)
+    private const long BusinessModuleId = 2;      // DefaultModuleSeed:业务中心
     private const long SiteTitleConfigId = 1;    // ConfigSeed:站点标题
     private const long EnabledDictItemId = 1;    // DictSeed:通用状态「启用」
 
@@ -100,6 +101,41 @@ public class SeedUpgradeTests
 
                 var version = await db.Queryable<SysSchemaVersion>().FirstAsync(x => x.Id == 1);
                 Assert.Equal(SysSchemaVersion.Current, version.Version);   // 版本写回,下次启动不再当升级
+            });
+    }
+
+    /// <summary>
+    /// 升级时模块种子只刷结构列(编码、图标、落地路由、路由前缀);标题、排序、启用、备注、可转授是超管的设置,留着。
+    /// 整行刷回的话,超管关掉的「业务中心」可转授会在每次升级时被重新打开。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_syncs_module_structure_but_keeps_admin_settings()
+    {
+        await RestartWithAsync(
+            async db =>
+            {
+                await DowngradeVersionAsync(db);
+                await db.Updateable<SysModule>()
+                    .SetColumns(x => new SysModule
+                    {
+                        Code = "old-business", Icon = "ph:old", DefaultRoute = "/old", ApiPrefix = "old",
+                        Title = "我的业务", Sort = 9, Enabled = false, Remark = "改过", IsDelegatable = false,
+                    })
+                    .Where(x => x.Id == BusinessModuleId)
+                    .ExecuteCommandAsync();
+            },
+            async db =>
+            {
+                var m = await db.Queryable<SysModule>().FirstAsync(x => x.Id == BusinessModuleId);
+                Assert.Equal("business", m.Code);                    // 结构列刷回:编码、落地路由也在白名单里
+                Assert.Equal("", m.DefaultRoute);
+                Assert.Equal("lucide:briefcase-business", m.Icon);   // 结构列刷回
+                Assert.Equal("biz", m.ApiPrefix);
+                Assert.Equal("我的业务", m.Title);                    // 超管的设置留着
+                Assert.Equal(9, m.Sort);
+                Assert.False(m.Enabled);
+                Assert.Equal("改过", m.Remark);
+                Assert.False(m.IsDelegatable);
             });
     }
 
@@ -210,6 +246,55 @@ public class SeedUpgradeTests
                 Assert.True(menu.IsDelete);   // 仍是删除态,没被升级复活
                 Assert.Single(await db.Queryable<SysMenu>().ClearFilter()
                     .Where(x => x.Id == WorkbenchMenuId).ToListAsync());   // 没被重复插入
+            });
+    }
+
+    /// <summary>非内置角色(雪花号段的 Id,模拟界面上新建的角色),直接插库造存量。</summary>
+    private const long NewRoleId = 900_000_000_001;
+
+    private static async Task SeedNewRoleWithMenusAsync(ISqlSugarClient db)
+    {
+        await db.Insertable(new SysRole { Id = NewRoleId, Name = "运维助理", Code = "ops-helper", Enabled = true }).ExecuteCommandAsync();
+        await db.Insertable(new List<SysRoleMenu>
+        {
+            new() { RoleId = NewRoleId, MenuId = 301 },   // 系统菜单(内核目录)
+            new() { RoleId = NewRoleId, MenuId = 110 },   // 业务中心
+            new() { RoleId = 1, MenuId = 301 },           // 内置「系统管理员」
+        }).ExecuteCommandAsync();
+    }
+
+    private static async Task<long[]> MenusOfRoleAsync(ISqlSugarClient db, long roleId) =>
+        [.. (await db.Queryable<SysRoleMenu>().Where(x => x.RoleId == roleId).Select(x => x.MenuId).ToListAsync()).Order()];
+
+    /// <summary>升级那一次:非内置角色上的系统菜单被删,业务菜单留着;内置角色不受影响。</summary>
+    [Fact]
+    public async Task Upgrade_removes_system_menus_from_non_builtin_roles_only()
+    {
+        await RestartWithAsync(
+            async db =>
+            {
+                await DowngradeVersionAsync(db);
+                await SeedNewRoleWithMenusAsync(db);
+            },
+            async db =>
+            {
+                long[] newRoleMenus = await MenusOfRoleAsync(db, NewRoleId);
+                long[] builtinMenus = await MenusOfRoleAsync(db, 1);
+                Assert.Equal([110L], newRoleMenus);
+                Assert.Contains(301L, builtinMenus);
+            });
+    }
+
+    /// <summary>平时重启(版本没变)不清理:清理只在从老版本升上来的那一次执行。</summary>
+    [Fact]
+    public async Task Restart_without_upgrade_keeps_role_menus()
+    {
+        await RestartWithAsync(
+            SeedNewRoleWithMenusAsync,
+            async db =>
+            {
+                long[] menus = await MenusOfRoleAsync(db, NewRoleId);
+                Assert.Equal([110L, 301L], menus);
             });
     }
 }

@@ -29,19 +29,39 @@ withDefaults(
 const app = useAppStore()
 const { t } = useI18n()
 
-// 指针视差:只认鼠标(触屏没有悬停位置),坐标归一到 -1..1 写成 CSS 变量,位移与过渡都在 CSS 里
+// 指针视差:只认鼠标(触屏没有悬停位置),坐标归一到 -1..1 写成 CSS 变量,位移与过渡都在 CSS 里。
+// 另外把指针相对卡片左上角的位置(--mx / --my,px)和「指针在窗口内」(--lit)写出来,
+// 给卡片面上那束跟着指针走的柔光用:指针停在卡片上时视差位移趋近于零,光斑是这时唯一的反馈。
 const root = ref<HTMLElement | null>(null)
 let raf = 0
-function setParallax(x: number, y: number) {
+function setPointer(x: number, y: number, clientX?: number, clientY?: number) {
   cancelAnimationFrame(raf)
   raf = requestAnimationFrame(() => {
-    root.value?.style.setProperty('--px', x.toFixed(3))
-    root.value?.style.setProperty('--py', y.toFixed(3))
+    const el = root.value
+    if (!el) return
+    el.style.setProperty('--px', x.toFixed(3))
+    el.style.setProperty('--py', y.toFixed(3))
+    if (clientX === undefined || clientY === undefined) {
+      // 指针离开:只熄灭柔光,保留最后位置,淡出时光斑不跳
+      el.style.setProperty('--lit', '0')
+      return
+    }
+    const card = el.querySelector('.desk-card')?.getBoundingClientRect()
+    if (card) {
+      el.style.setProperty('--mx', `${(clientX - card.left).toFixed(1)}px`)
+      el.style.setProperty('--my', `${(clientY - card.top).toFixed(1)}px`)
+    }
+    el.style.setProperty('--lit', '1')
   })
 }
 function onPointerMove(e: PointerEvent) {
   if (e.pointerType !== 'mouse') return
-  setParallax((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1)
+  setPointer(
+    (e.clientX / window.innerWidth) * 2 - 1,
+    (e.clientY / window.innerHeight) * 2 - 1,
+    e.clientX,
+    e.clientY,
+  )
 }
 onBeforeUnmount(() => cancelAnimationFrame(raf))
 </script>
@@ -52,7 +72,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
     class="login desk-bg"
     :class="{ split, leaving }"
     @pointermove="onPointerMove"
-    @pointerleave="setParallax(0, 0)"
+    @pointerleave="setPointer(0, 0)"
   >
     <div class="desk" aria-hidden="true">
       <i />
@@ -133,8 +153,8 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   inset: -20%;
   pointer-events: none;
   z-index: 0;
-  translate: calc(var(--px, 0) * -22px) calc(var(--py, 0) * -16px);
-  transition: translate 1.4s var(--rise);
+  translate: calc(var(--px, 0) * -44px) calc(var(--py, 0) * -30px);
+  transition: translate 1.2s var(--rise);
 }
 .desk i {
   position: absolute;
@@ -242,13 +262,37 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   box-shadow: var(--glass-shadow) !important;
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  /* 反向视差:卡朝指针方向挪一点,色场反方向挪,拉出前后景深 */
-  translate: calc(var(--px, 0) * 6px) calc(var(--py, 0) * 4px);
+  /* 反向视差:卡朝指针方向挪,色场反方向挪,拉出前后景深。
+     卡的跟随比色场快(0.45s 对 1.2s),指针一动卡就有回应;位移在窗口边缘最大,
+     指针停在卡片上时趋近于零,不会让要点的按钮在手下漂走 */
+  translate: calc(var(--px, 0) * 16px) calc(var(--py, 0) * 11px);
   transition:
-    translate 1s var(--rise),
+    translate 0.45s var(--rise),
     background-color 0.3s,
     border-color 0.3s,
     box-shadow 0.3s;
+  isolation: isolate;
+}
+/* 跟着指针走的柔光:画在毛玻璃面上、内容的下面(isolation + z-index:-1),强调色推导,亮暗主题通用。
+   指针不在窗口内时淡出;--mx / --my 是指针相对卡片左上角的位置(见脚本) */
+.desk-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    340px circle at var(--mx, 50%) var(--my, 0%),
+    color-mix(in srgb, var(--signal) var(--spot, 28%), transparent),
+    transparent 72%
+  );
+  opacity: var(--lit, 0);
+  transition: opacity 0.5s var(--rise);
+}
+/* 亮色的玻璃底本来就亮,同样的强调色占比要给高一点才看得出;暗色里 20% 已经够醒目 */
+:root[data-theme='dark'] .desk-card {
+  --spot: 20%;
 }
 .login-card :deep(.n-input) {
   border-radius: var(--radius-md);
@@ -404,6 +448,9 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   .desk,
   .desk-card {
     translate: none;
+  }
+  .desk-card::after {
+    display: none;
   }
   .login :deep(*),
   .login .desk-card,

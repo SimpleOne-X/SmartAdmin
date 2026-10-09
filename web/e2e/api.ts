@@ -69,6 +69,23 @@ export async function apiCreateUser(
   return env.data.id
 }
 
+/** 建一个没有任何菜单授权的角色。种子之外新建的角色 Id 都落在内置区间之外,即「非内置角色」。 */
+export async function apiCreateRole(
+  request: APIRequestContext,
+  token: string,
+  input: { name: string; code: string },
+): Promise<number | string> {
+  const res = await request.post(`${apiBase()}/api/v1/sys/role/add`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name: input.name, code: input.code, sort: 999, enabled: true, remark: '' },
+  })
+  const env = await readEnvelope<number | string>(res)
+  if (env.code !== 0 || env.data == null) {
+    throw new Error(`create role failed: code=${env.code} msg=${env.msg}`)
+  }
+  return env.data
+}
+
 /** 建 ForceTotp 用户供自助绑定 e2e(无邀请路径)。宿主须启用 Totp:Enabled。 */
 export async function seedForceTotpUser(request: APIRequestContext): Promise<{
   account: string

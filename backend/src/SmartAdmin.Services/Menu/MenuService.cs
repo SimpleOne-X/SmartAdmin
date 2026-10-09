@@ -5,7 +5,7 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// <see cref="IMenuService"/> 默认实现。菜单表很小,整表载入内存做树运算(上溯根目录取 ModuleId、
-/// 授权叶子的祖先脚手架),避免多次递归查库。授权链复用 <c>RbacPermissionProvider</c> 同款三步短路。
+/// 授权叶子的祖先脚手架),避免多次递归查库。有效菜单与 <c>RbacPermissionProvider</c> 同一套规则:启用角色授予的菜单叠加用户单独授权。
 /// </summary>
 public class MenuService(
     IRepository<SysUserRole> userRoles,
@@ -14,7 +14,9 @@ public class MenuService(
     IRepository<SysModule> modules,
     IRbacService rbac,
     ICacheProvider cache,
-    AdminCacheOptions cacheOptions) : IMenuService
+    AdminCacheOptions cacheOptions,
+    // 可选尾参:DI 正常注入,消费者子类不传也能编译;单独授权是否到期按注入时钟判
+    TimeProvider? time = null) : IMenuService
 {
     /// <summary>上溯 ParentId 链到根目录的最大步数(防断链/环)。菜单层级远小于此。</summary>
     private const int WalkGuard = 64;
@@ -29,8 +31,48 @@ public class MenuService(
             .Where((ur, r) => ur.UserId == userId)
             .Select((ur, r) => ur.RoleId).ToListAsync();
 
+    /// <summary>
+    /// 用户的有效菜单 Id:启用角色授予的菜单,叠加用户单独授权。与 <see cref="RbacPermissionProvider"/> 同一套规则,
+    /// 门户模块与菜单树都从它反推,侧栏与接口权限不会各说各话。
+    /// </summary>
+    protected virtual async Task<List<long>> ResolveGrantedMenuIdsAsync(long userId)
+    {
+        var roleIds = await ResolveEnabledRoleIdsAsync(userId);
+        List<long> roleMenuIds = roleIds.Count == 0
+            ? []
+            : await roleMenus.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.MenuId).ToListAsync();
+        return [.. await ApplyUserGrantsAsync(userId, roleMenuIds)];
+    }
+
+    /// <summary>在角色授予的菜单上叠加单独授权;没有记录时原样返回、不读菜单表。</summary>
+    protected virtual async Task<IReadOnlyCollection<long>> ApplyUserGrantsAsync(long userId, IReadOnlyCollection<long> roleMenuIds)
+    {
+        var grants = await UserMenuGrantQueries.ListByUserAsync(menus.Db, userId);
+        if (grants.Count == 0) return roleMenuIds;
+        var all = await menus.AsQueryable().ToListAsync();
+        return UserMenuGrantRules.Compute(roleMenuIds, grants, all, Now).EffectiveMenuIds;
+    }
+
+    /// <summary>该用户最早一条尚未到期的单独授权的到期时间(没有为 null),给门户缓存过期封顶。</summary>
+    protected virtual Task<DateTime?> GetNextGrantExpiryAsync(long userId) =>
+        UserMenuGrantQueries.NextExpiryAsync(menus.Db, userId, Now);
+
     // 门户缓存 TTL:仅作孤儿回收 + 直连改库的兜底(正确性由 CUD 自增 PortalGeneration 保证);复用权限缓存过期配置。
     private TimeSpan? PortalTtl => cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : null;
+
+    /// <summary>当前本地时间,单独授权是否到期按它判。</summary>
+    protected DateTime Now => (time ?? TimeProvider.System).GetLocalNow().DateTime;
+
+    /// <summary>
+    /// 该用户最早一条尚未到期的单独授权的到期时刻(超管不受单独授权影响,不查)。必须先于聚合取:
+    /// 聚合计入的授权到期时间都不早于它,缓存封到它就不会活过任何一条被计入的授权;
+    /// 先聚合再取的话,授权恰在两步之间到期,封顶查询看不到它,缓存会按整段配置 TTL 留着含已到期授权的结果。
+    /// </summary>
+    private async Task<DateTime?> PortalNextExpiryAsync(long userId, bool isSuperAdmin) =>
+        isSuperAdmin ? null : await GetNextGrantExpiryAsync(userId);
+
+    /// <summary>门户缓存 TTL:配置值,按 <paramref name="nextExpiry"/>(见 <see cref="PortalNextExpiryAsync"/>)封顶。</summary>
+    private TimeSpan? PortalTtlCappedBy(DateTime? nextExpiry) => UserMenuGrantRules.CapTtl(PortalTtl, nextExpiry, Now);
 
     /// <summary>令门户缓存(模块列表 + 菜单树)整体惰性失效——自增代际,旧键不再被读到。菜单/角色-菜单/用户-角色变更后调用。</summary>
     private Task BumpPortalAsync() => cache.IncrementAsync(CacheKeys.PortalGeneration);
@@ -43,8 +85,9 @@ public class MenuService(
         var cached = await cache.GetAsync<List<ModuleItem>>(key);
         if (cached is not null) return cached;                              // 命中(含缓存的空列表,与未缓存可区分)
 
+        var nextExpiry = await PortalNextExpiryAsync(userId, isSuperAdmin);   // 先取到期时刻,再聚合
         var result = await ComputeMyModulesAsync(userId, isSuperAdmin);
-        await cache.SetAsync(key, result, PortalTtl);
+        await cache.SetAsync(key, result, PortalTtlCappedBy(nextExpiry));
         return result;
     }
 
@@ -54,16 +97,14 @@ public class MenuService(
         var allModules = await modules.AsQueryable().Where(m => m.Enabled).OrderBy(m => m.Sort).OrderBy(m => m.Id).ToListAsync();
         if (isSuperAdmin) return allModules.Select(ToItem).ToList();
 
-        var roleIds = await ResolveEnabledRoleIdsAsync(userId);
-        if (roleIds.Count == 0) return [];
-        var grantedMenuIds = await roleMenus.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.MenuId).ToListAsync();
+        var grantedMenuIds = await ResolveGrantedMenuIdsAsync(userId);
         if (grantedMenuIds.Count == 0) return [];
 
         // 只用启用菜单反推模块访问权:与 RbacPermissionProvider 的生效权限口径一致。
         // 若角色仍关联已停用菜单,它不应继续让用户在门户看到该模块(Permission 本身也不会授出)。
         var byId = (await menus.AsQueryable().Where(m => m.Enabled).ToListAsync()).ToDictionary(m => m.Id);
         var accessibleModuleIds = grantedMenuIds
-            .Select(id => RootModuleId(id, byId))
+            .Select(id => MenuTree.RootModuleId(id, byId))
             .Where(mid => mid is not null)
             .Select(mid => mid!.Value)
             .ToHashSet();
@@ -79,8 +120,9 @@ public class MenuService(
         var cached = await cache.GetAsync<List<MenuNode>>(key);
         if (cached is not null) return cached;
 
+        var nextExpiry = await PortalNextExpiryAsync(userId, isSuperAdmin);   // 先取到期时刻,再聚合
         var result = await ComputeMyMenuTreeAsync(userId, isSuperAdmin, moduleId);
-        await cache.SetAsync(key, result, PortalTtl);
+        await cache.SetAsync(key, result, PortalTtlCappedBy(nextExpiry));
         return result;
     }
 
@@ -91,15 +133,12 @@ public class MenuService(
         var byId = allMenus.ToDictionary(m => m.Id);
 
         // 该模块下的节点 = 其根目录 ModuleId == moduleId
-        var moduleMenus = allMenus.Where(m => RootModuleId(m.Id, byId) == moduleId).ToList();
+        var moduleMenus = allMenus.Where(m => MenuTree.RootModuleId(m.Id, byId) == moduleId).ToList();
 
         IEnumerable<SysMenu> visible = moduleMenus;
         if (!isSuperAdmin)
         {
-            var roleIds = await ResolveEnabledRoleIdsAsync(userId);
-            var grantedMenuIds = roleIds.Count == 0
-                ? []
-                : await roleMenus.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.MenuId).ToListAsync();
+            var grantedMenuIds = await ResolveGrantedMenuIdsAsync(userId);
 
             // 授权叶子 ∪ 其祖先目录(脚手架:让被授权节点在树上有完整的父路径)
             var keep = new HashSet<long>();
@@ -233,19 +272,6 @@ public class MenuService(
         Sort = m.Sort, Enabled = m.Enabled, ModuleId = m.ModuleId,
         Path = m.Path, Component = m.Component, Icon = m.Icon, Visible = m.Visible,
     };
-
-    /// <summary>上溯 <paramref name="menuId"/> 的 ParentId 链到根目录,返回根目录的 ModuleId(未挂模块或断链为 null)。</summary>
-    private static long? RootModuleId(long menuId, IReadOnlyDictionary<long, SysMenu> byId)
-    {
-        var cur = byId.GetValueOrDefault(menuId);
-        var guard = 0;
-        while (cur is not null && cur.ParentId != 0 && guard++ < WalkGuard)
-        {
-            if (!byId.TryGetValue(cur.ParentId, out var parent)) break;
-            cur = parent;
-        }
-        return cur?.ModuleId;
-    }
 
     /// <summary>按 ParentId 把平铺(已排序)节点拼成森林;父不在集合内的节点升为根。</summary>
     private static List<MenuNode> BuildForest(List<SysMenu> nodes)

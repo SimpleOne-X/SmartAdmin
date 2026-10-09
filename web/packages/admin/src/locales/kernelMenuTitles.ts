@@ -52,6 +52,7 @@ export const KERNEL_MENU_TITLES: Record<string, string> = {
   '用户-启停': 'menuTitle.button.userToggle',
   '用户-导入': 'menuTitle.button.userImport',
   '用户-导出': 'menuTitle.button.userExport',
+  '用户-授权菜单': 'menuTitle.button.userGrantMenus',
   '角色-查询': 'menuTitle.button.roleQuery',
   '角色-新增': 'menuTitle.button.roleCreate',
   '角色-更新': 'menuTitle.button.roleUpdate',

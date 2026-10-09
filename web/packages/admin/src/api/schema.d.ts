@@ -2559,6 +2559,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/user/{id}/menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取某用户的单独授权记录(授权菜单弹窗回显) */
+        get: operations["User_GetMenuGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/user/{id}/menus/effective": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取某用户的有效权限与来源(授权菜单弹窗一次取齐:能否授、能否编辑、模块清单) */
+        get: operations["User_GetEffectiveMenus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/user/menu-grants/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 单独授权一览(分页 + 筛选) */
+        get: operations["User_MenuGrantPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/user/menu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 按变更集保存某用户的单独授权(允许 / 拒绝 / 到期 / 备注),没提到的记录原样保留。
+         *     操作日志记下的请求体就是这次的增改删明细。越权判定见 IUserMenuGrantPolicy。
+         */
+        put: operations["User_SetMenuGrants"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/user/import/template": {
         parameters: {
             query?: never;
@@ -3741,6 +3812,8 @@ export interface components {
             enabled?: boolean;
             /** @description 备注 */
             remark?: null | string;
+            /** @description 可转授(普通管理员能否单独授权本模块菜单)。更新时为 null = 保持原值;内置 system 模块传什么都按 false。 */
+            isDelegatable?: null | boolean;
         };
         /** @description 门户模块出参(当前用户视角的可访问应用)。 */
         ModuleItem: {
@@ -4378,6 +4451,34 @@ export interface components {
             pages?: number | string;
             /** @description 当前页数据 */
             items?: components["schemas"]["UserItem"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
+        PagedListOfUserMenuGrantPageItem: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["UserMenuGrantPageItem"][];
         };
         /** @description 密码复杂度策略(运行时可配置,见 ISecurityPolicyProvider)。 */
         PasswordPolicy: {
@@ -5147,6 +5248,28 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfIReadOnlyListOfUserMenuGrantItem: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["UserMenuGrantItem"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfIReadOnlyListOfUserShortcutItem: {
             /**
              * Format: int32
@@ -5699,6 +5822,27 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfPagedListOfUserMenuGrantPageItem: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfUserMenuGrantPageItem"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfPasswordPolicy: {
             /**
              * Format: int32
@@ -5973,6 +6117,27 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfUserMenuEffectiveOutput: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["UserMenuEffectiveOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfUserProfile: {
             /**
              * Format: int32
@@ -6123,6 +6288,21 @@ export interface components {
             roleId?: number | string;
             /** @description 关联的用户 Id 列表(全量替换;空列表 = 收回全部) */
             userIds?: (number | string)[];
+        };
+        /**
+         * @description 按变更集保存某用户的单独授权:新增与修改走 IReadOnlyList&lt;UserMenuGrantUpsert&gt; SetUserMenuGrantsInput.Upserts,移除走 IReadOnlyList&lt;long&gt; SetUserMenuGrantsInput.Removes(按菜单 Id),
+         *     没提到的记录原样保留。
+         */
+        SetUserMenuGrantsInput: {
+            /**
+             * Format: int64
+             * @description 目标用户
+             */
+            userId?: number | string;
+            /** @description 新增或修改 */
+            upserts?: components["schemas"]["UserMenuGrantUpsert"][];
+            /** @description 要移除记录的菜单 Id */
+            removes?: (number | string)[];
         };
         /** @description 快捷方式操作的请求体——菜单路由 path 本身带斜杠,只能走 body,不能塞进路由段。 */
         ShortcutMenuPathInput: {
@@ -6726,7 +6906,7 @@ export interface components {
          * @description 模块/应用表(多应用门户)——一套登录体系下的多个独立子系统。菜单树按模块分区
          *     (long? SysMenu.ModuleId 仅顶级目录设置),登录后一次只进一个应用、只加载该应用的菜单与路由。
          *     模块不是独立权限轴:用户"拥有"某模块 = 被授权了该模块下任一菜单(派生自菜单授权,
-         *     见 MenuService.GetMyModulesAsync);模块只做运行时的侧边栏/路由分区,不改用户持有的 API 权限码。内置 system 模块()不可删除。
+         *     见 MenuService.GetMyModulesAsync);模块只做运行时的侧边栏/路由分区,不改用户持有的 API 权限码。模块同时是委派授权的边界:见 bool? SysModule.IsDelegatable。内置 system 模块()不可删除。
          */
         SysModule: {
             /** @description 模块编码(唯一,程序判模块用它而非名称;内置 system) */
@@ -6745,6 +6925,13 @@ export interface components {
             sort?: number | string;
             enabled?: boolean;
             remark?: null | string;
+            /**
+             * @description 可转授:非超管(普通管理员)能否把本模块里的菜单单独授给或拒给用户。可空,存量库补列时无损:
+             *     数据库 NULL(存量模块)与显式 `false` 同判定为不可转授,只有显式 `true` 才放行——
+             *     默认收紧,补列不会静默放宽。内置 system 模块固定不可转授(`ModuleService` 读写都按 false)。
+             *     演进列必须可空:MSSQL 无法对有数据的表 ADD 无 DEFAULT 的 NOT NULL 列(同 bool? SysRole.IsDelegatable)。
+             */
+            isDelegatable?: null | boolean;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -6990,6 +7177,11 @@ export interface components {
              *     ADD 无 DEFAULT 的 NOT NULL 列(同 bool SysUser.ForceTotp 的成法)。
              */
             isDelegatable?: null | boolean;
+            /**
+             * @description 内置角色:内核种子播的固定 Id(1–999)。系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
+             *     与消费者种子里的角色(Id ≥ 1000)都授不了。只读计算属性,不建列。
+             */
+            isBuiltin?: boolean;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
             isDelete?: boolean;
             /**
@@ -7209,6 +7401,151 @@ export interface components {
             totpEnabled?: boolean;
             /** Format: date-time */
             createTime?: string;
+        };
+        /** @description 用户单独授权的效果。 */
+        UserMenuEffect: number;
+        /** @description 一个菜单节点对目标用户是否有效、为什么。 */
+        UserMenuEffectiveNode: {
+            /** Format: int64 */
+            menuId?: number | string;
+            /**
+             * Format: int64
+             * @description 所属模块(上溯到根目录取 ModuleId)
+             */
+            moduleId?: null | number | string;
+            /** @description 最终是否有效 */
+            effective?: boolean;
+            /** @description 授予该节点的启用角色名 */
+            roles?: string[];
+            grant?: null | components["schemas"]["UserMenuEffect"];
+            /** Format: date-time */
+            expireTime?: null | string;
+            /** @description 该节点上的单独授权已过期 */
+            expired?: boolean;
+            /** @description 被某个祖先节点的拒绝连带收回 */
+            deniedByAncestor?: boolean;
+            /** @description 当前授权人能否改这个节点(超管恒为 true;普通管理员看菜单所属模块是否可转授) */
+            grantable?: boolean;
+            /** @description 该节点被拒时仍然有效的权限码及携带它们的节点(只在生效中的拒绝上给出) */
+            leakedCodes?: components["schemas"]["UserMenuLeakedCode"][];
+        };
+        /** @description 授权弹窗需要的全部数据,一次取齐。 */
+        UserMenuEffectiveOutput: {
+            /** Format: int64 */
+            userId?: number | string;
+            /** @description 目标用户有没有启用中的角色(没有时数据范围为「仅本人」,界面据此提示) */
+            hasRoles?: boolean;
+            /** @description 当前授权人能否编辑这个目标用户 */
+            targetEditable?: boolean;
+            readOnlyReason?: null | components["schemas"]["ErrorCode"];
+            /**
+             * Format: int32
+             * @description 委派授权最长天数;超管、配置为 0 时为空
+             */
+            delegatedMaxDays?: null | number | string;
+            /**
+             * Format: date
+             * @description 委派授权的最晚到期日(服务器当前本地日期加最长天数);超管、配置为 0 时为空。界面的日期选择器上限与保存前校验都按它算,不用浏览器的日期。
+             */
+            delegatedMaxDate?: null | string;
+            modules?: components["schemas"]["UserMenuModuleItem"][];
+            /** @description 全部未删除菜单节点(含停用的)各一项 */
+            nodes?: components["schemas"]["UserMenuEffectiveNode"][];
+        };
+        /** @description 一条单独授权记录(授权菜单弹窗回显)。 */
+        UserMenuGrantItem: {
+            /**
+             * Format: int64
+             * @description 菜单节点
+             */
+            menuId?: number | string;
+            /** @description 允许 / 拒绝 */
+            effect?: components["schemas"]["UserMenuEffect"];
+            /**
+             * Format: date-time
+             * @description 到期时间;为空即长期
+             */
+            expireTime?: null | string;
+            /** @description 授权理由 */
+            remark?: null | string;
+            /**
+             * Format: int64
+             * @description 授权人(建这一行的人;系统写入为空)
+             */
+            grantorId?: null | number | string;
+            grantorName?: null | string;
+            /**
+             * Format: date-time
+             * @description 授权时间
+             */
+            grantTime?: string;
+            /**
+             * Format: int64
+             * @description 最后修改人
+             */
+            updaterId?: null | number | string;
+            updaterName?: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+        };
+        /** @description 单独授权一览的一行。 */
+        UserMenuGrantPageItem: {
+            /** Format: int64 */
+            id?: number | string;
+            /** Format: int64 */
+            userId?: number | string;
+            userAccount?: string;
+            userName?: string;
+            /** Format: int64 */
+            menuId?: number | string;
+            menuTitle?: string;
+            /** Format: int64 */
+            moduleId?: null | number | string;
+            moduleTitle?: null | string;
+            effect?: components["schemas"]["UserMenuEffect"];
+            /** Format: date-time */
+            expireTime?: null | string;
+            status?: components["schemas"]["UserMenuGrantStatus"];
+            /** Format: int64 */
+            grantorId?: null | number | string;
+            grantorName?: null | string;
+            /** Format: date-time */
+            grantTime?: string;
+            remark?: null | string;
+        };
+        /** @description 单独授权的状态(一览筛选与展示)。 */
+        UserMenuGrantStatus: number;
+        /** @description 单独授权变更集里的一条新增或修改。 */
+        UserMenuGrantUpsert: {
+            /**
+             * Format: int64
+             * @description 菜单节点
+             */
+            menuId?: number | string;
+            /** @description 允许 / 拒绝 */
+            effect?: components["schemas"]["UserMenuEffect"];
+            /**
+             * Format: date-time
+             * @description 到期时间(本地时间);为空即长期。非超管授「允许」必填。
+             */
+            expireTime?: null | string;
+            /** @description 授权理由,最长 200 */
+            remark?: null | string;
+        };
+        /** @description 被拒节点里仍然有效的一条权限码,以及携带它的有效节点。 */
+        UserMenuLeakedCode: {
+            /** @description 权限码(规范化路由) */
+            code?: string;
+            /** @description 仍携带这条码的有效菜单节点 Id */
+            carrierMenuIds?: (number | string)[];
+        };
+        /** @description 授权弹窗用的模块清单项:授权弹窗不调模块列表接口(那个要「模块-查询」权限)。 */
+        UserMenuModuleItem: {
+            /** Format: int64 */
+            id?: number | string;
+            title?: string;
+            /** @description 可转授(内置 system 模块恒为 false) */
+            delegatable?: boolean;
         };
         /** @description 个人资料出参(当前登录用户视角;不含密码哈希)。 */
         UserProfile: {
@@ -11739,6 +12076,116 @@ export interface operations {
                 "application/json": components["schemas"]["SetEnabledInput"];
                 "text/json": components["schemas"]["SetEnabledInput"];
                 "application/*+json": components["schemas"]["SetEnabledInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    User_GetMenuGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfUserMenuGrantItem"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfUserMenuGrantItem"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfUserMenuGrantItem"];
+                };
+            };
+        };
+    };
+    User_GetEffectiveMenus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfUserMenuEffectiveOutput"];
+                    "application/json": components["schemas"]["ResultOfUserMenuEffectiveOutput"];
+                    "text/json": components["schemas"]["ResultOfUserMenuEffectiveOutput"];
+                };
+            };
+        };
+    };
+    User_MenuGrantPage: {
+        parameters: {
+            query?: {
+                /** @description 目标用户账号或姓名,模糊 */
+                User?: string;
+                /** @description 授权人账号或姓名,模糊 */
+                Grantor?: string;
+                MenuId?: number | string;
+                Effect?: components["schemas"]["UserMenuEffect"];
+                Status?: components["schemas"]["UserMenuGrantStatus"];
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfUserMenuGrantPageItem"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfUserMenuGrantPageItem"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfUserMenuGrantPageItem"];
+                };
+            };
+        };
+    };
+    User_SetMenuGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetUserMenuGrantsInput"];
+                "text/json": components["schemas"]["SetUserMenuGrantsInput"];
+                "application/*+json": components["schemas"]["SetUserMenuGrantsInput"];
             };
         };
         responses: {
