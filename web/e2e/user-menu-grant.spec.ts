@@ -11,7 +11,7 @@ import {
 import { apiAdminToken, apiCreateUser } from './api'
 
 /**
- * 用户单独授权主流程:超管给一个没有任何角色的用户「允许」岗位管理页 → 该用户登录能看到 →
+ * 用户单独授权主流程:超管给一个没有任何角色的用户「允许」角色管理页 → 该用户登录能看到 →
  * 改成「拒绝」→ 该用户再登录就没有任何应用可进。走真实的弹窗,不经接口直改。
  *
  * 两条用例有先后依赖(第二条改的是第一条授出去的那条记录),所以串行。
@@ -19,7 +19,9 @@ import { apiAdminToken, apiCreateUser } from './api'
 
 const ACCOUNT = `e2e_grant_${Date.now().toString(36)}`
 const PASSWORD = 'TestPass123!'
-const PAGE_TITLE = /^(岗位管理|Positions)$/
+// 授权弹窗在「系统」应用下只列用户管理、角色管理两个页面(其余系统自带的菜单只属于超管与内置角色),
+// 所以用其中一个做授权对象。
+const PAGE_TITLE = /^(角色管理|Roles)$/
 
 async function logout(page: Page) {
   await page.evaluate(() => localStorage.clear())
@@ -49,7 +51,7 @@ async function openGrantSheet(page: Page): Promise<Locator> {
   return sheet
 }
 
-/** 把岗位管理页那一行切到指定状态并保存。 */
+/** 把角色管理页那一行切到指定状态并保存。 */
 async function setPageState(sheet: Locator, state: RegExp) {
   const row = sheet
     .locator('.ugr.is-page')
