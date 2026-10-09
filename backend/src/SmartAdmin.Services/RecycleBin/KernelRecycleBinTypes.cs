@@ -7,7 +7,7 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// 已删用户:列表按数据范围收敛(回收站里躺着的仍是用户行,与用户管理页同一条可见性规则,
-/// 不该因为"删掉了"就对所有管理员敞开);恢复后重建门户代际;彻底删除前清角色关联与外部身份绑定。
+/// 不该因为"删掉了"就对所有管理员敞开);恢复后重建门户代际;彻底删除前清角色关联、单独授权与外部身份绑定。
 /// </summary>
 public class UserRecycleBinType() : RecycleBinType<SysUser>("user", e => e.Account + " / " + e.Name)
 {
@@ -25,8 +25,9 @@ public class UserRecycleBinType() : RecycleBinType<SysUser>("user", e => e.Accou
     /// <inheritdoc />
     protected override async Task BeforePurgeAsync(IServiceProvider sp, long id)
     {
-        await sp.GetRequiredService<ISqlSugarClient>().Deleteable<SysUserRole>()
-            .Where(ur => ur.UserId == id).ExecuteCommandAsync();
+        var db = sp.GetRequiredService<ISqlSugarClient>();
+        await db.Deleteable<SysUserRole>().Where(ur => ur.UserId == id).ExecuteCommandAsync();
+        await db.Deleteable<SysUserMenu>().Where(g => g.UserId == id).ExecuteCommandAsync();
         if (sp.GetService<ISysUserExternalService>() is { } bindings) await bindings.UnbindAllAsync(id);
     }
 }
@@ -58,4 +59,22 @@ public class JobRecycleBinType() : RecycleBinType<SysJob>("job", e => e.Name, e 
             .SetColumns(j => new SysJob { Status = JobStatus.Paused, NextRunTime = null })
             .Where(j => j.Id == id)
             .ExecuteCommandAsync();
+}
+
+/// <summary>
+/// 已删菜单:恢复后失效持有它的用户的权限缓存并重建门户代际(与删菜单时的失效对称,单独授权的用户也在其中);
+/// 彻底删除前物理删掉指向它的单独授权。读取单独授权时也会过滤掉菜单已不存在的行,这里是另一道保险。
+/// </summary>
+public class MenuRecycleBinType() : RecycleBinType<SysMenu>("menu", e => e.Title, e => e.Permission)
+{
+    /// <inheritdoc />
+    protected override async Task AfterRestoreAsync(IServiceProvider sp, long id)
+    {
+        await sp.GetRequiredService<IRbacService>().InvalidatePermissionsByMenuAsync(id);
+        await sp.GetRequiredService<ICacheProvider>().IncrementAsync(CacheKeys.PortalGeneration);
+    }
+
+    /// <inheritdoc />
+    protected override Task BeforePurgeAsync(IServiceProvider sp, long id) =>
+        sp.GetRequiredService<ISqlSugarClient>().Deleteable<SysUserMenu>().Where(g => g.MenuId == id).ExecuteCommandAsync();
 }

@@ -221,12 +221,12 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, UserRecycleBinType>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, RoleRecycleBinType>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, JobRecycleBinType>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<RecycleBinType, MenuRecycleBinType>());
         services.AddRecycleBinType<SysOrg>("org", e => e.Name, e => e.Code);
         services.AddRecycleBinType<SysPosition>("position", e => e.Name, e => e.Code);
         services.AddRecycleBinType<SysModule>("module", e => e.Title, e => e.Code);
         services.AddRecycleBinType<SysConfig>("config", e => e.Name, e => e.ConfigKey);
         services.AddRecycleBinType<SysDictType>("dict", e => e.Name, e => e.Code);
-        services.AddRecycleBinType<SysMenu>("menu", e => e.Title, e => e.Permission);
 
         // 个人中心:当前用户对自己账号的读改(看/改资料、验旧改密)
         services.TryAddScoped<IPersonalService, PersonalService>();
