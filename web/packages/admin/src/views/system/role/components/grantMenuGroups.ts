@@ -259,16 +259,42 @@ export const KERNEL_MAX_ID = 999
 export const isBuiltinRole = (role: { isBuiltin?: boolean | null }): boolean =>
   role.isBuiltin !== false
 
+/** 放开的两个系统页面:用户管理、角色管理(与后端 DefaultMenuSeed.USER_PAGE_ID / ROLE_PAGE_ID 一致)。 */
+export const USER_PAGE_ID = 230
+export const ROLE_PAGE_ID = 240
+const OPEN_PAGE_IDS: readonly number[] = [USER_PAGE_ID, ROLE_PAGE_ID]
+
 /**
- * 系统菜单只能授给内置角色:非内置角色去掉系统菜单的顶级节点,即挂在系统应用下的内核目录(后端同样拒绝)。
+ * 去掉超管专属的系统菜单:内核系统菜单里只留「用户管理」「角色管理」两个页面(整棵子树,含按钮)
+ * 和承载它们的目录(组织管理),其余一概去掉(后端同样拒绝,见 MenuTree.IsSuperAdminOnlyMenu)。
+ * 只处理内核的系统根节点;业务应用的、消费者在系统应用下自建的目录(Id 超过 KERNEL_MAX_ID)不是系统菜单,原样保留。
+ * 内核目录下不在那两个页面之下的节点(机构、岗位、直挂按钮、消费者自己加的页面)去掉,目录里一个都没剩就整个去掉;
+ * 目录节点返回新对象,不改传入的树。
+ */
+export function pruneSuperAdminOnly(tree: MenuTreeNode[]): MenuTreeNode[] {
+  const keep = (n: MenuTreeNode): MenuTreeNode | null => {
+    if (OPEN_PAGE_IDS.includes(n.id)) return n
+    if (n.type !== MenuType.Catalog) return null
+    const children = n.children.map(keep).filter((c): c is MenuTreeNode => c !== null)
+    return children.length ? { ...n, children } : null
+  }
+  return tree.flatMap(n => {
+    if (n.moduleId !== SYSTEM_MODULE_ID || n.id > KERNEL_MAX_ID) return [n]
+    const kept = keep(n)
+    return kept ? [kept] : []
+  })
+}
+
+/**
+ * 系统菜单里除用户管理、角色管理外只能授给内置角色:非内置角色的树里去掉其余的系统菜单(后端同样拒绝)。
  * 消费者在系统应用下自建的目录(Id 超过 KERNEL_MAX_ID)不是系统菜单,保留。
  */
 export const treeForRole = (tree: MenuTreeNode[], builtinRole: boolean): MenuTreeNode[] =>
-  builtinRole ? tree : tree.filter(n => !(n.moduleId === SYSTEM_MODULE_ID && n.id <= KERNEL_MAX_ID))
+  builtinRole ? tree : pruneSuperAdminOnly(tree)
 
 /**
  * 同上:应用下拉里去掉系统应用。visibleTree 是 treeForRole 过滤后的树,
- * 里面还有系统应用的节点(消费者自建的目录)时保留系统应用,否则那些目录没有入口。
+ * 里面还有系统应用的节点(用户管理 / 角色管理所在的目录,或消费者自建的目录)时保留系统应用,否则那些节点没有入口。
  */
 export const modulesForRole = <T extends { id: number }>(
   modules: T[],

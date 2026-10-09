@@ -259,12 +259,16 @@ The range is 0 to 3650; a value outside it makes startup fail, and a negative va
 `0` means unlimited: no expiry time is required and there is no upper bound.
 Super admins are not subject to this setting.
 
-Role grants have a rule of their own: system menus can be granted only to built-in roles.
+Role grants have a rule of their own: apart from User Management and Role Management, system menus can be granted only to built-in roles.
 A system menu is a directory the kernel seed plants under the built-in "System" app (Id ≤ 999, such as Organization or System Operations) together with everything below it, including pages you hang under those directories.
 A built-in role is one whose Id is fixed in the kernel seed, 1–999, such as "System Administrator".
 Roles created in the UI, and roles your own seed plants (Id ≥ 1000), are not built in.
-When a super admin grants a non-built-in role on the role-grant page, the kernel's own directories aren't shown, and the endpoint rejects them with 41009 (`SystemMenuNotAssignable`).
+When a super admin grants a non-built-in role on the role-grant page, only the kernel's own User Management and Role Management are shown, the other system menus aren't, and the endpoint rejects them with 41009 (`SystemMenuNotAssignable`).
 The guard only stops calls that carry a login context; seeds, startup tasks and other code with no login context are unrestricted.
+
+The two pages User Management and Role Management (buttons included, and any node you hang below them) and the Organization directory that carries them are open: a new role can be granted them, and an ordinary admin relies on them to maintain users and roles.
+The Org and Position pages in the same directory, and any page you hang directly under the Organization directory, can still go only to built-in roles.
+The write endpoints for a role's menus and data scope have a super-admin-only guard of their own, so opening these two pages doesn't let a new role change anyone's grants.
 
 A top-level directory you create yourself under the "System" app (Id ≥ 1000) is not a system menu, and a new role can be granted it as usual.
 It still belongs to the "System" app, though, which is permanently non-delegatable, so an ordinary admin cannot grant it to a user.
@@ -272,16 +276,16 @@ To delegate it, re-parent the directory under your own app first.
 
 If someone later moves a page under a kernel directory, or moves a kernel directory to another app and back to "System" (the seed also restores it on upgrade), the grants a new role holds on those menus in the meantime are not reclaimed automatically.
 A super admin opens that role's grant dialog and saves once: those menus no longer show in the dialog, and a save submits only the grants that are visible, so they are taken back.
-This restriction covers role grants only; a super admin can still grant a system menu to an individual user.
+This restriction covers role grants only. The individual-grant dialog likewise lists only User Management and Role Management, but the endpoint doesn't block: a super admin can still grant a system menu to an individual user through the API.
 
 ::: warning Upgrading deletes system-menu grants held by new roles
-On the first startup after upgrading from a database whose seed version is below 7, once the database is ready the kernel physically deletes the `sys_role_menu` rows of "non-built-in role × system menu".
+On the first startup after upgrading from a database whose seed version is below 7, once the database is ready the kernel physically deletes the `sys_role_menu` rows of "non-built-in role × super-admin-only system menu", with User Management, Role Management and the Organization directory shell excepted.
 Directories you created yourself under the "System" app (Id ≥ 1000) are not touched.
 The deletion is irreversible, so back up that table before upgrading.
 Every row writes a Warning log line (role name, code, menu title, menu Id), and the affected users' permission-code cache is invalidated and the portal-menu cache is recomputed as a whole.
 An empty database, an ordinary restart, or seeding turned off (which skips the version gate) never runs it.
 
-- Projects that rely on a new role to reach system pages lose that access for those users after the upgrade;
+- Projects that rely on a new role to reach system pages other than User Management and Role Management lose that access for those users after the upgrade;
   switch them to the built-in "System Administrator" role.
 - Roles your own seed plants (Id ≥ 1000) count as non-built-in too.
   On the upgrade startup the cleanup deletes the system menus already granted to them;
@@ -292,7 +296,7 @@ An empty database, an ordinary restart, or seeding turned off (which skips the v
   A failed lookup or a failed deletion leaves an Error log line saying no grant was deleted (a failed deletion also says the transaction was rolled back).
   When a deployment that skips table creation lacks `sys_user_menu`, the missing-table guard aborts the startup, but the cleanup is registered ahead of it and has already finished.
   To recover, a super admin re-saves the grants of every non-built-in role on the role-grant page (after a failed deletion, the roles named in the log are enough):
-  the dialog doesn't show system menus and a save submits only the grants that are visible, so saving takes them back.
+  the dialog doesn't show those system menus and a save submits only the grants that are visible, so saving takes them back.
 - If only the cache invalidation fails after the grants are deleted, it writes an Error log line and startup carries on.
   Clear "permission cache" and "portal menu cache" separately on the cache-management page.
 - During a rolling upgrade, replicas still running the old version can keep granting system menus to new roles.
@@ -307,7 +311,7 @@ When a grant is rejected, match the error code to find the cause:
 | `41006` | `MenuNotGrantable` | A menu in the change set belongs to a module that isn't delegatable |
 | `41007` | `TargetIsDelegatedAdmin` | An ordinary admin grants to another ordinary admin; also when the target was later put into an admin role and the original granter tries to edit that user's records |
 | `41008` | `DelegatedGrantExpiryInvalid` | An ordinary admin's Allow has no expiry time, or its expiry date is later than today plus the maximum days |
-| `41009` | `SystemMenuNotAssignable` | A system menu is granted to a non-built-in role |
+| `41009` | `SystemMenuNotAssignable` | A system menu other than User Management or Role Management is granted to a non-built-in role |
 | `42015` | `MenuNotFound` | A menu being added or edited doesn't exist |
 | `42031` | `UserMenuGrantInvalid` | The change set itself is invalid: the same menu appears more than once (adds, edits and removals counted together, so a menu in both an edit and a removal counts), the effect is neither Allow nor Deny, the expiry time is not later than now (Allow and Deny alike), or the remark exceeds 200 characters |
 

@@ -39,8 +39,8 @@ public class SysRole : BaseEntity
     public bool? IsDelegatable { get; set; }
 
     /// <summary>
-    /// 内置角色:内核种子播的固定 Id(1–999)。系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
-    /// 与消费者种子里的角色(Id ≥ 1000)都授不了。只读计算属性,不建列。
+    /// 内置角色:内核种子播的固定 Id(1–999)。除「用户管理」「角色管理」外,系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
+    /// 与消费者种子里的角色(Id ≥ 1000)都授不了那部分。只读计算属性,不建列。
     /// </summary>
     [SugarColumn(IsIgnore = true)]
     public bool IsBuiltin => Id is >= 1 and <= SmartSeedIds.KernelMax;

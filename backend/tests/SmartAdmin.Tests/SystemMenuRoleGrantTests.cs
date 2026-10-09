@@ -8,7 +8,9 @@ using SmartAdmin.SqlSugar;
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 系统菜单(内置「系统」应用下内核种子目录的整棵子树)只能授给内置角色(种子里固定 Id 1–999 的角色)。界面上新建的角色授不了;
+/// 系统菜单(内置「系统」应用下内核种子目录的整棵子树)只能授给内置角色(种子里固定 Id 1–999 的角色),
+/// 唯一的例外是「用户管理」「角色管理」两个页面(含按钮、含消费者挂在它们下面的节点)和承载它们的「组织管理」目录:
+/// 界面上新建的角色可以持有这两项,其余系统菜单授不了。
 /// 消费者在「系统」应用下自建的目录(Id ≥ 1000)不算系统菜单。
 /// 后台代码在无登录上下文里调服务不受限(与超管专属守卫同一约定)。
 /// 升级清理(<see cref="SystemMenuRoleGrantCleanup"/>)是破坏性的:这里的用例全部跑在测试自己的临时库里。
@@ -18,6 +20,15 @@ public class SystemMenuRoleGrantTests
     private const long BuiltinRole = 1, BizWorkbench = 110, Ping = 301;
     private const long ConfigPage = 310, ConfigQueryButton = 311;   // 系统运维(300)→ 系统配置页(310)→ 配置-查询按钮(311)
     private const long SystemModule = 1, BusinessModule = 2;
+
+    // 组织管理(200)下:机构管理 210、岗位管理 220 是只给超管/内置角色的;用户管理 230、角色管理 240 是放开的
+    private const long OrgCatalog = 200, OrgPage = 210, OrgQueryButton = 211, PositionPage = 220;
+    private const long UserPage = 230, UserQueryButton = 231, UserGrantMenuButton = 239;
+    private const long RolePage = 240, RoleQueryButton = 241, RoleGrantMenuButton = 245;
+
+    /// <summary>用户管理 + 角色管理的全部菜单(目录壳、两个页面、各自的按钮)。</summary>
+    private static readonly long[] UserAndRoleManagement =
+        [OrgCatalog, UserPage, .. Enumerable.Range(231, 9).Select(i => (long)i), RolePage, .. Enumerable.Range(241, 7).Select(i => (long)i)];
 
     private static readonly DatabaseReadyContext UpgradeFromSix = new(true, true, true, "6", "7");
 
@@ -64,6 +75,107 @@ public class SystemMenuRoleGrantTests
         Assert.Equal(41009, await PutRoleMenusAsync(super, role, [BizWorkbench, Ping]));
         Assert.Equal(0, await PutRoleMenusAsync(super, role, [BizWorkbench]));
         Assert.Equal(0, await PutRoleMenusAsync(super, BuiltinRole, [Ping]));
+    }
+
+    /// <summary>用户管理与角色管理(连同「组织管理」目录壳)可以授给新建角色,授上的行原样保留。</summary>
+    [Fact]
+    public async Task New_role_can_get_user_and_role_management_menus()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+
+        long[] granted = [.. UserAndRoleManagement, BizWorkbench];
+
+        Assert.Equal(0, await PutRoleMenusAsync(super, role, granted));
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal(granted.Order(), menus);
+    }
+
+    /// <summary>
+    /// 放开的只有用户管理、角色管理:同一个「组织管理」目录里的机构、岗位(及其按钮)和别的目录里的菜单仍是超管专属。
+    /// 整份被拒,不留半截授权;内置角色不受限。
+    /// </summary>
+    [Theory]
+    [InlineData(OrgPage)]
+    [InlineData(OrgQueryButton)]
+    [InlineData(PositionPage)]
+    [InlineData(Ping)]
+    [InlineData(ConfigPage)]
+    public async Task New_role_still_cannot_get_other_system_menus_even_next_to_user_management(long menuId)
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+
+        Assert.Equal(41009, await PutRoleMenusAsync(super, role, [OrgCatalog, UserPage, RolePage, menuId]));
+
+        Assert.Empty(await MenusOfRoleAsync(f, role));
+        Assert.Equal(0, await PutRoleMenusAsync(super, BuiltinRole, [menuId]));
+    }
+
+    /// <summary>
+    /// 消费者挂在用户管理页下面的节点跟着页面一起放开(整棵子树);挂在「组织管理」目录下的不跟,目录只是壳,不是放开的页面。
+    /// </summary>
+    [Fact]
+    public async Task Consumer_page_follows_the_page_it_hangs_under_not_the_org_catalog()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+        var belowUserPage = await CreateChildPageAsync(f, UserPage);
+        var besideInOrgCatalog = await CreateChildPageAsync(f, OrgCatalog);
+
+        Assert.Equal(0, await PutRoleMenusAsync(super, role, [OrgCatalog, UserPage, belowUserPage]));
+        Assert.Equal(41009, await PutRoleMenusAsync(super, role, [OrgCatalog, besideInOrgCatalog]));
+    }
+
+    /// <summary>放开的页面被停用:它下面的按钮仍然放开(判定读全表,停用不断链),不会被误判成别的系统菜单。</summary>
+    [Fact]
+    public async Task Buttons_below_a_disabled_user_management_page_stay_assignable()
+    {
+        using var f = new AdminAppFactory();
+        var super = await GrantTestKit.SuperAdminAsync(f);
+        var role = await GrantTestKit.CreateRoleAsync(f, []);
+        await DisableMenuAsync(f, UserPage);
+
+        Assert.Equal(0, await PutRoleMenusAsync(super, role, [UserQueryButton, UserGrantMenuButton]));
+    }
+
+    /// <summary>放开的菜单号是写死在判定里的种子号:种子一旦换号,这里先红,而不是静默放开或锁死别的页面。</summary>
+    [Fact]
+    public void Open_menu_ids_point_at_user_and_role_pages_under_the_org_catalog()
+    {
+        var seed = new DefaultMenuSeed().HasData().ToDictionary(m => m.Id);
+
+        Assert.Equal("system/user/index", seed[DefaultMenuSeed.USER_PAGE_ID].Component);
+        Assert.Equal("system/role/index", seed[DefaultMenuSeed.ROLE_PAGE_ID].Component);
+        Assert.Equal(DefaultMenuSeed.ORG_CATALOG_ID, seed[DefaultMenuSeed.USER_PAGE_ID].ParentId);
+        Assert.Equal(DefaultMenuSeed.ORG_CATALOG_ID, seed[DefaultMenuSeed.ROLE_PAGE_ID].ParentId);
+        Assert.Equal(0L, seed[DefaultMenuSeed.ORG_CATALOG_ID].ParentId);
+        Assert.Equal(SystemModule, seed[DefaultMenuSeed.ORG_CATALOG_ID].ModuleId);
+    }
+
+    /// <summary>判定本身(不经 HTTP):内核种子里谁是超管专属,谁不是。</summary>
+    [Theory]
+    [InlineData(OrgCatalog, false)]
+    [InlineData(UserPage, false)]
+    [InlineData(UserGrantMenuButton, false)]
+    [InlineData(RolePage, false)]
+    [InlineData(RoleGrantMenuButton, false)]
+    [InlineData(OrgPage, true)]
+    [InlineData(OrgQueryButton, true)]
+    [InlineData(PositionPage, true)]
+    [InlineData(100L, true)]       // 系统应用的工作台
+    [InlineData(Ping, true)]
+    [InlineData(ConfigPage, true)]
+    [InlineData(BizWorkbench, false)]   // 业务应用,不是系统菜单
+    public void Super_admin_only_follows_the_kernel_seed(long menuId, bool expected)
+    {
+        var byId = new DefaultMenuSeed().HasData().ToDictionary(m => m.Id);
+
+        Assert.Equal(expected, MenuTree.IsSuperAdminOnlyMenu(menuId, byId));
     }
 
     /// <summary>被拒的那次不能留下半截授权:整份替换没有发生,角色原有授权原样保留。</summary>
@@ -214,6 +326,20 @@ public class SystemMenuRoleGrantTests
         Assert.Equal([Ping], builtinMenus);
     }
 
+    /// <summary>升级清理只删超管专属的系统菜单:用户管理、角色管理(含目录壳)上的授权原样保留,业务菜单与之同理。</summary>
+    [Fact]
+    public async Task Cleanup_keeps_user_and_role_management_grants_of_non_builtin_roles()
+    {
+        using var f = new AdminAppFactory();
+        long[] kept = [.. UserAndRoleManagement, BizWorkbench];
+        var role = await GrantTestKit.CreateRoleAsync(f, [.. kept, Ping, ConfigQueryButton, OrgQueryButton, PositionPage]);
+
+        await RunCleanupAsync(f, UpgradeFromSix);
+
+        long[] menus = await MenusOfRoleAsync(f, role);
+        Assert.Equal(kept.Order(), menus);
+    }
+
     /// <summary>软删(在回收站里)的系统菜单上的授权同样要清:恢复菜单不能把授权带回来。</summary>
     [Fact]
     public async Task Cleanup_removes_grants_on_soft_deleted_system_menus()
@@ -302,11 +428,11 @@ public class SystemMenuRoleGrantTests
         return logger;
     }
 
-    /// <summary>全部系统菜单的 Id(含停用与软删的节点,与清理的判定同口径)。</summary>
+    /// <summary>全部超管专属系统菜单的 Id(含停用与软删的节点,与清理的判定同口径;用户管理、角色管理不在内)。</summary>
     private static async Task<long[]> SystemMenuIdsAsync(ISqlSugarClient db)
     {
         var byId = (await db.Queryable<SysMenu>().ClearFilter<ISoftDelete>().ToListAsync()).ToDictionary(m => m.Id);
-        return [.. byId.Keys.Where(id => MenuTree.IsKernelSystemMenu(id, byId))];
+        return [.. byId.Keys.Where(id => MenuTree.IsSuperAdminOnlyMenu(id, byId))];
     }
 
     /// <summary>直接插库造授权行(角色不必真实存在),分批插免得单条语句过长。</summary>

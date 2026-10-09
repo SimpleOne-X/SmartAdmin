@@ -9,7 +9,12 @@ import AppIcon from '#/components/AppIcon.vue'
 import { translateMenuTitle } from '#/locales/menuTitle'
 import type { MenuTreeNode } from '#/types/menu'
 import type { UserMenuEffective } from '#/types/api'
-import { buildGroups, type CatalogGroup, type MenuRow } from '../../role/components/grantMenuGroups'
+import {
+  buildGroups,
+  pruneSuperAdminOnly,
+  type CatalogGroup,
+  type MenuRow,
+} from '../../role/components/grantMenuGroups'
 import UserGrantNodeRow from './UserGrantNodeRow.vue'
 import { leakedCodes, setTriState, triStateOf, type Draft, type TriState } from './userGrantState'
 
@@ -32,7 +37,10 @@ watch(
   v => (moduleId.value = v),
 )
 
-const groups = computed(() => buildGroups(props.tree, new Set(), t('role.apiOnlyRow')))
+// 单独授权的目标从来不是超管:系统菜单里除用户管理、角色管理外只属于超管与内置角色,这里不列出来。
+// 只收窄列表;防漏提示(leakedCodes)与「有效权限」页签仍按完整的树算,隐藏的节点照样是它们的数据来源。
+const visibleTree = computed(() => pruneSuperAdminOnly(props.tree))
+const groups = computed(() => buildGroups(visibleTree.value, new Set(), t('role.apiOnlyRow')))
 const nodeMap = computed(() => new Map(props.effective.nodes.map(n => [n.menuId, n])))
 const effectiveIds = computed(
   () => new Set(props.effective.nodes.filter(n => n.effective).map(n => n.menuId)),
@@ -50,7 +58,9 @@ const titles = computed(() => {
 })
 
 // ── 应用切换:同角色页,按顶级节点的 moduleId 分 ──
-const moduleOfTop = computed(() => new Map(props.tree.map(n => [n.id, n.moduleId ?? UNASSIGNED])))
+const moduleOfTop = computed(
+  () => new Map(visibleTree.value.map(n => [n.id, n.moduleId ?? UNASSIGNED])),
+)
 const moduleOf = (g: CatalogGroup) => moduleOfTop.value.get(g.id) ?? UNASSIGNED
 const moduleOptions = computed(() => {
   const options = props.effective.modules.map(m => ({

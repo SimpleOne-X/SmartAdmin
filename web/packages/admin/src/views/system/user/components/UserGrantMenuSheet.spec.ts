@@ -43,7 +43,8 @@ const node = (
   sort: 0,
   enabled: true,
   visible: true,
-  moduleId: 1,
+  // 业务应用的模块号(种子里 2)。不能用 1:那是内置系统应用,它的内核目录对单独授权只剩用户管理 / 角色管理
+  moduleId: 2,
   path: type === MenuType.Menu ? `/p${id}` : null,
   children,
 })
@@ -66,10 +67,10 @@ const effectiveOf = (patch: Partial<UserMenuEffective> = {}): UserMenuEffective 
   readOnlyReason: null,
   delegatedMaxDays: null,
   delegatedMaxDate: null,
-  modules: [{ id: 1, title: '业务应用', delegatable: true }],
+  modules: [{ id: 2, title: '业务应用', delegatable: true }],
   nodes: [100, 110, 111, 112, 120, 121].map(menuId => ({
     menuId,
-    moduleId: 1,
+    moduleId: 2,
     effective: true,
     roles: ['销售'],
     grant: null,
@@ -161,6 +162,56 @@ describe('UserGrantMenuSheet 打开与渲染', () => {
     expect(qa('.ugr')).toHaveLength(6)
     expect(qa('.n-radio-button', rowOf('订单'))).toHaveLength(3)
     expect(warnings.filter(w => w.includes('Failed to resolve component'))).toEqual([])
+  })
+
+  it('系统应用里只列出用户管理、角色管理(含按钮);机构、岗位、系统运维等超管专属节点不出现,业务应用照常', async () => {
+    const sys = (...args: Parameters<typeof node>): MenuTreeNode => ({
+      ...node(...args),
+      moduleId: 1,
+    })
+    const SYSTEM_TREE: MenuTreeNode[] = [
+      sys(200, MenuType.Catalog, '组织管理', '', [
+        sys(210, MenuType.Menu, '机构管理', '', [
+          sys(211, MenuType.Button, '机构查询', 'GET:/org'),
+        ]),
+        sys(230, MenuType.Menu, '用户管理', '', [
+          sys(231, MenuType.Button, '用户查询', 'GET:/user'),
+        ]),
+        sys(240, MenuType.Menu, '角色管理', '', [
+          sys(241, MenuType.Button, '角色查询', 'GET:/role'),
+        ]),
+      ]),
+      sys(300, MenuType.Catalog, '系统运维', '', [sys(310, MenuType.Menu, '系统配置')]),
+    ]
+    const ids = [200, 210, 211, 230, 231, 240, 241, 300, 310]
+    const effective = effectiveOf({
+      modules: [
+        { id: 1, title: '系统', delegatable: false },
+        { id: 2, title: '业务应用', delegatable: true },
+      ],
+      nodes: ids.map(menuId => ({
+        menuId,
+        moduleId: 1,
+        effective: true,
+        roles: ['系统管理员'],
+        grant: null,
+        expired: false,
+        deniedByAncestor: false,
+        grantable: true,
+        leakedCodes: [],
+      })),
+    })
+    treeMock.mockResolvedValue([...SYSTEM_TREE, ...TREE])
+    grantsMock.mockResolvedValue([])
+    effectiveMock.mockResolvedValue(effective)
+    mount()
+    sheet.open({ id: 7, name: '张三' })
+    await settle()
+
+    const titles = qa('.ugr .ugr-title').map(el => el.textContent)
+    expect(titles).toEqual(['组织管理', '用户管理', '用户查询', '角色管理', '角色查询'])
+    expect(titles).not.toContain('机构管理')
+    expect(titles).not.toContain('系统运维')
   })
 
   it('没有任何角色时顶部提示数据范围为仅本人', async () => {

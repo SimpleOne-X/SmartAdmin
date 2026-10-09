@@ -31,6 +31,15 @@ namespace SmartAdmin.Services;
 /// </remarks>
 public class DefaultMenuSeed : ISeedData<SysMenu>
 {
+    /// <summary>「组织管理」目录:用户管理、角色管理的父目录,授权上只是承载它们的壳。</summary>
+    public const long ORG_CATALOG_ID = 200;
+
+    /// <summary>「用户管理」页面。内核系统菜单里只有它与 <see cref="ROLE_PAGE_ID"/> 可以授给非内置角色(见 <see cref="MenuTree.IsSuperAdminOnlyMenu"/>)。</summary>
+    public const long USER_PAGE_ID = 230;
+
+    /// <summary>「角色管理」页面。</summary>
+    public const long ROLE_PAGE_ID = 240;
+
     /// <summary>菜单树的<b>结构</b>是内核拥有的:内核升级时把已有节点的结构列刷回种子值(挪挂载点、改图标/路由/权限码
     /// 都靠这个到老库)。只刷 <see cref="SyncColumns"/> 里那几列,用户在菜单管理页改过的标题、排序、可见、启用照常留着。
     /// 见 <see cref="ISeedData{T}.SyncOnUpgrade"/>。</summary>
