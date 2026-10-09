@@ -115,6 +115,8 @@ public static class ServicesSetup
         services.TryAddScoped<IPermissionProvider, RbacPermissionProvider>();
         services.TryAddScoped<IRoleGrantPolicy, RoleGrantPolicy>();   // 角色授予的唯一判定出口,RbacService 收口调用
         services.TryAddScoped<IRbacService, RbacService>();
+        // 单独授权表在鉴权热路径上:建表被跳过时库就绪即确认它在,缺了点名拦下而不是放进程起来再 500
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, UserMenuGrantTableGuard>());
         services.TryAddScoped<IRoleService, RoleService>();   // 角色生命周期 CRUD(授权/数据范围仍走 IRbacService)
 
         // 数据范围解析(招牌能力):合并用户多角色范围,结果按用户缓存

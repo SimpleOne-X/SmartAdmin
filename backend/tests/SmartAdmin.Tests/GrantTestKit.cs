@@ -87,4 +87,37 @@ internal static class GrantTestKit
             }
         }
     }
+
+    /// <summary>绕过服务直接写一条单独授权,并失效该用户的权限码缓存与门户代际。</summary>
+    public static async Task InsertGrantAsync(AdminAppFactory f, long userId, long menuId, UserMenuEffect effect, DateTime? expireTime = null)
+    {
+        using (var s = f.Services.CreateScope())
+            await s.ServiceProvider.GetRequiredService<IRepository<SysUserMenu>>()
+                .InsertAsync(new SysUserMenu { UserId = userId, MenuId = menuId, Effect = effect, ExpireTime = expireTime });
+        await ResetUserCachesAsync(f, userId);
+    }
+
+    /// <summary>绕过服务直接删一条单独授权,并失效缓存。</summary>
+    public static async Task DeleteGrantAsync(AdminAppFactory f, long userId, long menuId)
+    {
+        using (var s = f.Services.CreateScope())
+            await s.ServiceProvider.GetRequiredService<IRepository<SysUserMenu>>().Db
+                .Deleteable<SysUserMenu>().Where(g => g.UserId == userId && g.MenuId == menuId).ExecuteCommandAsync();
+        await ResetUserCachesAsync(f, userId);
+    }
+
+    /// <summary>直接改库后补做服务层会做的失效:该用户的权限码缓存 + 门户代际。</summary>
+    public static async Task ResetUserCachesAsync(AdminAppFactory f, long userId)
+    {
+        var cache = f.Services.GetRequiredService<ICacheProvider>();
+        await cache.RemoveAsync(CacheKeys.UserPermissions(userId));
+        await cache.IncrementAsync(CacheKeys.PortalGeneration);
+    }
+
+    /// <summary>不经 HTTP,直接问权限提供者(用于替换了时钟、令牌可能随之过期的用例)。</summary>
+    public static async Task<IReadOnlyCollection<string>> CodesOfAsync(AdminAppFactory f, long userId)
+    {
+        using var s = f.Services.CreateScope();
+        return await s.ServiceProvider.GetRequiredService<IPermissionProvider>().GetPermissionCodesAsync(userId);
+    }
 }
