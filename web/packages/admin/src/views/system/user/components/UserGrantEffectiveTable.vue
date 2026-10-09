@@ -40,6 +40,8 @@ const rows = computed<Row[]>(() => {
     }
   }
   walk(props.tree, '')
+  // 不在菜单树里的节点(树已被收窄或节点已删)排到最后,不打乱树的先序
+  const orderOf = (menuId: number) => paths.get(menuId)?.order ?? Number.MAX_SAFE_INTEGER
   const grantOf = new Map(props.grants.map(g => [g.menuId, g]))
   return props.effective.nodes
     .filter(n => n.effective || n.grant != null)
@@ -69,7 +71,7 @@ const rows = computed<Row[]>(() => {
         remark: g?.remark,
       }
     })
-    .toSorted((a, b) => (paths.get(a.menuId)?.order ?? 0) - (paths.get(b.menuId)?.order ?? 0))
+    .toSorted((a, b) => orderOf(a.menuId) - orderOf(b.menuId))
 })
 
 const dash = () => h('span', { class: 'faint' }, '—')

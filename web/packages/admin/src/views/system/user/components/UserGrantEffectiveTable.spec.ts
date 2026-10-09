@@ -117,10 +117,12 @@ const grants: UserMenuGrantItem[] = [
 ]
 
 let app: App<Element> | undefined
-function mount() {
+function mount(eff: UserMenuEffective = effective) {
   const host = document.createElement('div')
   document.body.appendChild(host)
-  app = createApp({ render: () => h(UserGrantEffectiveTable, { tree: TREE, effective, grants }) })
+  app = createApp({
+    render: () => h(UserGrantEffectiveTable, { tree: TREE, effective: eff, grants }),
+  })
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }))
   app.mount(host)
   return host
@@ -175,5 +177,22 @@ describe('UserGrantEffectiveTable 行', () => {
   it('状态列区分有效与无效', () => {
     const rows = [...mount().querySelectorAll('.row')]
     expect(rows.map(r => cells(r, 'effective'))).toEqual(['有效', '有效', '无效', '有效', '有效'])
+  })
+})
+
+describe('UserGrantEffectiveTable 树外节点', () => {
+  it('不在菜单树里的节点排在最后,不打乱树的先序', () => {
+    const orphan = effNode(888, { effective: true, roles: ['销售'] })
+    const rows = [
+      ...mount({ ...effective, nodes: [orphan, ...effective.nodes] }).querySelectorAll('.row'),
+    ]
+    expect(rows.map(r => cells(r, 'path'))).toEqual([
+      '业务',
+      '业务 / 订单',
+      '业务 / 订单 / 订单导出',
+      '业务 / 客户',
+      '工作台',
+      '888',
+    ])
   })
 })
