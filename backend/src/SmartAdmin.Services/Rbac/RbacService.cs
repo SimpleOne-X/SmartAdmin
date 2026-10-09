@@ -145,9 +145,16 @@ public class RbacService(
         // 菜单 → 授它的角色(sys_role_menu) → 挂这些角色的用户(sys_user_role) → 失效其权限缓存。
         // 菜单 CRUD 低频,过量失效无害(下次请求按新授权重算);软删菜单不清 sys_role_menu,故删后此扇出仍能命中受影响用户。
         var roleIds = await roleMenus.AsQueryable().Where(x => x.MenuId == menuId).Select(x => x.RoleId).ToListAsync();
-        if (roleIds.Count == 0) return;
-        var affectedUsers = await userRoles.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.UserId).ToListAsync();
-        await InvalidatePermissionsAsync(affectedUsers);
+        List<long> affected = roleIds.Count == 0
+            ? []
+            : await userRoles.AsQueryable().Where(x => roleIds.Contains(x.RoleId)).Select(x => x.UserId).ToListAsync();
+
+        // 再加上所有有单独授权记录的用户:拒绝会扩展到子孙,挪父节点会改变扩展结果,精确圈定代价高;
+        // 单独授权是例外,这个集合小,过量失效无害。
+        affected.AddRange(await roleMenus.Db.Queryable<SysUserMenu>().Select(g => g.UserId).Distinct().ToListAsync());
+
+        if (affected.Count == 0) return;
+        await InvalidatePermissionsAsync(affected.Distinct());
     }
 
     /// <inheritdoc />

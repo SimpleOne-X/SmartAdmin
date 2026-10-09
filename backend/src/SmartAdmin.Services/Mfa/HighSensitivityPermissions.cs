@@ -26,6 +26,8 @@ public static class HighSensitivityPermissions
         "POST:/api/v1/sys/user/batch-delete",
         "PUT:/api/v1/sys/user/{id}/password",
         "PUT:/api/v1/sys/user/{id}/enabled",
+        // 单独授权:能放大或收回别人的权限
+        "PUT:/api/v1/sys/user/menu",
 
         "POST:/api/v1/sys/role/add",
         "PUT:/api/v1/sys/role/{id}",

@@ -371,6 +371,7 @@ export default {
       userToggle: '用户-启停',
       userImport: '用户-导入',
       userExport: '用户-导出',
+      userGrantMenus: '用户-授权菜单',
       roleQuery: '角色-查询',
       roleCreate: '角色-新增',
       roleUpdate: '角色-更新',
@@ -1816,6 +1817,9 @@ export default {
       denied: '无权限访问',
       demoReadOnly: '当前为演示环境，禁止修改操作',
       superAdminRequired: '该操作仅限超级管理员执行',
+      menuNotGrantable: '该菜单所属模块不允许转授',
+      targetIsDelegatedAdmin: '对方是管理员,只有超管能为其单独授权',
+      delegatedGrantExpiryInvalid: '允许必须设置到期日,且最长 {maxDays} 天',
     },
     user: {
       notFound: '用户不存在',
@@ -1826,6 +1830,7 @@ export default {
       outOfDataScope: '目标用户超出当前数据范围',
       avatarUrlInvalid: '头像地址不合法',
       cannotOperateSelf: '不能对自己执行此操作',
+      menuGrantInvalid: '授权变更不合法:同一菜单只能出现一次,到期时间须晚于当前时间',
     },
     role: {
       notFound: '角色不存在',

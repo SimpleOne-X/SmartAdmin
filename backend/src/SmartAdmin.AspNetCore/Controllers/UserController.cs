@@ -96,6 +96,41 @@ public class UserController(
         return Result<bool>.Ok(true);
     }
 
+    // ── 单独授权 ──────────────────────────────────
+
+    /// <summary>取某用户的单独授权记录(授权菜单弹窗回显)</summary>
+    [HttpGet("{id}/menus")]
+    [RolePermission]
+    public async Task<Result<IReadOnlyList<UserMenuGrantItem>>> GetMenuGrants(long id, [FromServices] IUserMenuGrantService grants) =>
+        Result<IReadOnlyList<UserMenuGrantItem>>.Ok(await grants.GetGrantsAsync(id));
+
+    /// <summary>取某用户的有效权限与来源(授权菜单弹窗一次取齐:能否授、能否编辑、模块清单)</summary>
+    [HttpGet("{id}/menus/effective")]
+    [RolePermission]
+    public async Task<Result<UserMenuEffectiveOutput>> GetEffectiveMenus(long id, [FromServices] IUserMenuGrantService grants) =>
+        Result<UserMenuEffectiveOutput>.Ok(await grants.GetEffectiveAsync(id));
+
+    /// <summary>单独授权一览(分页 + 筛选)</summary>
+    [HttpGet("menu-grants/page")]
+    [RolePermission]
+    public async Task<Result<PagedList<UserMenuGrantPageItem>>> MenuGrantPage(
+        [FromQuery] UserMenuGrantPageInput input, [FromServices] IUserMenuGrantService grants) =>
+        Result<PagedList<UserMenuGrantPageItem>>.Ok(await grants.GetGrantPageAsync(input));
+
+    /// <summary>
+    /// 按变更集保存某用户的单独授权(允许 / 拒绝 / 到期 / 备注),没提到的记录原样保留。
+    /// 操作日志记下的请求体就是这次的增改删明细。越权判定见 <see cref="IUserMenuGrantPolicy"/>。
+    /// </summary>
+    [HttpPut("menu")]
+    [RolePermission]
+    [RequireReauth]
+    [OperationLog("用户授权菜单")]
+    public async Task<Result<bool>> SetMenuGrants(SetUserMenuGrantsInput input, [FromServices] IUserMenuGrantService grants)
+    {
+        await grants.ApplyChangesAsync(input.UserId, input.Upserts, input.Removes);
+        return Result<bool>.Ok(true);
+    }
+
     // ── 导入 / 导出 ──────────────────────────────────
 
     /// <summary>

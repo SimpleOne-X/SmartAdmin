@@ -375,6 +375,7 @@ export default {
       userToggle: 'User - Enable / Disable',
       userImport: 'User - Import',
       userExport: 'User - Export',
+      userGrantMenus: 'User - Grant Menus',
       roleQuery: 'Role - Query',
       roleCreate: 'Role - Create',
       roleUpdate: 'Role - Update',
@@ -1858,6 +1859,11 @@ export default {
       denied: 'Access denied',
       demoReadOnly: 'Demo environment is read-only',
       superAdminRequired: 'This action requires super admin privileges',
+      menuNotGrantable: "This menu's module does not allow delegated grants",
+      targetIsDelegatedAdmin:
+        'The user is an administrator; only a super admin can grant them menus individually',
+      delegatedGrantExpiryInvalid:
+        'An allow grant needs an expiry date at most {maxDays} days away',
     },
     user: {
       notFound: 'User not found',
@@ -1868,6 +1874,8 @@ export default {
       outOfDataScope: 'Target user is outside your data scope',
       avatarUrlInvalid: 'Avatar URL is not allowed',
       cannotOperateSelf: 'You cannot perform this action on yourself',
+      menuGrantInvalid:
+        'Invalid grant changes: each menu at most once, and the expiry must be in the future',
     },
     role: {
       notFound: 'Role not found',

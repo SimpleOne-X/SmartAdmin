@@ -91,4 +91,28 @@ public class ProductionBootstrapTests
         Assert.Contains("Avatar", ex.Message);                         // 哪一列 —— 驱动层错误给不了这个
         Assert.Contains("EnableCodeFirstInProduction", ex.Message);    // 怎么办
     }
+
+    /// <summary>
+    /// 关着建表闸门升级、库里缺 sys_user_menu:缺列检查只看已存在的表,缺整张表它不报;
+    /// 而这张表在每个非超管请求的鉴权路径上。必须启动时点名拦下,不能起来以后每个非超管请求都 500。
+    /// </summary>
+    [Fact]
+    public void Production_with_missing_user_menu_table_fails_at_startup_naming_the_table()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"smart-nogrant-{Guid.NewGuid():N}.db");
+        var noSeed = new Dictionary<string, string?> { ["SmartAdmin:Database:EnableSeed"] = "false" };
+
+        using (var v1 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true, Settings = noSeed })
+        {
+            _ = v1.CreateClient();
+            using var scope = v1.Services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ISqlSugarClient>().DbMaintenance.DropTable("sys_user_menu");
+        }
+
+        using var f = new AdminAppFactory { DbPath = dbPath, EnvironmentName = "Production", FreshDatabase = true, Settings = noSeed };
+        var ex = Assert.Throws<InvalidOperationException>(() => f.CreateClient());
+
+        Assert.Contains("sys_user_menu", ex.Message);
+        Assert.Contains("EnableCodeFirstInProduction", ex.Message);
+    }
 }
