@@ -46,7 +46,6 @@ SmartAdmin 内接入约定:
   - 树表:静态过滤不递归 `children`(3.0 / 3.1 的行为:搜子行名整张表为空),用远程取数器 + `filterTree`,见上面「树形页」与 `views/system/org/index.vue`。
   - **不要裸用 `n-data-table`**:小表用 SmartTable 静态数据模式(`:data` + `row-key`,前端分页 / 求值搜索 / 窄档卡片 `card-on-narrow` 都是内置的),范例 `views/personal/sessions.vue`、`views/system/job-monitor`、`views/system/dict`(字典项表)。行拖拽排序用内置 `row-draggable` + `drag-handle` + `@row-drag-sort`。
   - 嵌在抽屉 / 弹窗里的小表(各次尝试、导入预览)不套整页标准:`:toolbar="false"`、不传 `search`、不写任何列的 `search`,并登记进 `listSearch.spec.ts` 的 `EMBEDDED`(范例 `views/system/job-log/components/AttemptTable.vue`)。
-  - 嵌入弹窗的表格(`UserPicker`)是唯一例外。
   - 写在模板注释里的 `<SmartTable` 也会被 `listSearch.spec.ts` 的正则当成一张表而误判,注释里别写带尖括号的标签名。
 - **别用 scoped 样式去调 SmartTable 内部**:包内 `inheritAttrs:false`,`class` 落在内层 `n-data-table` 上,而 scope id 落在 SmartTable 自己的根元素上,`.x :deep(.y)` 要求两者在同一元素,**永不命中**(比如拿它写 `min-height:0` 治横向滚动、写 `padding` 压空态高度,都不生效)。调内部样式走 `:theme-overrides`(经 attrs 透传给 `n-data-table`,只影响这一张表,如 `:theme-overrides="{ emptyPadding: '16px 0' }"`);实在要写 CSS 就用不带类名前缀的 `:deep(.y)`——编译成 `[data-v-xxx] .y`,起点是 SmartTable 根元素,能命中。
 - **搜索折叠**:`collapsible` 只对独立搜索卡片(`container: 'card'`,本项目不用)有效;条件构造器靠「更多条件」展开,不需要它。
@@ -85,7 +84,7 @@ SmartAdmin 内接入约定:
 | DictRadio / DictCheckbox | 字典单选(按钮组)/ 字典多选(复选框组);`typeCode` 取数经 `stores/dict` 缓存,其余 `$attrs` 透传 n-radio-group / n-checkbox-group;与 DictSelect 同源同范式 | `src/components/DictRadio/README.md`、`src/components/DictCheckbox/README.md` |
 | RoleSelect | 角色选择器;基于 ApiSelect,`roleApi.page` 名称搜索,只列启用角色,value=角色 id,多选经 `$attrs` | `src/components/RoleSelect/README.md` |
 | JsonEditor | JSON 值编辑:textarea + 实时校验 + 一键格式化,零依赖;只给约定为 JSON 的配置字段用 | `src/components/JsonEditor/README.md` |
-| UserPicker | 授权用户选择器;机构树过滤 + 用户表格多选,确认后回传用户 Id 数组;宽 / 中档是 1100 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
+| UserPicker | 授权用户选择器;机构列表过滤 + 搜索框 + 点整行勾选的用户列表,确认后回传用户 Id 数组;宽 / 中档是 920 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
 | ErrorBoundary | 内容区渲染错误兜底;`onErrorCaptured` + 重试/回首页,chunk 失效自动重载一次。已包住 `layouts/default.vue` 的 `router-view`,页面作者不必再手动套 | `src/components/ErrorBoundary/README.md` |
 | TableZoomButton | 表格「放大/还原」按钮;形态与 SmartTable 工具栏按钮一致,状态由调用方的 `useTableZoom()` 持有,必须与表格一起进 `Teleport`。**已弃用,改用 `toolbar.maximize`**(内核页面的 `TABLE_TOOLBAR` 已统一开放大),下一个 .NET 大版本删除 | `src/components/TableZoomButton/README.md` |
 

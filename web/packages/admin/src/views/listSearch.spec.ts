@@ -18,7 +18,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** 嵌在弹窗 / 抽屉里的小表:不套用整页列表的工具栏标准(弹窗里切密度没有意义)。 */
 const EMBEDDED = new Set([
-  'components/UserPicker/index.vue',
   // 执行记录详情抽屉里的「各次尝试」子表(一次触发下个位数行),搜索 / 工具栏对它没有意义
   'views/system/job-log/components/AttemptTable.vue',
   // 导入向导「预览改错」步骤里的表:单元格就是输入框 / 字典下拉,嵌在向导弹窗里

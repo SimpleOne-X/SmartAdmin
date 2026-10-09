@@ -156,13 +156,11 @@ test.describe('RBAC 权限', () => {
     // 记录初始已选数
     const initialCount = await picker.locator('.selected-item').count()
 
-    // ② 在中间面板找"超级管理员"行,点"添加"按钮
-    const adminRow = picker.locator('.n-data-table-tr').filter({ hasText: '超级管理员' })
+    // ② 在中间面板搜"超级管理员"(默认按姓名),点整行选中
+    await picker.locator('.picker-search input').fill('超级管理员')
+    const adminRow = picker.locator('.user-row').filter({ hasText: '超级管理员' })
     await expect(adminRow).toBeVisible({ timeout: 5_000 })
-    await adminRow
-      .locator('button')
-      .filter({ hasText: /添加|Add/ })
-      .click()
+    await adminRow.click()
 
     // 右面板应多出一条
     await expect(picker.locator('.selected-item')).toHaveCount(initialCount + 1, { timeout: 3_000 })
