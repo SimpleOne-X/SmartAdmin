@@ -77,7 +77,8 @@ public class UserMenuGrantPolicy(
     /// </summary>
     protected virtual void EnsureDelegatedExpiry(IReadOnlyCollection<UserMenuGrantUpsert> upserts)
     {
-        if (DelegatedMaxDays is not { } maxDays || DelegatedMaxDate is not { } lastDay) return;
+        if (DelegatedMaxDays is not { } maxDays) return;
+        var lastDay = DelegatedMaxDate ?? DateOnly.FromDateTime(Now).AddDays(maxDays);
         foreach (var u in upserts.Where(u => u.Effect == UserMenuEffect.Allow))
             AdminException.ThrowIf(u.ExpireTime is not { } t || DateOnly.FromDateTime(t) > lastDay, ErrorCode.DelegatedGrantExpiryInvalid,
                 new Dictionary<string, object?> { ["maxDays"] = maxDays });

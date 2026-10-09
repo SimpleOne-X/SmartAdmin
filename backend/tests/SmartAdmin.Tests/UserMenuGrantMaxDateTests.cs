@@ -37,6 +37,15 @@ public class UserMenuGrantMaxDateTests
         public void CheckExpiry(params UserMenuGrantUpsert[] upserts) => EnsureDelegatedExpiry(upserts);
     }
 
+    /// <summary>子类把最晚到期日覆写成 null,而最长天数仍受限。</summary>
+    private sealed class NullMaxDatePolicy(AdminSecurityOptions security, TimeProvider time, ICurrentUser? user)
+        : UserMenuGrantPolicy(null!, null!, null!, null!, null!, security, time, user)
+    {
+        public override DateOnly? DelegatedMaxDate => null;
+
+        public void CheckExpiry(params UserMenuGrantUpsert[] upserts) => EnsureDelegatedExpiry(upserts);
+    }
+
     private static readonly FakeUser Admin = new(authenticated: true, superAdmin: false);
 
     private static Policy PolicyAt(DateTime local, int maxDays = 90, ICurrentUser? user = null) =>
@@ -116,6 +125,23 @@ public class UserMenuGrantMaxDateTests
         Assert.Throws<AdminException>(() => PolicyAt(now).CheckExpiry(Allow(null)));
         PolicyAt(now).CheckExpiry(new UserMenuGrantUpsert { MenuId = BizWorkbench, Effect = UserMenuEffect.Deny });
         PolicyAt(now, maxDays: 0).CheckExpiry(Allow(null));
+    }
+
+    /// <summary>
+    /// 子类把最晚到期日覆写成 null、天数仍受限时,限时要求不能跟着失效:
+    /// 「允许」照样必须带到期时间,上限退回到策略自己按天数算出的那一天。
+    /// </summary>
+    [Fact]
+    public void Overriding_max_date_to_null_does_not_disable_the_expiry_requirement()
+    {
+        var policy = new NullMaxDatePolicy(new AdminSecurityOptions { DelegatedGrantMaxDays = 90 },
+            new LocalClock(new DateTime(2026, 10, 9, 8, 0, 0)), Admin);
+
+        var missing = Assert.Throws<AdminException>(() => policy.CheckExpiry(Allow(null)));
+        Assert.Equal(ErrorCode.DelegatedGrantExpiryInvalid, missing.Code);
+        policy.CheckExpiry(Allow(new DateTime(2027, 1, 7, 23, 59, 59)));
+        var late = Assert.Throws<AdminException>(() => policy.CheckExpiry(Allow(new DateTime(2027, 1, 8))));
+        Assert.Equal(ErrorCode.DelegatedGrantExpiryInvalid, late.Code);
     }
 
     /// <summary>有效权限接口把最晚到期日带给界面:普通管理员是服务器今天 + 90 天的日期串,超管为空。</summary>
