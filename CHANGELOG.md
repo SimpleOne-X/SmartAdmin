@@ -48,6 +48,8 @@
     这些授权不会被清理，升级完成后同样靠超管重新保存来收回。
   - 升级之后，超管在角色页给新建角色授系统菜单会被拒绝（`41009`）。
     后台代码在没有登录上下文时调 `IRbacService.SetRoleMenusAsync` 不受限，种子同理。
+  - 下游的集成测试要留意：经 HTTP `PUT /api/v1/sys/role/menu` 给新建角色授系统菜单的用例，升级后会得到 `41009`。
+    这类用例改为经服务直接授（`IRbacService.SetRoleMenusAsync`，没有登录上下文，不受限），或者把菜单授给内置角色。
 
 - **数据库：新增一张表和一个可空列，CodeFirst 自动建、自动补。**
   - 新表 `sys_user_menu`（用户单独授权），`(UserId, MenuId)` 唯一索引。
