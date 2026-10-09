@@ -21,6 +21,7 @@ namespace SmartAdmin.Tests;
 public class SeedUpgradeTests
 {
     private const long WorkbenchMenuId = 100;    // DefaultMenuSeed:工作台(根级菜单)
+    private const long BusinessModuleId = 2;      // DefaultModuleSeed:业务中心
     private const long SiteTitleConfigId = 1;    // ConfigSeed:站点标题
     private const long EnabledDictItemId = 1;    // DictSeed:通用状态「启用」
 
@@ -100,6 +101,39 @@ public class SeedUpgradeTests
 
                 var version = await db.Queryable<SysSchemaVersion>().FirstAsync(x => x.Id == 1);
                 Assert.Equal(SysSchemaVersion.Current, version.Version);   // 版本写回,下次启动不再当升级
+            });
+    }
+
+    /// <summary>
+    /// 升级时模块种子只刷结构列(编码、图标、落地路由、路由前缀);标题、排序、启用、备注、可转授是超管的设置,留着。
+    /// 整行刷回的话,超管关掉的「业务中心」可转授会在每次升级时被重新打开。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_syncs_module_structure_but_keeps_admin_settings()
+    {
+        await RestartWithAsync(
+            async db =>
+            {
+                await DowngradeVersionAsync(db);
+                await db.Updateable<SysModule>()
+                    .SetColumns(x => new SysModule
+                    {
+                        Icon = "ph:old", ApiPrefix = "old",
+                        Title = "我的业务", Sort = 9, Enabled = false, Remark = "改过", IsDelegatable = false,
+                    })
+                    .Where(x => x.Id == BusinessModuleId)
+                    .ExecuteCommandAsync();
+            },
+            async db =>
+            {
+                var m = await db.Queryable<SysModule>().FirstAsync(x => x.Id == BusinessModuleId);
+                Assert.Equal("lucide:briefcase-business", m.Icon);   // 结构列刷回
+                Assert.Equal("biz", m.ApiPrefix);
+                Assert.Equal("我的业务", m.Title);                    // 超管的设置留着
+                Assert.Equal(9, m.Sort);
+                Assert.False(m.Enabled);
+                Assert.Equal("改过", m.Remark);
+                Assert.False(m.IsDelegatable);
             });
     }
 

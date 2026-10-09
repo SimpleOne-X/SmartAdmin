@@ -85,4 +85,39 @@ public class CodeFirstNullableUpgradeTests
             TestDb.Cleanup(dbPath, dbPath);
         }
     }
+
+    /// <summary>
+    /// 老库升级:sys_module 已有数据时补可空列 IsDelegatable;存量模块是 NULL(不可转授),
+    /// 种子的列白名单不含它,升级同步也不会把「业务中心」改成可转授。
+    /// </summary>
+    [Fact]
+    public async Task NonEmpty_sys_module_gets_nullable_IsDelegatable_and_stays_null_after_upgrade()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"smart-module-upg-{Guid.NewGuid():N}.db");
+        try
+        {
+            using (var v1 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true })
+            {
+                _ = v1.CreateClient();
+                using var scope = v1.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+                db.DbMaintenance.DropColumn("sys_module", "IsDelegatable");
+                await db.Updateable<SysSchemaVersion>().SetColumns(x => new SysSchemaVersion { Version = "6" }).Where(x => x.Id == 1).ExecuteCommandAsync();
+            }
+
+            using var v2 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false };
+            _ = v2.CreateClient();
+            using var s2 = v2.Services.CreateScope();
+            var db2 = s2.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+
+            var cols = db2.DbMaintenance.GetColumnInfosByTableName("sys_module", false).Select(c => c.DbColumnName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("IsDelegatable", cols);
+            var business = await db2.Queryable<SysModule>().FirstAsync(x => x.Id == 2);
+            Assert.Null(business.IsDelegatable);
+        }
+        finally
+        {
+            TestDb.Cleanup(dbPath, dbPath);
+        }
+    }
 }
