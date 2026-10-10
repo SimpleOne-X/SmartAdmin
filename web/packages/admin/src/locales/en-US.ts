@@ -530,8 +530,12 @@ export default {
     passwordHint: 'Leave blank to auto-generate one (shown once after creation)',
     org: 'Org',
     allOrgs: 'All',
-    // Narrow content area: the org tree moves into a drawer (toolbar button + drawer title)
+    // Group name of the org panel; in a narrow content area the tree moves into a drawer, where it is also the toolbar button + drawer title
     orgFilter: 'Organization',
+    // Panel header button tips: once fully expanded it becomes "collapse to first level"; "hide" slides the whole panel left, after which the toolbar button's tip is "show"
+    collapseToFirstLevel: 'Collapse to first level',
+    hideOrgPanel: 'Hide organization panel',
+    showOrgPanel: 'Show organization panel',
     orgPlaceholder: 'Select org (optional)',
     position: 'Position',
     positionPlaceholder: 'Select position (optional)',

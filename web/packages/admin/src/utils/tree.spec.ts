@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, filterTree, collectSubtreeIds, expandableIds, flattenTree } from './tree'
+import {
+  buildTree,
+  filterTree,
+  collectSubtreeIds,
+  expandableIds,
+  flattenTree,
+  rootExpandableIds,
+} from './tree'
 
 describe('buildTree', () => {
   it('两层挂载 + parentId 指向不存在的父时孤儿兜底当根不丢数据', () => {
@@ -82,6 +89,25 @@ describe('flattenTree', () => {
 
   it('空树得空数组', () => {
     expect(flattenTree([])).toEqual([])
+  })
+})
+
+describe('rootExpandableIds', () => {
+  it('只收有子节点的根:根展开露出第二层,更深层级与没有子节点的根都不收', () => {
+    const tree = buildTree([
+      { id: 1, parentId: 0 },
+      { id: 2, parentId: 1 },
+      { id: 3, parentId: 2 }, // 第三层:id2 有子节点,但它不是根,不收
+      { id: 4, parentId: 1 },
+      { id: 5, parentId: 0 }, // 没有子节点的根:无需展开
+      { id: 6, parentId: 0 },
+      { id: 7, parentId: 6 },
+    ])
+    expect(rootExpandableIds(tree)).toEqual([1, 6])
+  })
+
+  it('空树得空数组', () => {
+    expect(rootExpandableIds([])).toEqual([])
   })
 })
 

@@ -57,6 +57,11 @@ export function expandableIds<T extends { id: number; children?: T[] }>(nodes: T
   return ids
 }
 
+/** 有子节点的根的 id —— 受控展开时用它播种"只展开一级":根展开、露出第二层,更深的层级仍收起。 */
+export function rootExpandableIds<T extends { id: number; children?: T[] }>(nodes: T[]): number[] {
+  return nodes.filter(n => n.children?.length).map(n => n.id)
+}
+
 /**
  * 树 → 深度优先平铺行(父在前、子紧随其后),每行带 depth(根 = 0),children 置空。
  * 给窄档卡片列表用:smart-naive-table 的卡片模式只画传入的这一层行,不认 children,

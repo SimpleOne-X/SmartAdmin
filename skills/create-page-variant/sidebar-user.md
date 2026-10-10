@@ -99,7 +99,14 @@ watch(
 </style>
 ```
 
-不想用 `n-card` 当侧栏时，`styles/layout.css` 还带一套侧栏面板外观：外层 `.side-filter`（宽度按页覆盖 `--side-filter-width`）、头部 `.side-filter__head` + `.side-filter__actions`、滚动区 `.side-filter__body`、平铺分类的行 `.side-row`（选中态 `.is-active`，可带 `.side-row__count` 角标）、树形分类给 `<n-tree>` 加 `.side-tree`。面板不放标题（紧挨着的第一行就是「全部」，再写一遍分类名是重复），头部只留操作按钮；树形分类进入页面默认全部折叠。
+不想用 `n-card` 当侧栏时，`styles/layout.css` 还带一套侧栏面板外观（macOS 侧边栏的样子）：外层 `.side-filter`（宽度按页覆盖 `--side-filter-width`；加 `.is-hidden` 向左收起，页面同时给这个 `aside` 写 `inert` 让它退出 Tab 顺序与读屏）、头部 `.side-filter__head`（左边 `.side-filter__title` 是分组名，右边 `.side-filter__actions` 里放 `.side-filter__btn` 图标按钮，如「展开全部 ↔ 折叠到一级」`.side-filter__toggle`、「向左收起」`.side-filter__hide`）、滚动区 `.side-filter__body`、平铺分类的行 `.side-row`（选中态 `.is-active`，可带 `.side-row__count` 角标）、树形分类给 `<n-tree>` 加 `.side-tree`（不开 `show-line`，用 `render-switcher-icon` 换成小号 chevron，层级靠缩进）。
+
+几条约定：
+
+- 分组名是灰色小字，说的是「这一组是什么」，和紧挨着的「全部」行不重复；放进抽屉时抽屉标题栏已有分组名，头部就不再渲染它，也不放「向左收起」。
+- 树形分类进入页面只展开一级：数据到位时用 `rootExpandableIds(tree)` 播种受控的 `expanded-keys`，只播这一次，别在数据变化时重播（会覆盖用户手动展开的状态）。没有比第一层更深的层级时，不出展开切换按钮。
+- 分类不多时不放搜索框（用户页机构数超过 15 才出现）。
+- 向左收起后，在 `SmartTable` 的 `#toolbar` 插槽最左放一个显示当前筛选名的按钮请回面板，否则收起期间看不出筛选还在生效；状态用 `useStorage` 记在本浏览器里。
 
 ## 注意事项
 

@@ -527,8 +527,12 @@ export default {
     passwordHint: '留空则自动生成随机密码(创建后显示一次)',
     org: '归属机构',
     allOrgs: '全部',
-    // 内容区较窄时机构树收进抽屉:工具栏按钮与抽屉标题
+    // 机构分组栏的分组名;内容区较窄时机构树收进抽屉,它同时是工具栏按钮与抽屉标题
     orgFilter: '机构',
+    // 分组栏头部按钮的提示:展开到底后变成「折叠到一级」;「收起」向左收起整栏,收起后工具栏按钮的提示是「展开」
+    collapseToFirstLevel: '折叠到一级',
+    hideOrgPanel: '收起机构栏',
+    showOrgPanel: '展开机构栏',
     orgPlaceholder: '选择机构(可空)',
     position: '职位',
     positionPlaceholder: '选择职位(可空)',

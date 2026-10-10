@@ -137,7 +137,7 @@ FormContainer 的 `:fullscreen="true" | 'auto'` 建在 `useCompactScreen` 上,�
 
 1. 模板顶层直接是 `<SmartTable>`:什么都不用加,自动满屏;
 2. 顶层是自己的外壳 div:加 `.fill-page`;主表不是直接子元素时,给「包住主表的那一层」加 `.fill-main`;
-3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter` / `.side-row` / `.side-tree`;
+3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter`(头部分组名 + `.side-filter__btn` 图标按钮,`.is-hidden` 向左收起)/ `.side-row` / `.side-tree`,约定见 `skills/create-page-variant/sidebar-user.md`;
 4. 页签页:`<n-tabs>` 加 `.fill-tabs`;
 5. 上下 / 左右分栏均分:容器加 `.fill-split`(横向加 `--row`),每栏加 `.fill-main`。
 
