@@ -2,7 +2,7 @@
 
 **仅用于 SmartAdmin 本仓。** 前后端同仓、**同版本号一起发**。本 skill 是 agent 可执行的发布流程；操作细节与「为什么」见 [`docs/releasing.md`](../docs/releasing.md)（人类 runbook，环境侧真源）。
 
-**节奏**：开发在 `dev`，发布在 `main`。先合 `dev` → `main`，再在 **`main` 上**打 `v*` tag；tag 一推，`release` workflow 校验、测试、打包，经 Trusted Publishing 推 nuget.org（13 个 nupkg）并发 npm（前端包 `smart-admin-web`）。仓库里没有 NuGet API key 或 npm token，agent 不在本地 pack / push / publish。
+**节奏**：开发在 `dev`，发布在 `main`。先经 PR 把 `dev` 合进 `main`（`main` 受保护，不能直接 push），再在 **`main` 上**打 `v*` tag；tag 一推，`release` workflow 校验、测试、打包，经 Trusted Publishing 推 nuget.org（13 个 nupkg）并发 npm（前端包 `smart-admin-web`）。仓库里没有 NuGet API key 或 npm token，agent 不在本地 pack / push / publish。
 
 **本 skill 不代用户拍板版本号、不代推 tag。** 推 tag 就等于发包，每到不可逆步，先陈述现状并请用户确认后再执行。
 
@@ -149,49 +149,94 @@ chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号
 
 **完成标准**：该提交在 `$source` 上，且 diff 含 `site/.vitepress/config.ts`；`git status` 干净。
 
+### 1.5 纯前端发版：多带一个 `ci.yml` 提交
+
+自上个 tag 以来 `backend/`、`templates/`、`.github/workflows/ci.yml` 都没动时（下面的 diff 为空），`ci` 的 `changes` 任务会把后端腿整个跳过：
+
+```powershell
+git diff --stat "v<上一版>..HEAD" -- backend templates .github
+```
+
+后端腿被跳过，`dev` → `main` 的 PR 上就不会出现 `backend (sqlite)`、`backend (sqlserver)`、`template-smoke` 这三项必检，PR 会一直 `BLOCKED`。矩阵任务在 job 级 `if` 为假时不展开，检查名是没展开的表达式原文，对不上必检项的名字；手动触发（`workflow_dispatch`）的运行不计入 PR 的必检项，补不上。
+
+解法是在 `.github/workflows/ci.yml` 里动一下（它在后端路径的匹配里），比如改一行说明注释，单独提一个 `ci:` 提交。**这个提交要和准备提交放在同一次推送里**：`ci` 有并发取消，后推的提交会取消前一轮，先后各推一次会白跑一整轮（含 SqlServer 腿约 20 分钟）。
+
+**完成标准**：diff 为空时，`ci.yml` 已有一个独立的 `ci:` 提交，并和准备提交一起进入 2.1 的推送；diff 不为空时跳过本节。
+
 ---
 
 ## 2. 发布（不可逆：合 main + 打 tag，tag 触发发包）
 
-### 2.1 推 dev 与快进检查
+### 2.1 推 `$source` 并等 `ci`
 
 ```powershell
 git fetch origin
 git push origin $source
-git merge-base --is-ancestor origin/main "origin/$source"
-if ($LASTEXITCODE -eq 0) { Write-Host '可 ff' } else { Write-Host '有分叉，需真合并' }
 ```
 
-有分叉时：真合并 `origin/$source`，确认 CHANGELOG / 版本号没被顶回旧值，再继续。
+纯前端发版（1.5）要保证 `ci.yml` 的提交和准备提交在这同一次推送里。
+
+等这次推送触发的 `ci` 与 `docs` 跑完且全绿（整轮含 SqlServer 腿约 20 分钟）。**逐 job 核对，别只看总状态**，被门控跳过的后端腿也会让总状态显示成功：
+
+```powershell
+gh run list --branch $source --limit 3
+gh run view <run id> --json jobs --jq '.jobs[] | "\(.conclusion // .status)\t\(.name)"'
+```
+
+后端四库（sqlite / mysql / postgres / sqlserver）、`template-smoke`、`web`、`web-e2e` 都应是 `success`；只有 `dependency-review (PR only)` 在非 PR 运行里按预期 `skipped`。
+
+`main` 上有历史发版留下的 PR 合并提交，`$source` 没有它们，所以 `main` 通常不是 `$source` 的祖先——这是正常的，合并由 2.2 的 PR 完成，不需要在本地处理。PR 页面显示冲突时，才把 `origin/main` 合进 `$source`，确认 CHANGELOG / 版本号没被顶回旧值后再推。
+
+**完成标准**：`$source` 最新提交的 `ci` 与 `docs` 全部 job 通过；`origin/$source` 的 tip 含 `chore(release): 准备 X.Y.Z`。
 
 ### 2.2 合 main（需用户确认）
 
-向用户复述将执行：
+`main` 开了分支保护：禁止直接 push，只能从 `$source` 经 PR 合并，且 `backend (sqlite)`、`backend (sqlserver)`、`web (lint + vitest + build)`、`template-smoke (dotnet new smart-app)` 四项必检通过（对管理员也生效，不需要人工 review）。本地合并后直接 `git push origin main` 会被拒（`GH006`）。
 
-1. `main` 快进（或合并）到含准备提交的 `$source`
-2. `git push origin main`
-
-用户同意后再跑。此处绝不重置或强推本地 `main`；本地 `main` 与远端不一致时停下，查明未推送提交的归属后再继续。PowerShell：
+开 PR（标题沿用历史写法 `chore(release): X.Y.Z`）：
 
 ```powershell
+gh pr create --base main --head $source --title "chore(release): X.Y.Z" --body-file <说明文件>
+```
+
+说明里写：CHANGELOG 该版本的要点、提交清单、验证结果。然后等必检：
+
+```powershell
+gh pr checks <N> --required
+gh pr view <N> --json mergeStateStatus   # 必检跑完后应是 CLEAN
+```
+
+同一个 head SHA 上会有两批同名检查（`$source` 推送触发的和 PR 触发的），`gh pr checks` 会把两批都列出来；PR 触发的那批没跑完前 `mergeStateStatus` 一直是 `BLOCKED`，整轮约 20 分钟。必检一项都没出现、PR 一直 `BLOCKED` 时，回头看 1.5。
+
+必检全绿后，向用户复述将执行：
+
+1. `gh pr merge <N> --merge`：保持 merge commit，不 squash、不 rebase，与历史记录一致
+2. 本地 `main` 快进到 `origin/main`
+
+用户同意后再跑。此处绝不重置或强推本地 `main`；本地 `main` 有 `origin/main` 没有的提交时停下，查明归属后再继续。PowerShell：
+
+```powershell
+gh pr merge <N> --merge
 git fetch origin
 if (git show-ref --verify --quiet refs/heads/main) {
   git switch main
 } else {
   git switch --track -c main origin/main
 }
-if ((git rev-parse main) -ne (git rev-parse origin/main)) {
-  throw 'Local main differs from origin/main; inspect it before merging.'
+git merge-base --is-ancestor main origin/main
+if ($LASTEXITCODE -ne 0) {
+  throw 'Local main has commits origin/main does not; inspect it before merging.'
 }
-git merge --ff-only "origin/$source" # 有分叉时，用户确认后改为 git merge "origin/$source"
-git push origin main
+git merge --ff-only origin/main
 ```
 
-**完成标准**：`origin/main` 的 tip 含 `chore(release): 准备 X.Y.Z`。
+**完成标准**：PR 已合并；`HEAD`、`main`、`origin/main` 是同一 SHA，其历史含 `chore(release): 准备 X.Y.Z`。
 
 ### 2.3 打 tag 并推（需用户二次确认）
 
 再次 `git fetch origin`，并确认 `HEAD`、`main`、`origin/main` 是**同一 SHA**；只作为 `origin/main` 的祖先并不足够，可能会把 tag 打在过期提交上。
+
+合并后 `main` 上会再跑一轮 `ci`（约 20 分钟），它测的树与已经跑绿的 `$source` 逐字节相同。**等它绿了再打 tag**：`release` 在同一 SHA 的 `backend (sqlite)` 已绿时直接晋级、不重跑 SQLite 测试；不等也可以（`release` 的 verify 自己是闸门），但这是用户的选择，不替用户省这一步。`ci` 红着不打 tag（见「禁区」）。
 
 ```powershell
 git fetch origin
@@ -239,6 +284,7 @@ verify 红了不会发包，删 tag 重打即可；publish 跑完包就在 nuget
 ## 禁区与提醒
 
 - **不要在 `$source` 上打发布 tag 并推**：tag 必须落在 `origin/main` 的 tip 上。
+- **不要直接 `git push origin main`**：`main` 受保护（禁止直接 push、对管理员也生效），会被 `GH006` 拒绝；合并一律走 2.2 的 PR。
 - **不要漏 bump**；三个前端 `package.json`、模板依赖版本、lockfile、**文档站中英徽章** 必须一起改。
 - **不要漏 `site/.vitepress/config.ts`**——站顶版本号靠它，不是 `web/package.json`。
 - **不要在 `ci` 红着的时候推 tag**：`release` 只跑 SQLite 腿，四库矩阵、e2e 与 Docker 冒烟靠 `ci` / `docker-smoke`。
