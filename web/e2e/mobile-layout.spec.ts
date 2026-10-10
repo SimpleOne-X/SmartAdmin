@@ -119,3 +119,68 @@ test.describe('手机宽度布局', () => {
     }
   })
 })
+
+/**
+ * 窄档壳层里的定高页与表单弹窗。
+ *
+ * 内核页面窄档下的表全是卡片列表(有自然高度),所以几处「只在特定形状下才出毛病」的 CSS 没有现成的页面可测:
+ * 这里在真实页面上手动补上那个形状(给 `.page` 加 `bp-narrow`、给分栏容器加 `--row`、给弹窗卡片加全屏类),
+ * 断言的是最终的版面几何,不是类名本身。
+ */
+
+test.describe('窄档壳层:定高页与表单弹窗', () => {
+  test('定高页:表格仍是表格形态时,窄档壳层保持定高,表体不塌', async ({ page }) => {
+    test.setTimeout(120_000)
+    await login(page, ADMIN_ACCOUNT, ADMIN_PASSWORD)
+    await enterApp(page, SYSTEM_APP)
+    // 宽视口里表格是表格形态;再给 .page 补上 bp-narrow,等于「壳层窄档 + 没开 card-on-narrow 的 fill-height 表」
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await page.goto('/system/recycle') // .fill-page > .fill-tabs 形状
+    await expect(page.locator('.n-data-table-base-table-body').first()).toBeVisible({
+      timeout: 15_000,
+    })
+    await page.waitForLoadState('networkidle')
+    const body = () => page.locator('.n-data-table-base-table-body').first().boundingBox()
+    expect((await body())!.height, '宽档基线:表体本来有高度').toBeGreaterThan(300)
+
+    await page.evaluate(() => document.querySelector('.page')!.classList.add('bp-narrow'))
+
+    await expect
+      .poll(async () => (await body())?.height ?? 0, { message: '窄档壳层下表体塌了' })
+      .toBeGreaterThan(300)
+  })
+
+  test('.fill-split 窄档:左右分栏也叠成上下,两栏时每栏有定高', async ({ page }) => {
+    await login(page, ADMIN_ACCOUNT, ADMIN_PASSWORD)
+    await enterApp(page, SYSTEM_APP)
+    await page.goto('/system/dict')
+    await expect(page.locator('.fill-split').first()).toBeVisible({ timeout: 15_000 })
+    await page.waitForLoadState('networkidle')
+    // 字典页窄档只渲染上栏(下栏走底部抽屉);克隆出第二栏、补上 --row 变体,模拟「两栏左右分栏」的页面
+    await page.evaluate(() => {
+      const split = document.querySelector('.fill-split')!
+      split.classList.add('fill-split--row')
+      split.appendChild(split.firstElementChild!.cloneNode(true))
+    })
+
+    const geometry = () =>
+      page.evaluate(() => {
+        const split = document.querySelector('.fill-split')!
+        const [a, b] = [...split.children].map(c => c.getBoundingClientRect())
+        return {
+          direction: getComputedStyle(split).flexDirection,
+          firstH: Math.round(a.height),
+          secondH: Math.round(b.height),
+          stacked: b.top >= a.bottom - 1, // 第二栏在第一栏下面,不是并排
+          viewportH: innerHeight,
+        }
+      })
+    await expect.poll(async () => (await geometry()).direction).toBe('column')
+    const g = await geometry()
+    expect(g.stacked, '--row 在窄档也该叠成上下').toBe(true)
+    // 每栏定高 max(440px, 72dvh):上栏不会无限长、把下栏挤到很远的地方
+    const cap = Math.max(440, g.viewportH * 0.72)
+    expect(g.firstH).toBeCloseTo(cap, -1)
+    expect(g.secondH).toBeCloseTo(cap, -1)
+  })
+})

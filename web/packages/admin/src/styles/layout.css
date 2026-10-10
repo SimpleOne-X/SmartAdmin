@@ -360,6 +360,20 @@
   height: 100%;
 }
 
+/* ①′ 窄档兜底。壳层窄档把 .page-view 放回自动高度(layouts/default.vue),卡片列表有自然高度所以没事;
+      页面里只要还有「表格形态的 fill-height 表」(没开 card-on-narrow,也没用 :fill-height="!narrow" 放掉定高),
+      它的表体没有基准高度:页签页里塌成 0(页签条下面整片空白),顶层表和 .side-page 里塌到最小高度。
+      这种页在窄档也保持一屏定高,滚动留给表体。
+      只认 ① 的那三种满屏形状:别的自然滚动页里夹着一张小表,不该把整页锁死。
+      含 .fill-split 的页除外:分栏在窄档整页自然滚动,两栏及以上时每栏自己有定高(见 ⑨)。
+      特异性要压过 default.vue 里 .page.bp-narrow :deep(.page-view) 的 height:auto。 */
+.page.bp-narrow
+  .page-view:is(:has(> .smart-table), :has(> .fill-page), :has(> .side-page)):has(
+    .smart-table--fill:not(.smart-table--cards)
+  ):not(:has(.fill-split)) {
+  height: 100%;
+}
+
 /* ② 形状 1:顶层裸 SmartTable。这里不把 .page-view 做成 flex 容器 —— 它同级还挂着
       FormContainer / 各种弹窗组件,收起时是空节点,变成 flex item 只会平白多出坑。 */
 .page-view > .smart-table {
@@ -521,11 +535,29 @@
 }
 
 /* 壳层窄档整页自然滚动(layouts/default.vue 把 .page-view 放回自动高度),容器没有定高可分:
-   flex-basis 0 会把每一栏压到各自的 min-height,卡片列表被关在一个小框里再滚。
-   窄档各栏回到按内容分,高度由内容撑开、由 .page 滚动。只处理上下分栏;左右分栏(--row)的窄档形态由用它的页面自己定。 */
-.bp-narrow .fill-split:not(.fill-split--row) > .fill-main,
-.bp-narrow .fill-split:not(.fill-split--row) > .smart-table {
-  flex: 0 0 auto;
+   flex-basis 0 会把每一栏压到各自的 min-height,卡片列表被关在一个小框里再滚;
+   按内容分又会让上栏把下栏挤到首屏之外(外层 overflow:hidden 时直接被裁掉),左右并排的 --row 在 370px 里每栏只剩一半。
+   所以窄档不分上下 / 左右,统一叠成上下、整页自然滚动。
+   只有一栏时(如字典页窄档只渲染上栏,下栏走底部抽屉)没有「挤走下一栏」的问题,按内容分、不给定高:
+   定高会把本来放得下的卡片列表又关回一个小框里滚。 */
+.bp-narrow .fill-split {
+  flex-direction: column;
+  height: auto;
+  overflow: visible;
+}
+
+.bp-narrow .fill-split > :is(.fill-main, .smart-table) {
+  flex: none;
+}
+
+/* 两栏及以上:每栏给一个定高,栏内的卡片自己滚。
+   72dvh 让一栏装得下一屏里工具栏 + 若干张卡片 + 分页,首屏下沿还能露出下一栏;440px 兜住矮屏。
+   定高也是表格形态的表(虚拟滚动)在窄档能工作的前提。 */
+.bp-narrow
+  .fill-split:has(> :is(.fill-main, .smart-table) ~ :is(.fill-main, .smart-table))
+  > :is(.fill-main, .smart-table) {
+  height: max(440px, 72dvh);
+  min-height: 0;
 }
 
 /* ⑩ 链中间夹了 <n-spin>:它的容器层和内容层默认是 block,高度传不下去。

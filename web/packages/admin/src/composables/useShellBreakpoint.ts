@@ -7,6 +7,7 @@
 // 阈值 600 = smart-naive-table 的窄档(表格根节点宽 < 600 换卡片)。壳层 narrow 必须和它对齐:
 // 壳层进入「整页自然滚动」时表格一定已是卡片列表;壳层不是 narrow 时表格一定仍是表格。
 // 两层阈值错开会出现一段宽度:页面不定高、表格却还在 fill-height,表体塌成最小高度。
+// 这条对齐只对开了 card-on-narrow 的表成立;没开的表(表格形态的 fill-height 表)由 layout.css ①′ 让那一页保持定高兜底。
 // 阈值直接取 600:量的是 `.page` 的 content box(ResizeObserver 的 contentRect 本身已扣掉内边距),
 // 留白不进数字,日后改 `.page` 的内边距不用回来改阈值。
 //
