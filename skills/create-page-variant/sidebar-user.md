@@ -107,6 +107,7 @@ watch(
 - 树形分类进入页面只展开一级：数据到位时用 `rootExpandableIds(tree)` 播种受控的 `expanded-keys`，只播这一次，别在数据变化时重播（会覆盖用户手动展开的状态）。没有比第一层更深的层级时，不出展开切换按钮。
 - 分类不多时不放搜索框（用户页机构数超过 15 才出现）。
 - 向左收起后，在 `SmartTable` 的 `#toolbar` 插槽最左放一个显示当前筛选名的按钮请回面板，否则收起期间看不出筛选还在生效；状态用 `useStorage` 记在本浏览器里。
+- 内容区窄于 1000 时分组栏不再占一列（手机上 200px 的栏会把表格挤到只剩 160px 出头）：用 `useSidePanel()` 取 `compact`（该不该收）与 `drawerOpen`，`compact` 时不渲染 `.side-filter`，在 `#toolbar` 最左放按钮把 `drawerOpen` 置 `true`，面板放进 `<SidePanelDrawer v-model:show="drawerOpen" :title="分组名">`。面板内容用 `createReusableTemplate` 只写一份，宽屏放进 aside、窄屏放进抽屉。范例是 `system/user`，用法见 `SidePanelDrawer` 的 README。不要只用 CSS 在窄档把 `.side-filter` 藏掉，那样用户就没有分组筛选的入口了。
 
 ## 注意事项
 

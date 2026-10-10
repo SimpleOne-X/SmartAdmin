@@ -14,6 +14,15 @@
 
 ## Unreleased
 
+### Added
+
+- **`useSidePanel()` 与 `SidePanelDrawer`：「左分组栏 + 右列表」页在窄内容区里的面板抽屉。**
+  内容区窄于 1000px 时分组栏不再占一列（200px 的栏加上表格，手机上表格只剩 160px 出头），收进从左侧滑出的抽屉。
+  `useSidePanel()` 返回 `{ compact, drawerOpen }`：`compact` 是「内容区 < 1000」（可传阈值），宽度回到不紧凑时 `drawerOpen` 自动置回 `false`；
+  `SidePanelDrawer` 是抽屉本身（`v-model:show`、`title`、默认插槽放面板内容）。
+  两者都从 `smart-admin-web` 导出；用户页的机构栏改用它们，行为不变。
+  用法见 `SidePanelDrawer` 的 README，应用里自己的分组侧栏页不必再各抄一份「窄档不画 aside、工具栏按钮、左侧 `n-drawer`」。
+
 ## 10.22.0 - 2026-10-10
 
 ### 升级说明
