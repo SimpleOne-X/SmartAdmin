@@ -97,6 +97,17 @@
   height: var(--control-h, 30px);
 }
 
+/* 条件搜索栏的值输入框限宽。库只给它 flex: 1 1 100px 和 min-width,没有上限,于是它吃掉一行里所有剩余宽度:
+   中档(表格卡片 600-1279)条件栏独占整行,值 = 卡片宽 - 约 502,1279 宽时 777px;
+   宽档(≥ 1280)条件栏只占半行,值 = 卡片宽 / 2 - 约 503,屏越大越长。
+   字段 136 + 比较符 112 之后,值给到 320 足够放账号 / 手机号 / 日期 / 多值标签,
+   再长只是把「查询」「重置」推到老远,输入框看着像一条横幅。库在宽档自然给到的宽度(用户管理页 2048 宽视口下 263)在上限之内,不受影响。
+   选择器限定在 .smart-table-cond__main(宽档 / 中档的一行):窄档是「输入框 + 筛选」的另一套结构,
+   输入框铺满整行(.smart-table-cond__narrow-input),更多条件弹层 / 抽屉里的值控件也不在 __main 里面,都不动。 */
+.smart-table-cond__main .smart-table-filter-value {
+  max-width: 320px;
+}
+
 /* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/
 .n-data-table .n-data-table-td--last-col .n-space {
   gap: 0 !important;
