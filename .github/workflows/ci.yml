@@ -67,6 +67,10 @@ jobs:
           # 用 here-string 而不是管道喂 grep:管道里 grep -q 一命中就退出,清单很大时上游 printf 会
           # Broken pipe,pipefail 下整条管道失败,hit 误输出 false,backend / web 被整个跳过(但分支保护把跳过当通过)
           hit() { if grep -Eq "$1" <<<"$files"; then echo true; else echo false; fi; }
+          # 注意:后端腿被整个跳过时,main 的必检项 `backend (sqlite)` / `backend (sqlserver)` 不会出现在 PR 上。
+          # 矩阵任务在 job 级 if 为假时不展开矩阵,检查名是没展开的表达式原文,对不上这两个名字;
+          # workflow_dispatch 手动触发的运行不计入 PR 的必检项。所以只改了 web/ 与 site/ 的发版 PR 会一直 BLOCKED,
+          # 要让它跑全后端腿,就在 PR 里动一下本文件(它在下面 backend 的路径里)。
           echo "backend=$(hit '^(backend/|templates/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "web=$(hit '^(web/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
 
