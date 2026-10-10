@@ -108,6 +108,34 @@
   max-width: 320px;
 }
 
+/* 条件搜索栏所在的工具栏(中档,表格卡片 600-1279)按可用宽度自适应:放得下就和右侧操作区同一行对齐,放不下才折行。
+   库的中档写死两行(操作区在上、条件栏在下),不看宽度够不够;值输入框限宽后条件栏不再撑满整行,
+   第一行左边空着一大片,搜索与工具栏就看着没对齐。
+   这里改成 flex 换行:条件栏以它自己的最小宽度为基准(字段 136 + 比较符 112 + 值 100 + » / 查询 / 重置 + 间距 ≈ 560),
+   同一行放得下就并排;放不下时后换出来的那一行由 wrap-reverse 放到上面,保持原来「操作区在上、条件栏在下」的次序。
+   宽档是左右并排,窄档是另一套结构,都不动。选择器多叠一层 .smart-table:库的同类规则带 scoped 属性,同特异度时先后顺序说了算。 */
+.smart-table .smart-table-toolbar.smart-table-toolbar--cond.smart-table-toolbar--mid {
+  display: flex;
+  flex-flow: row wrap-reverse;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.smart-table .smart-table-toolbar--cond.smart-table-toolbar--mid .smart-table-toolbar-cond {
+  flex: 1 1 560px;
+  min-width: 0;
+}
+
+.smart-table .smart-table-toolbar--cond.smart-table-toolbar--mid .smart-table-toolbar-right {
+  margin-left: auto;
+}
+
+/* 头部(#toolbar 插槽、标题)没有内容时不占位:空元素也会吃一份宽 / 中档的 12px 间距,
+   条件栏的左缘就比下面的表格缩进 12px。有内容(如收起机构栏后的恢复按钮)时照常排在条件栏左边。 */
+.smart-table-toolbar--cond .smart-table-toolbar-head:empty {
+  display: none;
+}
+
 /* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/
 .n-data-table .n-data-table-td--last-col .n-space {
   gap: 0 !important;
