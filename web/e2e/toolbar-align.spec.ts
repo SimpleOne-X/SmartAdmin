@@ -8,14 +8,18 @@ import { ADMIN_ACCOUNT, ADMIN_PASSWORD, SYSTEM_APP, enterApp, login } from './he
  * 值输入框限宽之后条件栏不再撑满整行,第一行左边空着一大片,搜索与工具栏看着没对齐。
  * styles/table.css 把中档改成 flex 换行:条件栏以 COND_MIN_WIDTH 为基准宽,同一行放得下就并排,
  * 放不下操作区整块折到条件栏上方(仍是原来的「操作区在上、条件栏在下」)。下面的 COND_MIN_WIDTH 与它同值。
+ * 基准宽按「并排时值输入框至少还剩 MIN_INLINE_VALUE_WIDTH」定,而不是按库的下限 100px:刚好放得下就并排,
+ * 会把输入框挤到几乎没法输入(收起机构栏、头部多出一个按钮时尤其明显),宁可折成两行让输入框宽松。
  *
  * 不写死分辨率:每个视口宽度读到的布局,都按「这一行的可用宽度够不够」来判断该并排还是该折行,
  * 够不够由页面里实际量到的操作区宽度与头部宽度算出来,不假设某个页面有几个按钮。
  * 档位阈值(600 / 1280)是库的约定,这里只用它判断读数是否已经跟上当前宽度(ResizeObserver 晚于视口变化)。
  */
 
-/** 与 styles/table.css 里条件栏的基准宽同值:并排所需的条件栏最小宽度。 */
-const COND_MIN_WIDTH = 560
+/** 与 styles/table.css 里条件栏的基准宽同值:并排所需的条件栏最小宽度(值输入框以外的部分约 468,再留 200 给输入框)。 */
+const COND_MIN_WIDTH = 670
+/** 并排时值输入框至少要有的宽度:再窄就挤得没法输入,应当折行。 */
+const MIN_INLINE_VALUE_WIDTH = 200
 /** 工具栏里各块之间的间距(库的 gap)。 */
 const GAP = 12
 /** 垂直中心相差不超过它,算在同一行对齐。 */
@@ -31,6 +35,8 @@ interface Reading {
   barOverflow: number
   headWidth: number
   rightWidth: number
+  /** 值输入框外壳(.smart-table-filter-value)的宽度。 */
+  valueWidth: number
   /** 条件栏一行(.smart-table-cond__main)与右侧操作区的垂直中心。 */
   condCenterY: number
   rightCenterY: number
@@ -68,6 +74,7 @@ function readBar(): Reading | null {
       0,
     ),
     rightWidth: r.width,
+    valueWidth: cond.querySelector('.smart-table-filter-value')?.getBoundingClientRect().width ?? 0,
     condCenterY: c.top + c.height / 2,
     rightCenterY: r.top + r.height / 2,
     condLeft: (bar.querySelector('.smart-table-cond__field') ?? cond).getBoundingClientRect().left,
@@ -97,20 +104,25 @@ async function settledReading(page: Page, label: string): Promise<Reading> {
 }
 
 /** 视口宽度:笔记本到超宽屏。卡片宽取决于页面;中档「放得下」与「放不下」两种情形是否都扫到由下面的断言守住。 */
-const VIEWPORT_WIDTHS = [700, 1100, 1200, 1300, 1440, 1700, 1920, 2560]
+const VIEWPORT_WIDTHS = [700, 1100, 1200, 1300, 1440, 1600, 1700, 1920, 2560]
 
 /** 用户管理(左侧机构栏占 256,卡片 = 视口 - 约 516)与角色管理(整页一张表,卡片 = 视口 - 约 260)。 */
-const PAGES = [
-  { path: '/system/user', name: '用户管理' },
-  { path: '/system/role', name: '角色管理' },
+const PAGES: { path: string; name: string; hidePanel?: boolean; expectStacked: boolean }[] = [
+  { path: '/system/user', name: '用户管理', expectStacked: false },
+  // 收起机构栏后头部多出「机构」按钮:头部、条件栏、操作区三块要么同一行,要么操作区在上、头部与条件栏在下
+  { path: '/system/user', name: '用户管理(收起机构栏)', hidePanel: true, expectStacked: true },
+  { path: '/system/role', name: '角色管理', expectStacked: true },
 ]
 
 test.describe('条件搜索栏与工具栏对齐', () => {
-  for (const { path, name } of PAGES) {
+  for (const { path, name, hidePanel, expectStacked } of PAGES) {
     test(`${name}:放得下就同一行对齐,放不下折成两行且不溢出`, async ({ page }) => {
       test.setTimeout(120_000)
       await login(page, ADMIN_ACCOUNT, ADMIN_PASSWORD)
       await enterApp(page, SYSTEM_APP)
+      // 机构栏的收起状态记在 localStorage:在页面脚本之前写好,进页面就是收起的
+      if (hidePanel)
+        await page.addInitScript(() => localStorage.setItem('sa-user-org-panel-hidden', 'true'))
       await page.setViewportSize({ width: VIEWPORT_WIDTHS[0]!, height: 1080 })
       await page.goto(path)
       await expect(page.locator('.smart-table-toolbar').first()).toBeVisible({ timeout: 15_000 })
@@ -133,7 +145,7 @@ test.describe('条件搜索栏与工具栏对齐', () => {
         const dy = r.condCenterY - r.rightCenterY
         lines.push(
           `${at}:工具栏 ${r.barWidth},操作区 ${r.rightWidth},` +
-            `${fits ? '放得下' : '放不下'},条件栏相对操作区垂直 ${Math.round(dy)}px,左缘缩进 ${Math.round(r.condLeft - r.barLeft)}px,溢出 ${r.barOverflow}px`,
+            `${fits ? '放得下' : '放不下'},头部 ${Math.round(r.headWidth)},值输入框 ${Math.round(r.valueWidth)},条件栏相对操作区垂直 ${Math.round(dy)}px,左缘缩进 ${Math.round(r.condLeft - r.barLeft)}px,溢出 ${r.barOverflow}px`,
         )
 
         if (r.barOverflow > 0) problems.push(`${at}:工具栏横向溢出 ${r.barOverflow}px`)
@@ -143,8 +155,14 @@ test.describe('条件搜索栏与工具栏对齐', () => {
             `${at}:条件栏左缘比工具栏左缘缩进 ${Math.round(r.condLeft - r.barLeft)}px,与表格没有对齐`,
           )
 
-        if (r.tier === 'wide' || fits) {
+        if (fits) {
           if (r.tier === 'mid') sawMidSameRow = true
+          // 并排只在输入框还够用的时候才成立:刚好放得下就并排会把输入框挤到几乎没法输入。
+          // 宽档同理:头部有按钮(收起机构栏)时,库的两列等分会把输入框挤到一百多像素
+          if (r.valueWidth < MIN_INLINE_VALUE_WIDTH - 1)
+            problems.push(
+              `${at}:并排时值输入框只剩 ${Math.round(r.valueWidth)}px,低于 ${MIN_INLINE_VALUE_WIDTH}px,应当折行或让出空间`,
+            )
           if (Math.abs(dy) > SAME_ROW_TOLERANCE)
             problems.push(`${at}:放得下却没有同一行对齐,条件栏与操作区垂直相差 ${Math.round(dy)}px`)
           if (r.condRight > r.rightLeft + 0.5)
@@ -162,14 +180,14 @@ test.describe('条件搜索栏与工具栏对齐', () => {
       }
 
       // 两种情形都扫到才算守住,否则上面的断言有一半在空转
-      expect(sawMidSameRow, `${path} 的扫描没有出现「中档且放得下」:\n${lines.join('\n')}`).toBe(
+      expect(sawMidSameRow, `${name} 的扫描没有出现「中档且放得下」:\n${lines.join('\n')}`).toBe(
         true,
       )
-      if (path === '/system/role')
-        expect(sawMidStacked, `${path} 的扫描没有出现「中档且放不下」:\n${lines.join('\n')}`).toBe(
+      if (expectStacked)
+        expect(sawMidStacked, `${name} 的扫描没有出现「中档且放不下」:\n${lines.join('\n')}`).toBe(
           true,
         )
-      expect(problems, `${path} 的扫描读数:\n${lines.join('\n')}`).toEqual([])
+      expect(problems, `${name} 的扫描读数:\n${lines.join('\n')}`).toEqual([])
     })
   }
 })
