@@ -71,6 +71,8 @@ jobs:
           # 矩阵任务在 job 级 if 为假时不展开矩阵,检查名是没展开的表达式原文,对不上这两个名字;
           # workflow_dispatch 手动触发的运行不计入 PR 的必检项。所以只改了 web/ 与 site/ 的发版 PR 会一直 BLOCKED,
           # 要让它跑全后端腿,就在 PR 里动一下本文件(它在下面 backend 的路径里)。
+          # 整轮连 SqlServer 腿约 20 分钟,而 ci 有并发取消(后推的提交会取消前一轮),
+          # 所以动本文件的提交要和发版准备提交放在同一次推送里,别先后各推一次。
           echo "backend=$(hit '^(backend/|templates/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "web=$(hit '^(web/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
 
