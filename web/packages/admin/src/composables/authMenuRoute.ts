@@ -58,10 +58,15 @@ export function describeMenuRoute(
   }
 }
 
-/** 比对路由路径的口径:补前导斜杠、去末尾斜杠(vue-router 非严格模式下 /a/ 与 /a 是同一条路由)。 */
+/**
+ * 比对路由路径的口径:补前导斜杠、去末尾斜杠(vue-router 非严格模式下 /a/ 与 /a 是同一条路由)。
+ * 末尾斜杠用循环从后往前数:路径来自地址栏,是用户可控的输入,`/\/+$/` 这类正则遇到一长串斜杠会二次方回溯。
+ */
 export function normalizeRoutePath(path: string): string {
   const withSlash = path.startsWith('/') ? path : `/${path}`
-  return withSlash.replace(/\/+$/, '') || '/'
+  let end = withSlash.length
+  while (end > 1 && withSlash.charCodeAt(end - 1) === 47 /* '/' */) end--
+  return withSlash.slice(0, end)
 }
 
 /**

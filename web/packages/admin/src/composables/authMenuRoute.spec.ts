@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeMenuRoute, menuHasPath } from './authMenuRoute'
+import { describeMenuRoute, menuHasPath, normalizeRoutePath } from './authMenuRoute'
 import { MenuType, type MenuNode } from '#/types/menu'
 
 function menu(overrides: Partial<MenuNode> = {}): MenuNode {
@@ -95,5 +95,27 @@ describe('menuHasPath', () => {
 
   it('空树不命中', () => {
     expect(menuHasPath([], '/workbench', keys)).toBe(false)
+  })
+})
+
+describe('normalizeRoutePath', () => {
+  it('补前导斜杠、去末尾斜杠,全是斜杠时回到根', () => {
+    expect(normalizeRoutePath('a')).toBe('/a')
+    expect(normalizeRoutePath('/a')).toBe('/a')
+    expect(normalizeRoutePath('/a/')).toBe('/a')
+    expect(normalizeRoutePath('/a//')).toBe('/a')
+    expect(normalizeRoutePath('/a/b/')).toBe('/a/b')
+    expect(normalizeRoutePath('/')).toBe('/')
+    expect(normalizeRoutePath('///')).toBe('/')
+    expect(normalizeRoutePath('')).toBe('/')
+  })
+
+  it('地址里有大量连续斜杠时耗时与长度成线性,不会二次方回溯', () => {
+    // 末尾不是斜杠的长串斜杠:`/\/+$/` 会在每个起点都扫完整段斜杠再失败,10 万个要几秒。
+    // 地址栏里的路径是用户可控的输入,不能让它卡死页面。
+    const path = `/${'/'.repeat(100_000)}a`
+    const started = performance.now()
+    expect(normalizeRoutePath(path)).toBe(path)
+    expect(performance.now() - started).toBeLessThan(500)
   })
 })
