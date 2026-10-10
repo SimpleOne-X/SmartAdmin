@@ -52,6 +52,9 @@ const fullscreen = computed(() =>
 // 窄档抽屉改底部抽屉。全屏表单(fullscreen)本就铺满视口,不叠底部抽屉形态。
 const { bp } = useShellBreakpoint()
 const sheet = computed(() => mode.value === 'drawer' && bp.value === 'narrow' && !fullscreen.value)
+// 窄档的弹窗卡片限高在视口内、正文自己滚:内容比视口高时底栏(保存 / 取消)不随正文滚出屏外。
+// 全屏态自带这套(.smart-form--fullscreen),所以只给非全屏的窄档弹窗加。宽 / 中档保持 naive 默认(整张卡随遮罩层滚)。
+const fixedFoot = computed(() => bp.value === 'narrow' && !fullscreen.value)
 const btnSize = computed(() => (sheet.value ? 'large' : 'medium'))
 const w = computed(() =>
   fullscreen.value ? winW.value : Math.min(props.width ?? 560, Math.round(winW.value * 0.9)),
@@ -101,7 +104,7 @@ onDeactivated(() => {
     :closable="canClose"
     :close-on-esc="canClose"
     :mask-closable="maskClose"
-    :class="{ 'smart-form--fullscreen': fullscreen }"
+    :class="{ 'smart-form--fullscreen': fullscreen, 'smart-form--fixed-foot': fixedFoot }"
     :style="modalStyle"
   >
     <template v-if="$slots['header-extra']" #header-extra>
@@ -177,8 +180,17 @@ onDeactivated(() => {
   flex-direction: column;
   border-radius: 0;
 }
-/* 头/脚按内容高,正文吃满剩余并自己滚 —— 否则长表单会把整张卡撑出视口,底部按钮点不到。 */
-.smart-form--fullscreen > .n-card__content {
+/* 窄档非全屏弹窗:卡片限高在视口内(上下各留 12px 的遮罩),头/脚按内容高,正文吃满剩余并自己滚。 */
+.smart-form--fixed-foot {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 24px);
+}
+/* 头/脚按内容高,正文吃满剩余并自己滚 —— 否则长表单会把整张卡撑出视口,底部按钮点不到。
+   内容层的类名两种都写:naive-ui 2.45 输出 .n-card-content,只有 content-scrollable 时的滚动外层才带 __content-scrollbar,
+   光写 .n-card__content 在 2.45 上一条都命不中。 */
+.smart-form--fullscreen > :is(.n-card-content, .n-card__content),
+.smart-form--fixed-foot > :is(.n-card-content, .n-card__content) {
   flex: 1;
   min-height: 0;
   overflow: auto;

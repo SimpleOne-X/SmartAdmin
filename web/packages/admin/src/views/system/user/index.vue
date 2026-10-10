@@ -3,7 +3,7 @@
 // 超管行(isSuperAdmin)删除/停用置灰防自锁;启停走专用 setEnabled(非全量 update)。
 // 导入导出:ImportWizard 四步向导 + ExportColumnsModal 选列导出(带当前筛选)。
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { createReusableTemplate, useElementSize, useStorage } from '@vueuse/core'
+import { createReusableTemplate, useStorage } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import {
   NButton,
@@ -17,8 +17,6 @@ import {
   NInput,
   NSpin,
   NTooltip,
-  NDrawer,
-  NDrawerContent,
   useMessage,
   type DropdownOption,
   type TreeOption,
@@ -30,12 +28,14 @@ import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import DictTag from '#/components/DictTag/index.vue'
 import ImportWizard, { type ImportWizardApi } from '#/components/ImportWizard/index.vue'
 import ExportColumnsModal from '#/components/ExportColumnsModal/index.vue'
+import SidePanelDrawer from '#/components/SidePanelDrawer/index.vue'
 import UserFormModal from './components/UserFormModal.vue'
 import ResetPasswordModal from './components/ResetPasswordModal.vue'
 import UserGrantMenuSheet from './components/UserGrantMenuSheet.vue'
 import UserGrantOverviewDrawer from './components/UserGrantOverviewDrawer.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useBatchDelete } from '#/composables/useBatchDelete'
+import { useSidePanel } from '#/composables/useSidePanel'
 import { mfaApi, userApi, positionApi, roleApi, orgApi } from '#/api'
 import { useAuthStore } from '#/stores/auth'
 import { useUserStore } from '#/stores/user'
@@ -109,14 +109,9 @@ function onOrgSelect(keys: (string | number)[]) {
 }
 
 // ── 内容区较窄时,机构树收进左侧抽屉 ──
-// 判据是页面内容区宽度(不是视口):侧栏展开 / 收起都会改变它。面板占掉的宽度本来就会让右侧表格变窄,
-// 收进抽屉后表格得到整行宽度;表格自己的窄档(卡片列表)由库按表格卡片宽度另行判定,页面不管。
-const COMPACT_WIDTH = 1000
-const layoutRef = ref<HTMLElement>()
-const { width: layoutWidth } = useElementSize(layoutRef)
-// 量到宽度前(0)按宽屏渲染,避免首帧闪一下抽屉模式
-const compact = computed(() => layoutWidth.value > 0 && layoutWidth.value < COMPACT_WIDTH)
-const orgDrawer = ref(false)
+// 判据与抽屉本体都是内核的:useSidePanel(壳层内容区宽度 < 1000,量到宽度前按宽屏渲染,首帧不闪)+ SidePanelDrawer。
+// 表格自己的窄档(卡片列表)由库按表格卡片宽度另行判定,页面不管。
+const { compact, drawerOpen: orgDrawer } = useSidePanel()
 // 宽屏下机构栏可向左收起,收起后表格占满整行;状态记在本浏览器里,下次进页面保持。窄屏走抽屉,不受它影响。
 const orgPanelHidden = useStorage('sa-user-org-panel-hidden', false)
 function pickOrg(id: number | null) {
@@ -620,7 +615,7 @@ deriveHeaderFilters(columns)
 
   <!-- 「左分组栏 + 右列表」= styles/layout.css 里的形状 3:.side-page 负责 display/gap/拉伸/整屏高度。
        窄内容区不画 aside,表格独占整行,SmartTable 照样是 .side-page 的直接子元素,高度链不变。 -->
-  <div ref="layoutRef" class="user-layout side-page">
+  <div class="user-layout side-page">
     <!-- 左侧机构树筛选:面板外观对齐内核 .side-filter 约定。收起时留在 DOM 里(宽度过渡到 0 再淡出),
          inert 让它退出 Tab 顺序与读屏。 -->
     <aside
@@ -690,13 +685,9 @@ deriveHeaderFilters(columns)
   </div>
 
   <!-- 内容区 < 1000:机构树的左侧抽屉,选中后自动收起 -->
-  <n-drawer v-model:show="orgDrawer" placement="left" width="min(300px, 88vw)">
-    <n-drawer-content :title="t('user.orgFilter')" closable>
-      <div class="org-drawer-body">
-        <ReuseOrgPanel :drawer="true" />
-      </div>
-    </n-drawer-content>
-  </n-drawer>
+  <SidePanelDrawer v-model:show="orgDrawer" :title="t('user.orgFilter')">
+    <ReuseOrgPanel :drawer="true" />
+  </SidePanelDrawer>
 
   <UserFormModal
     ref="userFormRef"
@@ -737,18 +728,5 @@ deriveHeaderFilters(columns)
 /* 树形比平铺分类宽一点:缩进和展开箭头要留出空间,默认 --side-filter-width(224px)偏窄。 */
 .user-layout {
   --side-filter-width: 248px;
-}
-
-/* 抽屉里的机构面板:与 aside 里同样的纵向堆叠与间距 */
-.org-drawer-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* 抽屉在触屏上用:头部图标按钮放大到可点的尺寸 */
-.org-drawer-body .side-filter__btn {
-  width: 32px;
-  height: 32px;
 }
 </style>

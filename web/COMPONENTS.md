@@ -64,7 +64,8 @@ SmartAdmin 内接入约定:
 
 | 组件 | 定位 | README |
 |---|---|---|
-| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭;弹窗形态下提交失败(校验 reject / 返回 `false`)卡片会晃一下 | `src/components/FormContainer/README.md` |
+| FormContainer | 弹窗/抽屉二合一表单容器;形态跟随全局偏好 `app.formStyle`(**默认弹窗**,外观设置「表单形态」可切抽屉;抽屉形态宽 / 中档右侧、窄档底部抽屉高 92%,取消钮 secondary;`variant` 按实例覆盖);onConfirm 协议接管 loading/关闭;弹窗形态下提交失败(校验 reject / 返回 `false`)卡片会晃一下;窄档弹窗卡片限高在视口内、正文自己滚,底栏不随正文滚出屏外 | `src/components/FormContainer/README.md` |
+| SidePanelDrawer | 「左分组栏 + 右列表」页在窄内容区的面板抽屉(左侧滑出,标题 + 插槽放面板内容);配 `useSidePanel()`(内容区 < 1000 → `compact`,管 `drawerOpen`)使用,范例 `system/user` 的机构栏 | `src/components/SidePanelDrawer/README.md` |
 | StatusSwitch | 表格行内启停开关;悲观更新,失败自动回滚 | `src/components/StatusSwitch/README.md` |
 | TableTotal | 分页栏左侧的「共 N 条」,写在 SmartTable 的 `#pagination-prefix` 插槽里;每张分页表格都要有 | `src/components/TableTotal/README.md` |
 | DictSelect | 字典下拉,`$attrs` 全透传 n-select | `src/components/DictSelect/README.md` |
@@ -137,11 +138,11 @@ FormContainer 的 `:fullscreen="true" | 'auto'` 建在 `useCompactScreen` 上,�
 
 1. 模板顶层直接是 `<SmartTable>`:什么都不用加,自动满屏;
 2. 顶层是自己的外壳 div:加 `.fill-page`;主表不是直接子元素时,给「包住主表的那一层」加 `.fill-main`;
-3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter`(头部分组名 + `.side-filter__btn` 图标按钮,`.is-hidden` 向左收起)/ `.side-row` / `.side-tree`,约定见 `skills/create-page-variant/sidebar-user.md`;
+3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter`(头部分组名 + `.side-filter__btn` 图标按钮,`.is-hidden` 向左收起)/ `.side-row` / `.side-tree`,约定见 `skills/create-page-variant/sidebar-user.md`;内容区 < 1000 时分组栏不再占一列,用 `useSidePanel()` + `SidePanelDrawer` 收进左侧抽屉(`system/user`);
 4. 页签页:`<n-tabs>` 加 `.fill-tabs`;
 5. 上下 / 左右分栏均分:容器加 `.fill-split`(横向加 `--row`),每栏加 `.fill-main`。
 
-**窄档(壳层内容区 < 600,含手机)整页自然滚动**:`layouts/default.vue` 把 `.page-view` 放回自动高度,`.fill-page` / `.fill-split` 没有定高可分。所以窄档的表格必须是自然高度的卡片列表(`card-on-narrow`);没有卡片形态的表,用 `:fill-height="!narrow"` 在窄档放掉定高(`useShellBreakpoint`,范例 `system/job-monitor`)。`.fill-split` 在窄档由 `layout.css` 退回按内容分栏。守卫:`views/listSearch.spec.ts` 查源码,`e2e/mobile-layout.spec.ts` 在 390 宽跑真实页面。
+**窄档(壳层内容区 < 600,含手机)整页自然滚动**:`layouts/default.vue` 把 `.page-view` 放回自动高度,`.fill-page` / `.fill-split` 没有定高可分。所以窄档的表格应当是自然高度的卡片列表(`card-on-narrow`);没有卡片形态的表,用 `:fill-height="!narrow"` 在窄档放掉定高(`useShellBreakpoint`,范例 `system/job-monitor`)。万一漏了(表格形态的 fill-height 表落在窄档壳层里),`layout.css` 的 ①′ 兜底:该页在窄档保持一屏定高、表体在页内滚,不会塌成 0;兜底只保证页面不坏,手机上的体验仍以卡片列表为准。`.fill-split` 在窄档统一叠成上下(`--row` 也是),整页自然滚动;两栏及以上时每栏定高 `max(440px, 72dvh)`、栏内的卡片自己滚,只有一栏时按内容分。守卫:`views/listSearch.spec.ts` 查源码,`e2e/mobile-layout.spec.ts` 在 390 宽跑真实页面。
 
 链中间夹了 `<n-spin>` 给它加 `.fill-pass`;矮屏宁可让页面滚也别把表压扁时外壳再叠 `.fill-page--soft`。弹窗表单分节用 `.form-section` / `.form-section__title`(修饰 `--fieldset` / `--panel`),别在页面 scoped 里再画一遍标题。表格全局外观(斑马纹 / 列分隔 / 固定列实底 / 选中行 `.row-selected`)在 `styles/table.css`,页面也不必再写。已落地:用户 / 字典(形状 3),菜单 / 机构 / 通知 / 回收站 / 任务监控(形状 2、4)。
 

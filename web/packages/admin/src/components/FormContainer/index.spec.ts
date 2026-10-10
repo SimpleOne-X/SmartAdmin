@@ -151,3 +151,33 @@ describe('FormContainer 形态', () => {
     expect(document.body.querySelector('.n-modal')).toBeNull()
   })
 })
+
+describe('FormContainer 窄档弹窗底栏固定', () => {
+  const origWidth = window.innerWidth
+  afterEach(() => setWidth(origWidth))
+
+  it('窄档的非全屏弹窗带 fixed-foot 类(卡片限高、正文自己滚)', async () => {
+    setWidth(500)
+    mount({})
+    await nextTick()
+    const card = document.body.querySelector('.n-card.n-modal')!
+    expect(card.classList.contains('smart-form--fixed-foot')).toBe(true)
+    expect(card.classList.contains('smart-form--fullscreen')).toBe(false)
+  })
+
+  it('宽 / 中档不加,保持 naive 默认', async () => {
+    setWidth(1200)
+    mount({})
+    await nextTick()
+    expect(document.body.querySelector('.smart-form--fixed-foot')).toBeNull()
+  })
+
+  it('全屏态自带这套,不再叠 fixed-foot', async () => {
+    setWidth(500)
+    mount({ fullscreen: true })
+    await nextTick()
+    const card = document.body.querySelector('.n-card.n-modal')!
+    expect(card.classList.contains('smart-form--fullscreen')).toBe(true)
+    expect(card.classList.contains('smart-form--fixed-foot')).toBe(false)
+  })
+})

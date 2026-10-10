@@ -431,7 +431,8 @@ watch(
   padding: 0 2px 2px;
 }
 /* narrow:整页自然滚动,不再锁一屏高度。满屏列表页的 .page-view 在 layout.css 里被补成 height:100%,
-   这里放回自动高度,内容多长页面就多长、由 .page 滚动。 */
+   这里放回自动高度,内容多长页面就多长、由 .page 滚动。
+   例外在 layout.css ①′:页里还有表格形态的 fill-height 表(没有自然高度)时,那一页在窄档仍保持定高。 */
 .page.bp-narrow :deep(.page-view) {
   height: auto;
 }

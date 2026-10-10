@@ -23,17 +23,13 @@ vi.mock('vue-router', async importOriginal => ({
   useRoute: () => ({ path: '/spec', query: {} }),
 }))
 
-// 页面按内容区宽度决定是否把机构树收进抽屉;happy-dom 没有布局,宽度由用例直接设定(0 = 量不到,按宽屏渲染)。
-const layout = vi.hoisted(() => ({ width: { value: 0 } }))
-vi.mock('@vueuse/core', async importOriginal => {
-  const { ref } = await import('vue')
-  const width = ref(0)
-  layout.width = width
-  return {
-    ...(await importOriginal<typeof import('@vueuse/core')>()),
-    useElementSize: () => ({ width, height: ref(0) }),
-  }
-})
+// 页面按壳层内容区宽度决定是否把机构树收进抽屉(useSidePanel);壳层之外它退回视口宽度,
+// happy-dom 没有布局,所以由用例直接改 window.innerWidth 来切档。
+const WIDE = window.innerWidth
+function setWidth(w: number) {
+  Object.defineProperty(window, 'innerWidth', { value: w, configurable: true })
+  window.dispatchEvent(new Event('resize'))
+}
 
 vi.mock('#/api', () => ({
   ApiError: class ApiError extends Error {},
@@ -183,7 +179,7 @@ beforeEach(() => {
   warnings = []
   for (const spy of Object.values(spies)) spy.mockReset()
   spies.orgList.mockResolvedValue([])
-  layout.width.value = 0
+  setWidth(WIDE)
 })
 
 afterEach(() => {
@@ -347,7 +343,7 @@ describe('用户页 机构分组栏', () => {
   })
 
   it('窄屏机构树进抽屉:抽屉里没有分组小标题与「收起」按钮,只留「展开全部」', async () => {
-    layout.width.value = 800
+    setWidth(800)
     spies.orgList.mockResolvedValue(THREE_LEVELS)
     await mount([])
     expect(q('.side-filter')).toBeNull()
