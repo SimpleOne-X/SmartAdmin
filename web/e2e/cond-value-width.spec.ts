@@ -4,11 +4,10 @@ import { ADMIN_ACCOUNT, ADMIN_PASSWORD, SYSTEM_APP, enterApp, login } from './he
 /**
  * 条件搜索栏的「值」输入框有宽度上限,不随窗口 / 分辨率无限变长。
  *
- * smart-naive-table 的条件构造器一行是 [字段 136][比较符 112][值 flex:1][»][查询][重置],值输入框只设了
- * `flex: 1 1 100px` 与 min-width,没有 max-width,于是它吃掉所有剩余宽度:
- *   - 中档(表格卡片 600–1279):条件栏独占第二行,值 = 卡片宽 - 约 502,1279 宽时能到 777px;
- *   - 宽档(卡片 ≥ 1280):条件栏只占半行,值 = 卡片宽 / 2 - 约 503,屏越大越长。
- * 上限写在 styles/table.css(.smart-table-cond__main .smart-table-filter-value 的 max-width),下面的 MAX_VALUE_WIDTH 与它同值。
+ * 条件构造器一行是 [字段 136][比较符 112][值 flex:1][»][查询][重置],值输入框吃掉一行里的剩余宽度,
+ * 上限由 smart-naive-table 给:.smart-table-cond__main .smart-table-filter-value 的
+ * max-width: var(--smart-table-cond-value-max-width, 320px)。SmartAdmin 不改这个变量,
+ * 下面的 MAX_VALUE_WIDTH 与库的默认值同值,库调整默认值时同步改。
  *
  * 窄档(卡片 < 600)是另一套结构:输入框 + 「筛选」按钮,输入框铺满整行,不在限宽范围内,这里一并锁住。
  *
@@ -17,7 +16,7 @@ import { ADMIN_ACCOUNT, ADMIN_PASSWORD, SYSTEM_APP, enterApp, login } from './he
  * 晚于视口变化,不等读数追上就量,会把上一档的布局当成当前的。
  */
 
-/** 与 styles/table.css 里值输入框的 max-width 同值。 */
+/** 与库给值输入框的默认上限(--smart-table-cond-value-max-width 的缺省值)同值。 */
 const MAX_VALUE_WIDTH = 320
 /** 库给值输入框的下限(.smart-table-cond__main .smart-table-filter-value 的 min-width)。 */
 const MIN_VALUE_WIDTH = 100

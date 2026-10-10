@@ -97,63 +97,6 @@
   height: var(--control-h, 30px);
 }
 
-/* 条件搜索栏的值输入框限宽。库只给它 flex: 1 1 100px 和 min-width,没有上限,于是它吃掉一行里所有剩余宽度:
-   中档(表格卡片 600-1279)条件栏独占整行,值 = 卡片宽 - 约 502,1279 宽时 777px;
-   宽档(≥ 1280)条件栏只占半行,值 = 卡片宽 / 2 - 约 503,屏越大越长。
-   字段 136 + 比较符 112 之后,值给到 320 足够放账号 / 手机号 / 日期 / 多值标签,
-   再长只是把「查询」「重置」推到老远,输入框看着像一条横幅。库在宽档自然给到的宽度(用户管理页 2048 宽视口下 263)在上限之内,不受影响。
-   选择器限定在 .smart-table-cond__main(宽档 / 中档的一行):窄档是「输入框 + 筛选」的另一套结构,
-   输入框铺满整行(.smart-table-cond__narrow-input),更多条件弹层 / 抽屉里的值控件也不在 __main 里面,都不动。 */
-.smart-table-cond__main .smart-table-filter-value {
-  max-width: 320px;
-}
-
-/* 条件搜索栏所在的工具栏(宽档与中档,表格卡片 ≥ 600)按可用宽度自适应:放得下就和右侧操作区同一行对齐,放不下才折行。
-   库的这两档都不看宽度够不够:中档写死两行(操作区在上、条件栏在下),值输入框限宽后条件栏不再撑满整行,
-   第一行左边空着一大片,搜索与工具栏就看着没对齐;宽档是左右两列等分,头部有内容(如收起机构栏后的恢复按钮)时
-   条件栏那半列还要再分走一块,值输入框会被挤到一百多像素,甚至顶到 100px 的下限。
-   这里统一改成 flex 换行:条件栏以「值输入框至少 200px」为基准宽(值以外的部分约 468,再加 200 ≈ 670),
-   同一行放得下就并排,条件栏吃掉头部与操作区之外的全部宽度(值输入框由上面的 max-width 封顶);
-   放不下就不硬挤,后换出来的那一行由 wrap-reverse 放到上面,保持原来「操作区在上、条件栏在下」的次序。
-   窄档是另一套结构,不动。选择器多叠一层 .smart-table:库的同类规则带 scoped 属性,同特异度时先后顺序说了算。 */
-.smart-table
-  .smart-table-toolbar.smart-table-toolbar--cond:is(
-    .smart-table-toolbar--mid,
-    .smart-table-toolbar--wide
-  ) {
-  display: flex;
-  flex-flow: row wrap-reverse;
-  align-items: center;
-  gap: 10px 12px;
-}
-
-/* 库只在中档 / 窄档把 main 摊平成网格项,宽档的 main 是一个自带 gap 的 flex 容器:一并摊平,
-   头部、条件栏、操作区才是同一层的 flex 项。 */
-.smart-table
-  .smart-table-toolbar--cond:is(.smart-table-toolbar--mid, .smart-table-toolbar--wide)
-  .smart-table-toolbar-main--cond {
-  display: contents;
-}
-
-.smart-table
-  .smart-table-toolbar--cond:is(.smart-table-toolbar--mid, .smart-table-toolbar--wide)
-  .smart-table-toolbar-cond {
-  flex: 1 1 670px;
-  min-width: 0;
-}
-
-.smart-table
-  .smart-table-toolbar--cond:is(.smart-table-toolbar--mid, .smart-table-toolbar--wide)
-  .smart-table-toolbar-right {
-  margin-left: auto;
-}
-
-/* 头部(#toolbar 插槽、标题)没有内容时不占位:空元素也会吃一份宽 / 中档的 12px 间距,
-   条件栏的左缘就比下面的表格缩进 12px。有内容(如收起机构栏后的恢复按钮)时照常排在条件栏左边。 */
-.smart-table-toolbar--cond .smart-table-toolbar-head:empty {
-  display: none;
-}
-
 /* SmartTable 操作列:清除最后一列 n-space 的 gap,否则操作按钮间距过大。*/
 .n-data-table .n-data-table-td--last-col .n-space {
   gap: 0 !important;
