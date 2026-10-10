@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, filterTree, collectSubtreeIds, expandableIds } from './tree'
+import { buildTree, filterTree, collectSubtreeIds, expandableIds, flattenTree } from './tree'
 
 describe('buildTree', () => {
   it('两层挂载 + parentId 指向不存在的父时孤儿兜底当根不丢数据', () => {
@@ -47,6 +47,41 @@ describe('filterTree', () => {
     // dirMatch 本身命中 → 原对象引用,整棵子树(含 leaf)零拷贝带出
     expect(result[0]!.children![0]!.children![0]).toBe(dirMatch)
     expect(result[0]!.children![0]!.children![0]!.children).toBe(dirMatch.children)
+  })
+})
+
+describe('flattenTree', () => {
+  it('深度优先平铺:父在前、子紧随其后,带 depth,children 置空', () => {
+    const tree = buildTree([
+      { id: 1, parentId: 0 },
+      { id: 2, parentId: 1 },
+      { id: 3, parentId: 2 },
+      { id: 4, parentId: 1 },
+      { id: 5, parentId: 0 },
+    ])
+    const rows = flattenTree(tree)
+    expect(rows.map(r => [r.id, r.depth])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 2],
+      [4, 1],
+      [5, 0],
+    ])
+    expect(rows.every(r => r.children?.length === 0)).toBe(true)
+  })
+
+  it('不改入参:原树节点仍带 children,也不被写上 depth', () => {
+    const tree = buildTree([
+      { id: 1, parentId: 0 },
+      { id: 2, parentId: 1 },
+    ])
+    flattenTree(tree)
+    expect(tree[0]!.children).toHaveLength(1)
+    expect('depth' in tree[0]!).toBe(false)
+  })
+
+  it('空树得空数组', () => {
+    expect(flattenTree([])).toEqual([])
   })
 })
 

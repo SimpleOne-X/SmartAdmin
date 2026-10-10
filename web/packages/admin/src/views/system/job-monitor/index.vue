@@ -24,6 +24,9 @@ const message = useMessage()
 const { bp, width: pw } = useShellBreakpoint()
 const narrow = computed(() => bp.value === 'narrow')
 const statCols = computed(() => (pw.value < 520 ? 1 : pw.value < 1000 ? 2 : 4))
+// 窄档必须显式给单列:网格默认的 auto 列会被表格的最小内容宽撑到 600,而库判卡片的条件是表格根宽 < 600,
+// 于是表格永远不换成卡片、页面横向溢出,还自己维持住这个状态。
+const NARROW_TABLES_STYLE = { gridTemplateColumns: 'minmax(0, 1fr)' }
 const tablesStyle = computed(() => {
   const stacked = pw.value < 1000
   const basis = stacked ? 488 : 240
@@ -212,7 +215,7 @@ const nodeColumns: SmartTableColumn<JobNodeItem>[] = [
     <div
       class="job-tables"
       :class="{ 'fill-main': !narrow }"
-      :style="narrow ? undefined : tablesStyle"
+      :style="narrow ? NARROW_TABLES_STYLE : tablesStyle"
     >
       <!-- 两张表都是 SmartTable 静态数据模式;不放表名(设计:表格工具栏没有标题),列头已能分辨。
            窄档(内容区 < 600)整页自然滚动,卡片列表由 card-on-narrow 内置。

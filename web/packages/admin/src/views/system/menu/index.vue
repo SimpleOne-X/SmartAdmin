@@ -21,13 +21,15 @@ import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import ButtonManager from './components/ButtonManager.vue'
 import MenuFormModal from './components/MenuFormModal.vue'
 import { useConfirm } from '#/composables/useConfirm'
+import { useShellBreakpoint } from '#/composables/useShellBreakpoint'
 import { buildRoutesForModule } from '#/composables/useAuthMenu'
 import { useAuthStore } from '#/stores/auth'
 import { menuApi, moduleApi } from '#/api'
 import { translateError } from '#/utils/error'
 import { SEARCH_ACTIONS, deriveHeaderFilters } from '#/utils/tableFilter'
 import { TABLE_MIN_ROW_HEIGHT, TABLE_TOOLBAR } from '#/utils/tableToolbar'
-import { expandableIds } from '#/utils/tree'
+import { expandableIds, flattenTree } from '#/utils/tree'
+import { indentByDepth } from '#/utils/treeCard'
 import { filterTreeByParams, hasTreeCondition, type TreeSearchFields } from '#/utils/treeFilter'
 import { MenuType, type MenuTreeNode, splitPermission, toMenuInput } from '#/types/menu'
 import type { ModuleRow, PermissionRouteItem } from '#/types/api'
@@ -189,12 +191,19 @@ const SEARCH_FIELDS: TreeSearchFields<MenuTreeNode> = {
 // 每次取数结果是否带搜索条件:挂在结果数组上,@loaded 时按数组引用取回。
 // 不用「最近一次 fetcher 调用的参数」是因为库会丢弃过期响应,@loaded 对应的未必是最后一次调用。
 const searchedResults = new WeakMap<object, boolean>()
+// 窄档(整页自然滚动)表格是卡片列表,库的卡片模式不渲染 children:取数器把整棵树摊成一列带 depth 的行,
+// 标题按 depth 缩进。此时没有折叠态可言(每个节点一张卡),工具栏的「展开 / 折叠全部」也就不显示。
+const { bp } = useShellBreakpoint()
+const narrow = computed(() => bp.value === 'narrow')
 const treeFetcher: SmartTableFetcher<MenuTreeNode> = async params => {
   await load()
-  const items = filterTreeByParams(filteredTree.value, params, SEARCH_FIELDS)
+  const matched = filterTreeByParams(filteredTree.value, params, SEARCH_FIELDS)
+  const items = narrow.value ? flattenTree(matched) : matched
   searchedResults.set(items, hasTreeCondition(params, SEARCH_FIELDS))
   return { items, total: items.length }
 }
+// 宽窄档切换(旋转屏幕、拖动窗口)时行的形状变了,重取一遍
+watch(narrow, () => reload())
 
 // 展开受控:一旦传了 expanded-row-keys,naive 就以它为准(default-expand-all 会被初始值直接覆盖)。
 // 初值留空 = 进来全折叠:先给一屏顶级目录的骨架,要看哪一支自己点开;
@@ -303,6 +312,7 @@ const columns: SmartTableColumn<MenuTreeNode>[] = [
     align: 'center',
     fixed: 'left',
     hideInSetting: true, // 结构性列,不进列设置
+    card: false, // 窄档卡片以标题为首,层级号不进卡片(默认会顶替标题成为卡片首行)
     render: r => {
       const no = rowNoById.value.get(r.id)
       if (!no) return null
@@ -326,13 +336,16 @@ const columns: SmartTableColumn<MenuTreeNode>[] = [
     fixed: 'left', // 横向滚动时不能丢失「这是哪一行」
     render: r =>
       // inline:必须行内 —— naive 的展开箭头是 inline-flex,默认块级 NSpace 会被挤到第二行。
-      h(NSpace, { inline: true, align: 'center', size: 6, wrapItem: false }, () => [
-        translateMenuTitle(r.title, r.path || undefined),
-        // 「隐藏」是罕见状态(种子里的目录/页面全是显示),只在为真时才占视觉 —— 省掉一整列同一个词。
-        r.visible
-          ? null
-          : h(NTag, { size: 'tiny', bordered: false, type: 'warning' }, () => t('common.hidden')),
-      ]),
+      indentByDepth(
+        r,
+        h(NSpace, { inline: true, align: 'center', size: 6, wrapItem: false }, () => [
+          translateMenuTitle(r.title, r.path || undefined),
+          // 「隐藏」是罕见状态(种子里的目录/页面全是显示),只在为真时才占视觉 —— 省掉一整列同一个词。
+          r.visible
+            ? null
+            : h(NTag, { size: 'tiny', bordered: false, type: 'warning' }, () => t('common.hidden')),
+        ]),
+      ),
   },
   // 图标独占一列:留在标题列会和树形展开箭头 + 缩进挤在一起撑破首列换行。
   {
@@ -516,6 +529,7 @@ deriveHeaderFilters(columns)
       :indent="26"
       fill-height
       :min-row-height="TABLE_MIN_ROW_HEIGHT"
+      card-on-narrow
       :render-expand-icon="renderExpandIcon"
       :expanded-row-keys="expandedKeys"
       @update:expanded-row-keys="(keys: number[]) => (expandedKeys = keys)"
@@ -531,7 +545,7 @@ deriveHeaderFilters(columns)
         />
       </template>
       <template #toolbar-right>
-        <n-button secondary @click="toggleExpandAll">
+        <n-button v-if="!narrow" secondary @click="toggleExpandAll">
           <template #icon>
             <AppIcon
               :icon="allExpanded ? 'ph:arrows-in-line-vertical' : 'ph:arrows-out-line-vertical'"

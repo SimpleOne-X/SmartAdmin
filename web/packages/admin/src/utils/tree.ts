@@ -57,6 +57,21 @@ export function expandableIds<T extends { id: number; children?: T[] }>(nodes: T
   return ids
 }
 
+/**
+ * 树 → 深度优先平铺行(父在前、子紧随其后),每行带 depth(根 = 0),children 置空。
+ * 给窄档卡片列表用:smart-naive-table 的卡片模式只画传入的这一层行,不认 children,
+ * 树表在手机上要想看到子节点,就得由页面自己把整棵树摊成一列。行是浅拷贝,不改入参。
+ */
+export function flattenTree<T extends { children?: T[] }>(
+  nodes: T[],
+  depth = 0,
+): Array<T & { depth: number }> {
+  return nodes.flatMap(node => [
+    { ...node, children: [], depth } as T & { depth: number },
+    ...flattenTree(node.children ?? [], depth + 1),
+  ])
+}
+
 /** 收集 rootId 及其全部后代 id(平铺数组上按 parentId 迭代到不动点)。编辑机构选上级时剪自身子树防成环。 */
 export function collectSubtreeIds<T extends { id: number; parentId: number }>(
   flat: T[],

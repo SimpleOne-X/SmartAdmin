@@ -444,6 +444,14 @@
   min-height: 0;
 }
 
+/* 壳层窄档整页自然滚动(layouts/default.vue 把 .page-view 放回自动高度),容器没有定高可分:
+   flex-basis 0 会把每一栏压到各自的 min-height,卡片列表被关在一个小框里再滚。
+   窄档各栏回到按内容分,高度由内容撑开、由 .page 滚动。只处理上下分栏;左右分栏(--row)的窄档形态由用它的页面自己定。 */
+.bp-narrow .fill-split:not(.fill-split--row) > .fill-main,
+.bp-narrow .fill-split:not(.fill-split--row) > .smart-table {
+  flex: 0 0 auto;
+}
+
 /* ⑩ 链中间夹了 <n-spin>:它的容器层和内容层默认是 block,高度传不下去。
       给 <n-spin> 加 class="fill-pass" 即可 —— class 落在 .n-spin-container 上,
       .n-spin-content 是它的直接子元素,一条规则盖住两层。
