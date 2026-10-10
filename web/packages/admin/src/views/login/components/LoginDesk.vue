@@ -440,17 +440,22 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   }
 }
 
-/* 减少动效:全局规则已把时长压到近零,这里再清掉延迟(否则 both 的起始态会把内容藏到延迟结束)并取消视差与漂移 */
+/* 减少动效:全局规则已把时长压到近零,这里再清掉延迟(否则 both 的起始态会把内容藏到延迟结束)并取消色场漂移。
+   指针视差与柔光不跟随这个偏好:Windows 关了「动画效果」、远程桌面、省电模式下浏览器都会报 reduce,
+   而它们是这页唯一的鼠标反馈。全局规则会把它们的 transition 压成 0.01ms(位移变瞬跳),
+   所以把缓动时长还回去;卡片的颜色 / 边框 / 阴影三项仍按全局规则保持瞬时。 */
 @media (prefers-reduced-motion: reduce) {
   .desk i {
     animation: none !important;
   }
-  .desk,
+  .desk {
+    transition-duration: 1.2s !important;
+  }
   .desk-card {
-    translate: none;
+    transition-duration: 0.45s, 0.01ms, 0.01ms, 0.01ms !important;
   }
   .desk-card::after {
-    display: none;
+    transition-duration: 0.5s !important;
   }
   .login :deep(*),
   .login .desk-card,

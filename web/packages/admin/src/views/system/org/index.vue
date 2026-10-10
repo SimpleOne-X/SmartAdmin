@@ -2,7 +2,7 @@
 // 机构管理 = 树表:SmartTable 远程模式(fetcher)+ children 树模式(无分页)。
 // org list 平铺 → buildTree 拼 children;上级机构用 OrgTreeSelect(剪自身子树防成环);
 // 无独立启停端点,StatusSwitch 走全量 update;删除有子机构后端拒,前端照调由 translateError 弹码。
-import { computed, h, reactive, ref, shallowRef } from 'vue'
+import { computed, h, reactive, ref, shallowRef, watch } from 'vue'
 import {
   NButton,
   NSpace,
@@ -33,12 +33,14 @@ import FormContainer from '#/components/FormContainer/index.vue'
 import OrgTreeSelect from '#/components/OrgTreeSelect/index.vue'
 import StatusSwitch from '#/components/StatusSwitch/index.vue'
 import { useConfirm } from '#/composables/useConfirm'
+import { useShellBreakpoint } from '#/composables/useShellBreakpoint'
 import { orgApi } from '#/api'
 import { useAuthStore } from '#/stores/auth'
 import { translateError } from '#/utils/error'
 import { SEARCH_ACTIONS, deriveHeaderFilters } from '#/utils/tableFilter'
 import { TABLE_MIN_ROW_HEIGHT, TABLE_TOOLBAR } from '#/utils/tableToolbar'
-import { buildTree, expandableIds, type Tree } from '#/utils/tree'
+import { buildTree, expandableIds, flattenTree, type Tree } from '#/utils/tree'
+import { indentByDepth } from '#/utils/treeCard'
 import { filterTreeByParams, type TreeSearchFields } from '#/utils/treeFilter'
 import type { OrgInput, SysOrg } from '#/types/api'
 
@@ -76,11 +78,18 @@ const SEARCH_FIELDS: TreeSearchFields<Tree<SysOrg>> = {
   name: n => n.name,
   code: n => n.code,
 }
+// 窄档(整页自然滚动)表格是卡片列表,库的卡片模式不渲染 children:取数器把整棵树摊成一列带 depth 的行,
+// 标题按 depth 缩进。此时没有折叠态可言(每个节点一张卡),工具栏的「展开 / 折叠全部」也就不显示。
+const { bp } = useShellBreakpoint()
+const narrow = computed(() => bp.value === 'narrow')
 const treeFetcher: SmartTableFetcher<Tree<SysOrg>> = async params => {
   await load()
-  const items = filterTreeByParams(tree.value, params, SEARCH_FIELDS)
+  const matched = filterTreeByParams(tree.value, params, SEARCH_FIELDS)
+  const items = narrow.value ? flattenTree(matched) : matched
   return { items, total: items.length }
 }
+// 宽窄档切换(旋转屏幕、拖动窗口)时行的形状变了,重取一遍
+watch(narrow, () => reload())
 
 // 展开受控:一旦传了 expanded-row-keys,naive 就以它为准,default-expand-all 会被初始值直接覆盖成"全折叠",
 // 所以"默认全展开"得自己播种。每次取数完成(首次进入、搜索、清除条件、增删改后重拉)都按结果重算,
@@ -211,6 +220,7 @@ const columns: SmartTableColumn<Tree<SysOrg>>[] = [
     width: 260,
     fixed: 'left',
     ellipsis: { tooltip: true },
+    render: r => indentByDepth(r, r.name),
     search: { actions: SEARCH_ACTIONS.fuzzy },
   },
   {
@@ -316,7 +326,7 @@ deriveHeaderFilters(columns)
   <div class="view fill-page">
     <!-- expanded-row-keys / update:expanded-row-keys 不是 SmartTable 的 prop —— 它 inheritAttrs:false + v-bind="attrs",
          未声明的 attr 原样透传给内层 n-data-table(:loading 走的也是这条路)。
-         card-on-narrow:卡片宽 < 600 换成卡片列表(树的缩进与展开状态库照旧带上,expanded-row-keys 照常生效)。 -->
+         card-on-narrow:卡片宽 < 600 换成卡片列表。库的卡片模式不渲染 children,所以窄档由 treeFetcher 把整棵树摊平(带 depth)。 -->
     <SmartTable
       ref="tableRef"
       :columns="columns"
@@ -335,7 +345,7 @@ deriveHeaderFilters(columns)
       @loaded="onLoaded"
     >
       <template #toolbar-right>
-        <n-button secondary @click="toggleExpandAll">
+        <n-button v-if="!narrow" secondary @click="toggleExpandAll">
           <template #icon>
             <AppIcon
               :icon="allExpanded ? 'ph:arrows-in-line-vertical' : 'ph:arrows-out-line-vertical'"

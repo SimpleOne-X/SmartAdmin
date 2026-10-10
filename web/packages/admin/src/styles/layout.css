@@ -16,7 +16,24 @@
   border-radius: var(--radius-lg, 14px);
   background: var(--bg-card);
   box-shadow: var(--glass-shadow-soft);
-  transition: flex-basis var(--transition-base, 0.2s ease);
+  /* 收起时宽度、间距、内边距一起过渡到 0;overflow 兜住过渡途中被挤窄的内容 */
+  overflow: hidden;
+  transition:
+    flex-basis 0.26s var(--ease),
+    margin-right 0.26s var(--ease),
+    padding 0.26s var(--ease),
+    opacity var(--transition-base, 0.2s ease);
+}
+
+/* 向左收起:宽度归零、淡出;右侧 8px 的 gap 由负 margin 抵掉,表格才占得满整行。
+   退出 Tab 顺序与读屏由页面给 aside 写 inert,这里只管视觉。 */
+.side-filter.is-hidden {
+  flex-basis: 0;
+  margin-right: calc(-1 * var(--gap-card));
+  padding-inline: 0;
+  opacity: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .side-filter__head {
@@ -28,14 +45,73 @@
   padding-left: 6px;
 }
 
-/* 面板不放标题:紧挨着的第一行就是「全部分类」,再写一遍分类名是重复。
-   头部只剩操作按钮,故靠 margin-left 顶到右边。 */
+/* 分组名:macOS 侧栏分组头的样子,小号灰色半粗体。说的是「这一组是什么」,和紧挨着的「全部」行不重复;
+   放在抽屉里时标题栏已有分组名,页面就不渲染它。 */
+.side-filter__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--font-size-xs, 13px);
+  font-weight: var(--font-weight-semibold, 600);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 操作按钮靠右;没有分组名(抽屉)时靠 margin-left 顶到右边。 */
 .side-filter__actions {
   display: flex;
   flex: none;
   margin-left: auto;
   align-items: center;
   gap: 2px;
+}
+
+/* 头部图标按钮(macOS 工具栏式):平时只有一个灰色字形,悬停才出底色,不画圆形描边。
+   24px 是桌面指针的点击面,触屏的抽屉里由页面放大。 */
+.side-filter__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+.side-filter__btn:hover {
+  background: var(--hover);
+  color: var(--text-1);
+}
+
+.side-filter__btn:active {
+  background: var(--fill);
+}
+
+.side-filter__btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.side-filter__btn:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+/* 展开全部 ↔ 折叠到一级:同一个双箭头字形转 180°,不换图标 */
+.side-filter__toggle svg {
+  transition: transform 0.24s var(--ease);
+}
+
+.side-filter__toggle.is-flipped svg {
+  transform: rotate(180deg);
 }
 
 /* 滚动区:面板里除头部与搜索框以外的全部内容 */
@@ -442,6 +518,14 @@
 .fill-split > .smart-table {
   flex: 1 1 0;
   min-height: 0;
+}
+
+/* 壳层窄档整页自然滚动(layouts/default.vue 把 .page-view 放回自动高度),容器没有定高可分:
+   flex-basis 0 会把每一栏压到各自的 min-height,卡片列表被关在一个小框里再滚。
+   窄档各栏回到按内容分,高度由内容撑开、由 .page 滚动。只处理上下分栏;左右分栏(--row)的窄档形态由用它的页面自己定。 */
+.bp-narrow .fill-split:not(.fill-split--row) > .fill-main,
+.bp-narrow .fill-split:not(.fill-split--row) > .smart-table {
+  flex: 0 0 auto;
 }
 
 /* ⑩ 链中间夹了 <n-spin>:它的容器层和内容层默认是 block,高度传不下去。

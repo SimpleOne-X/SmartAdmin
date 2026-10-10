@@ -9,6 +9,7 @@ vi.mock('#/api', () => ({
     permissions: vi.fn(),
     profile: vi.fn(),
     setDefaultModule: vi.fn(),
+    menu: vi.fn(),
   },
 }))
 vi.mock('./useAuthMenu', () => ({ buildRoutesForModule: vi.fn() }))
@@ -23,18 +24,34 @@ vi.mock('#/router', () => ({
 }))
 
 import { personalApi } from '#/api'
+import { router } from '#/router'
 import { buildRoutesForModule } from './useAuthMenu'
 import { useModule } from './useModule'
 import { useAuthStore } from '#/stores/auth'
 import { useUserStore } from '#/stores/user'
+import { MenuType, type MenuNode } from '#/types/menu'
 
 const modulesMock = vi.mocked(personalApi.modules)
 const permissionsMock = vi.mocked(personalApi.permissions)
 const profileMock = vi.mocked(personalApi.profile)
+const menuMock = vi.mocked(personalApi.menu)
 const buildRoutesMock = vi.mocked(buildRoutesForModule)
 
 function mod(id: number, defaultRoute?: string): AppModule {
   return { id, code: `m${id}`, title: `M${id}`, sort: 0, defaultRoute }
+}
+function page(id: number, path: string): MenuNode {
+  return {
+    id,
+    parentId: 0,
+    type: MenuType.Menu,
+    title: `P${id}`,
+    path,
+    component: 'x/index',
+    sort: 0,
+    visible: true,
+    children: [],
+  }
 }
 function profile(overrides: Partial<UserProfile> = {}): UserProfile {
   return { id: 1, account: 'a', name: 'A', isSuperAdmin: false, avatar: null, ...overrides }
@@ -126,5 +143,98 @@ describe('useModule().enterInitial', () => {
     expect(auth.permissionsLoaded).toBe(false)
     expect(auth.permissionCodes).toEqual([])
     expect(auth.isSuperAdmin).toBe(false)
+  })
+})
+
+// 动态路由只注册当前应用的菜单,直接访问别的应用的页面地址会落到通配 404。
+// findOwnerModule 回答「这个地址是不是别的应用里的页面」,404 页据此提示并一键切过去。
+describe('useModule().findOwnerModule', () => {
+  function setup(current: number | null = 1) {
+    const auth = useAuthStore()
+    auth.modules = [mod(1), mod(2), mod(3)]
+    auth.currentModuleId = current
+    return auth
+  }
+
+  it('在其它应用的菜单里找到该路径 → 返回那个应用;当前应用不重复拉取', async () => {
+    setup(1)
+    menuMock.mockImplementation(async id =>
+      id === 2 ? [page(10, '/workbench')] : [page(11, '/other')],
+    )
+
+    const owner = await useModule().findOwnerModule('/workbench')
+
+    expect(owner?.id).toBe(2)
+    expect(menuMock).not.toHaveBeenCalledWith(1)
+  })
+
+  it('任何应用里都没有 → null', async () => {
+    setup(1)
+    menuMock.mockResolvedValue([page(10, '/other')])
+
+    expect(await useModule().findOwnerModule('/nope')).toBeNull()
+  })
+
+  it('末尾斜杠不影响比对(vue-router 非严格模式下 /a/ 与 /a 是同一条路由)', async () => {
+    setup(1)
+    menuMock.mockImplementation(async id => (id === 3 ? [page(10, '/workbench')] : []))
+
+    expect((await useModule().findOwnerModule('/workbench/'))?.id).toBe(3)
+  })
+
+  it('应用的 defaultRoute 命中就直接返回,不必拉任何菜单', async () => {
+    setup(1)
+    useAuthStore().modules = [mod(1), mod(2, '/workbench'), mod(3)]
+
+    const owner = await useModule().findOwnerModule('/workbench')
+
+    expect(owner?.id).toBe(2)
+    expect(menuMock).not.toHaveBeenCalled()
+  })
+
+  it('某个应用的菜单拉取失败不影响其它应用的结果', async () => {
+    setup(1)
+    menuMock.mockImplementation(async id => {
+      if (id === 2) throw new Error('boom')
+      return [page(10, '/workbench')]
+    })
+
+    expect((await useModule().findOwnerModule('/workbench'))?.id).toBe(3)
+  })
+
+  it('只有一个应用时没有"别的应用",不发请求', async () => {
+    const auth = useAuthStore()
+    auth.modules = [mod(1)]
+    auth.currentModuleId = 1
+
+    expect(await useModule().findOwnerModule('/workbench')).toBeNull()
+    expect(menuMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('useModule().switchModule', () => {
+  it('不带目标 → 落新应用首页(原行为)', async () => {
+    const auth = useAuthStore()
+    auth.modules = [mod(1), mod(2, '/home-2')]
+    buildRoutesMock.mockImplementation(async id => {
+      auth.currentModuleId = id
+    })
+
+    await useModule().switchModule(2)
+
+    expect(router.replace).toHaveBeenCalledWith('/home-2')
+  })
+
+  it('带目标 → 建好新应用路由后落到该地址,而不是首页', async () => {
+    const auth = useAuthStore()
+    auth.modules = [mod(1), mod(2, '/home-2')]
+    buildRoutesMock.mockImplementation(async id => {
+      auth.currentModuleId = id
+    })
+
+    await useModule().switchModule(2, '/workbench?tab=1')
+
+    expect(buildRoutesMock).toHaveBeenCalledWith(2)
+    expect(router.replace).toHaveBeenCalledWith('/workbench?tab=1')
   })
 })

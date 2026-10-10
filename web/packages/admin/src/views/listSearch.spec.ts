@@ -38,6 +38,12 @@ const MAXIMIZE_OFF_OK: Record<string, string> = {
   'views/system/dict/index.vue': '左侧窄栏的字典类型列表,放大后只剩一个窄列表,没有意义',
 }
 
+/** 整页定高(fill-height)却没有窄档去处的表格;这里登记确有理由的页面。 */
+const NARROW_FIXED_OK: Record<string, string> = {
+  'views/system/dict/index.vue':
+    '下栏字典项表只在宽档渲染(v-if="!narrow");窄档走底部抽屉里的卡片列表',
+}
+
 function vueFiles(dir: string): string[] {
   return readdirSync(dir).flatMap(name => {
     const full = path.join(dir, name)
@@ -144,6 +150,20 @@ describe('表格统一标准', () => {
     ).toEqual([])
   })
 
+  it('定高表格(fill-height)窄档要有去处:card-on-narrow,或 :fill-height 随窄档放掉', () => {
+    // 壳层窄档整页自然滚动、页面容器不定高;定高表格(虚拟滚动)拿不到高度,会塌成一个只露几行的小框。
+    // 窄档的表格必须已是卡片列表(自然高度),或页面自己在窄档把 fill-height 关掉。
+    const offenders = tables
+      .filter(x => /fill-height/.test(x.tag))
+      .filter(x => !/card-on-narrow/.test(x.tag) && !/:fill-height="!/.test(x.tag))
+      .filter(x => !(x.rel in NARROW_FIXED_OK))
+      .map(x => x.rel)
+    expect(
+      offenders,
+      '加 card-on-narrow;没有卡片形态的表,用 :fill-height="!narrow" 在窄档放掉定高',
+    ).toEqual([])
+  })
+
   it('每张分页表格都在 #pagination-prefix 里显示「共 N 条」(分页关掉的树表、嵌入弹窗的除外)', () => {
     const offenders = tables
       .filter(x => !/:pagination="false"/.test(x.tag))
@@ -169,7 +189,11 @@ describe('表格统一标准', () => {
 
   it('例外清单里的页面确实存在(防止改名后例外悄悄失效)', () => {
     const existing = new Set(files.map(f => f.rel))
-    const stale = [...EMBEDDED, ...Object.keys(LEFT_SLOT_OK)].filter(rel => !existing.has(rel))
+    const stale = [
+      ...EMBEDDED,
+      ...Object.keys(LEFT_SLOT_OK),
+      ...Object.keys(NARROW_FIXED_OK),
+    ].filter(rel => !existing.has(rel))
     expect(stale).toEqual([])
   })
 })

@@ -137,9 +137,11 @@ FormContainer 的 `:fullscreen="true" | 'auto'` 建在 `useCompactScreen` 上,�
 
 1. 模板顶层直接是 `<SmartTable>`:什么都不用加,自动满屏;
 2. 顶层是自己的外壳 div:加 `.fill-page`;主表不是直接子元素时,给「包住主表的那一层」加 `.fill-main`;
-3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter` / `.side-row` / `.side-tree`;
+3. 「左分组栏 + 右列表」:外壳加 `.side-page`(侧栏宽度按页覆盖 `--side-filter-width`),侧栏面板外观用 `.side-filter`(头部分组名 + `.side-filter__btn` 图标按钮,`.is-hidden` 向左收起)/ `.side-row` / `.side-tree`,约定见 `skills/create-page-variant/sidebar-user.md`;
 4. 页签页:`<n-tabs>` 加 `.fill-tabs`;
 5. 上下 / 左右分栏均分:容器加 `.fill-split`(横向加 `--row`),每栏加 `.fill-main`。
+
+**窄档(壳层内容区 < 600,含手机)整页自然滚动**:`layouts/default.vue` 把 `.page-view` 放回自动高度,`.fill-page` / `.fill-split` 没有定高可分。所以窄档的表格必须是自然高度的卡片列表(`card-on-narrow`);没有卡片形态的表,用 `:fill-height="!narrow"` 在窄档放掉定高(`useShellBreakpoint`,范例 `system/job-monitor`)。`.fill-split` 在窄档由 `layout.css` 退回按内容分栏。守卫:`views/listSearch.spec.ts` 查源码,`e2e/mobile-layout.spec.ts` 在 390 宽跑真实页面。
 
 链中间夹了 `<n-spin>` 给它加 `.fill-pass`;矮屏宁可让页面滚也别把表压扁时外壳再叠 `.fill-page--soft`。弹窗表单分节用 `.form-section` / `.form-section__title`(修饰 `--fieldset` / `--panel`),别在页面 scoped 里再画一遍标题。表格全局外观(斑马纹 / 列分隔 / 固定列实底 / 选中行 `.row-selected`)在 `styles/table.css`,页面也不必再写。已落地:用户 / 字典(形状 3),菜单 / 机构 / 通知 / 回收站 / 任务监控(形状 2、4)。
 

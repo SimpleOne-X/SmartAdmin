@@ -3,7 +3,7 @@
 // 超管行(isSuperAdmin)删除/停用置灰防自锁;启停走专用 setEnabled(非全量 update)。
 // 导入导出:ImportWizard 四步向导 + ExportColumnsModal 选列导出(带当前筛选)。
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { createReusableTemplate, useElementSize } from '@vueuse/core'
+import { createReusableTemplate, useElementSize, useStorage } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import {
   NButton,
@@ -49,7 +49,7 @@ import {
 import { TABLE_MIN_ROW_HEIGHT, TABLE_TOOLBAR } from '#/utils/tableToolbar'
 import TableTotal from '#/components/TableTotal/index.vue'
 import { triggerBlobDownload } from '#/utils/download'
-import { buildTree, expandableIds } from '#/utils/tree'
+import { buildTree, expandableIds, rootExpandableIds } from '#/utils/tree'
 import type { ExportColumnDef, SysOrg, UserItem } from '#/types/api'
 
 const { t } = useI18n()
@@ -93,8 +93,8 @@ const positionOptions = ref<{ label: string; value: number }[]>([])
 const roleOptions = ref<{ label: string; value: number }[]>([])
 const directorOptions = ref<{ label: string; value: number }[]>([])
 // 左侧机构树筛选:选中节点即按其机构过滤用户;params 深监听联动 SmartTable(回第 1 页重查)。
-// 面板交互对齐内核 layout.css 的 .side-filter 约定(机构管理页搜索/展开收起用的同一套):
-// 搜索走 NTree 自带 pattern/filter;展开受控,进页面全折叠,选中节点自动展开其祖先链。
+// 面板外观对齐内核 layout.css 的 .side-filter 约定:搜索走 NTree 自带 pattern/filter;
+// 展开受控,进页面只展开一级,选中节点自动展开其祖先链;整栏可向左收起。
 const orgFlat = ref<SysOrg[]>([])
 // 拉取期间给树位占位(见下方 n-spin),避免树从空白直接跳成展开好的一整棵——那一下比慢半拍更扎眼。
 const orgLoading = ref(true)
@@ -117,17 +117,30 @@ const { width: layoutWidth } = useElementSize(layoutRef)
 // 量到宽度前(0)按宽屏渲染,避免首帧闪一下抽屉模式
 const compact = computed(() => layoutWidth.value > 0 && layoutWidth.value < COMPACT_WIDTH)
 const orgDrawer = ref(false)
+// 宽屏下机构栏可向左收起,收起后表格占满整行;状态记在本浏览器里,下次进页面保持。窄屏走抽屉,不受它影响。
+const orgPanelHidden = useStorage('sa-user-org-panel-hidden', false)
 function pickOrg(id: number | null) {
   selectedOrgId.value = id
   orgDrawer.value = false
 }
-// 机构面板的内容(展开收起 / 搜索 / 「全部」/ 树)只写一份:宽屏放在 aside 里,窄屏放进抽屉。
-const [DefineOrgPanel, ReuseOrgPanel] = createReusableTemplate()
+// 工具栏最左的机构按钮:窄屏打开抽屉,宽屏收起时把机构栏请回来
+function openOrgPanel() {
+  if (compact.value) orgDrawer.value = true
+  else orgPanelHidden.value = false
+}
+// 机构面板的内容(分组头 / 搜索 / 「全部」/ 树)只写一份:宽屏放在 aside 里,窄屏放进抽屉。
+// drawer = 放在抽屉里:标题栏已写了「机构」,头部不再重复分组名,也没有「向左收起」。
+const [DefineOrgPanel, ReuseOrgPanel] = createReusableTemplate<{ drawer?: boolean }>()
 const selectedOrgName = computed(
   () => orgFlat.value.find(o => o.id === selectedOrgId.value)?.name ?? t('user.orgFilter'),
 )
 
+// 机构不多时一眼能看完,搜索框只是平白占一行;超过这个数才出现。
+const ORG_SEARCH_MIN = 15
+const orgSearchable = computed(() => orgFlat.value.length > ORG_SEARCH_MIN)
 const orgPattern = ref('')
+// 展开箭头:小号 chevron,展开时 naive 把它所在的容器转 90°;没有连接线,层级靠缩进。
+const renderOrgSwitcher = () => h(AppIcon, { icon: 'ph:caret-right', size: 12 })
 function filterOrg(input: string, node: TreeOption) {
   const kw = input.trim().toLowerCase()
   if (!kw) return true
@@ -137,16 +150,25 @@ function filterOrg(input: string, node: TreeOption) {
 
 const orgExpandedKeys = ref<number[]>([])
 const expandableOrgKeys = computed(() => expandableIds(orgTree.value))
+const firstLevelOrgKeys = computed(() => rootExpandableIds(orgTree.value))
 const allOrgExpanded = computed(
   () =>
     expandableOrgKeys.value.length > 0 &&
     orgExpandedKeys.value.length >= expandableOrgKeys.value.length,
 )
+// 没有比第一层更深的层级时,「全部展开」与「只展开一级」是同一个状态,切换按钮没有意义,不出现。
+const canToggleOrgDepth = computed(
+  () => expandableOrgKeys.value.length > firstLevelOrgKeys.value.length,
+)
+const orgToggleLabel = computed(() =>
+  allOrgExpanded.value ? t('user.collapseToFirstLevel') : t('common.expandAll'),
+)
+// 全部展开 ↔ 回到默认的只展开一级(而不是把根也收起:只有一个根的机构树会缩成一行)
 function toggleExpandAllOrg() {
-  orgExpandedKeys.value = allOrgExpanded.value ? [] : [...expandableOrgKeys.value]
+  orgExpandedKeys.value = allOrgExpanded.value
+    ? [...firstLevelOrgKeys.value]
+    : [...expandableOrgKeys.value]
 }
-// 受控展开:一旦传了 expanded-keys,naive 就以它为准,不会自己默认展开——进页面全展开得自己播种。
-watch(expandableOrgKeys, keys => (orgExpandedKeys.value = keys), { immediate: true })
 
 // 选中的机构可能藏在收起的父级里(典型:切换搜索结果后选中项被折叠的祖先挡住),把祖先链补进展开集。
 watch(selectedOrgId, id => {
@@ -182,6 +204,9 @@ onMounted(async () => {
   }
   try {
     orgFlat.value = await orgApi.list()
+    // 受控展开:一旦传了 expanded-keys,naive 就以它为准,不会自己默认展开——数据到位时自己播种「只展开一级」。
+    // 只在这一次播种,之后用户手动展开 / 收起的状态不会被覆盖。
+    orgExpandedKeys.value = [...firstLevelOrgKeys.value]
   } catch {
     // 静默:机构树是筛选辅助,拉取失败不打断列表
   } finally {
@@ -514,35 +539,43 @@ deriveHeaderFilters(columns)
 </script>
 
 <template>
-  <!-- 机构面板内容(展开收起 / 搜索 / 「全部」/ 树),只写一份:宽屏放进 aside,内容区 < 1000 时放进抽屉。 -->
-  <DefineOrgPanel>
+  <!-- 机构面板内容(分组头 / 搜索 / 「全部」/ 树),只写一份:宽屏放进 aside,内容区 < 1000 时放进抽屉。 -->
+  <DefineOrgPanel v-slot="{ drawer }">
     <div class="side-filter__head">
+      <span v-if="!drawer" class="side-filter__title">{{ t('user.orgFilter') }}</span>
       <div class="side-filter__actions">
-        <n-tooltip v-if="expandableOrgKeys.length">
+        <n-tooltip v-if="canToggleOrgDepth">
           <template #trigger>
-            <n-button
-              quaternary
-              circle
-              size="small"
-              :aria-label="allOrgExpanded ? t('common.collapseAll') : t('common.expandAll')"
+            <button
+              type="button"
+              class="side-filter__btn side-filter__toggle"
+              :class="{ 'is-flipped': allOrgExpanded }"
+              :aria-label="orgToggleLabel"
               @click="toggleExpandAllOrg"
             >
-              <template #icon>
-                <AppIcon
-                  :icon="
-                    allOrgExpanded ? 'ph:arrows-in-line-vertical' : 'ph:arrows-out-line-vertical'
-                  "
-                  :size="18"
-                />
-              </template>
-            </n-button>
+              <AppIcon icon="ph:caret-double-down" :size="14" />
+            </button>
           </template>
-          {{ allOrgExpanded ? t('common.collapseAll') : t('common.expandAll') }}
+          {{ orgToggleLabel }}
+        </n-tooltip>
+        <n-tooltip v-if="!drawer">
+          <template #trigger>
+            <button
+              type="button"
+              class="side-filter__btn side-filter__hide"
+              :aria-label="t('user.hideOrgPanel')"
+              @click="orgPanelHidden = true"
+            >
+              <AppIcon icon="ph:sidebar-simple" :size="16" />
+            </button>
+          </template>
+          {{ t('user.hideOrgPanel') }}
         </n-tooltip>
       </div>
     </div>
 
     <n-input
+      v-if="orgSearchable"
       v-model:value="orgPattern"
       size="small"
       clearable
@@ -568,7 +601,7 @@ deriveHeaderFilters(columns)
         class="side-tree"
         block-line
         selectable
-        show-line
+        :indent="16"
         key-field="id"
         label-field="name"
         children-field="children"
@@ -578,6 +611,7 @@ deriveHeaderFilters(columns)
         :show-irrelevant-nodes="false"
         :selected-keys="selectedOrgId == null ? [] : [selectedOrgId]"
         :expanded-keys="orgExpandedKeys"
+        :render-switcher-icon="renderOrgSwitcher"
         @update:selected-keys="onOrgSelect"
         @update:expanded-keys="keys => (orgExpandedKeys = keys as unknown as number[])"
       />
@@ -587,8 +621,14 @@ deriveHeaderFilters(columns)
   <!-- 「左分组栏 + 右列表」= styles/layout.css 里的形状 3:.side-page 负责 display/gap/拉伸/整屏高度。
        窄内容区不画 aside,表格独占整行,SmartTable 照样是 .side-page 的直接子元素,高度链不变。 -->
   <div ref="layoutRef" class="user-layout side-page">
-    <!-- 左侧机构树筛选:面板外观/交互对齐内核 .side-filter 约定(机构管理页搜索、展开收起同款) -->
-    <aside v-if="!compact" class="side-filter">
+    <!-- 左侧机构树筛选:面板外观对齐内核 .side-filter 约定。收起时留在 DOM 里(宽度过渡到 0 再淡出),
+         inert 让它退出 Tab 顺序与读屏。 -->
+    <aside
+      v-if="!compact"
+      class="side-filter"
+      :class="{ 'is-hidden': orgPanelHidden }"
+      :inert="orgPanelHidden || undefined"
+    >
       <ReuseOrgPanel />
     </aside>
 
@@ -612,10 +652,18 @@ deriveHeaderFilters(columns)
       <template #pagination-prefix="{ itemCount }">
         <TableTotal :count="itemCount" />
       </template>
-      <!-- 内容区 < 1000:机构树收进抽屉,工具栏最左出「机构」按钮(限定数据范围的控件,不是业务按钮,所以放在 #toolbar 左半) -->
-      <template v-if="compact" #toolbar>
-        <n-button secondary @click="orgDrawer = true">
-          <template #icon><AppIcon icon="ph:tree-structure" :size="16" /></template>
+      <!-- 内容区 < 1000 机构树收进抽屉,或宽屏下机构栏被收起:工具栏最左出「机构」按钮,显示当前筛选的机构名,
+           点它打开抽屉 / 请回机构栏(限定数据范围的控件,不是业务按钮,所以放在 #toolbar 左半) -->
+      <template v-if="compact || orgPanelHidden" #toolbar>
+        <n-button
+          class="org-trigger"
+          secondary
+          :title="compact ? undefined : t('user.showOrgPanel')"
+          @click="openOrgPanel"
+        >
+          <template #icon>
+            <AppIcon :icon="compact ? 'ph:tree-structure' : 'ph:sidebar-simple'" :size="16" />
+          </template>
           {{ selectedOrgName }}
         </n-button>
       </template>
@@ -645,7 +693,7 @@ deriveHeaderFilters(columns)
   <n-drawer v-model:show="orgDrawer" placement="left" width="min(300px, 88vw)">
     <n-drawer-content :title="t('user.orgFilter')" closable>
       <div class="org-drawer-body">
-        <ReuseOrgPanel />
+        <ReuseOrgPanel :drawer="true" />
       </div>
     </n-drawer-content>
   </n-drawer>
@@ -696,5 +744,11 @@ deriveHeaderFilters(columns)
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 抽屉在触屏上用:头部图标按钮放大到可点的尺寸 */
+.org-drawer-body .side-filter__btn {
+  width: 32px;
+  height: 32px;
 }
 </style>
