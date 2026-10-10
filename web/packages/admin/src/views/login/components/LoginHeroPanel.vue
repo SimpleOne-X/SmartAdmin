@@ -72,7 +72,7 @@ const headlineParts = computed(() => {
   align-items: center;
   gap: 13px;
   margin-bottom: 30px;
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--text-1);

@@ -90,7 +90,7 @@ const iconOnly = computed(() => props.collapsed || props.rail)
 }
 .brand-name {
   min-width: 0;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
