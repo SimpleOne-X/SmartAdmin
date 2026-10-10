@@ -45,6 +45,12 @@
 全屏样式(`.smart-form--fullscreen`)写在本组件的**非 scoped** `<style>` 里:弹层 teleport 到 body,
 scoped 编译出的 `data-v` 属性到不了那棵子树,写了等于没写 —— 这是「全屏样式不生效」最常见的原因。
 
+## 窄档弹窗的底栏
+
+窄档(壳层内容区 < 600)的**非全屏弹窗**,卡片限高在视口内(`max-height: calc(100dvh - 24px)`),正文自己滚,头和底栏不动——内容比视口高时「保存」不会随正文滚出屏外。样式类 `.smart-form--fixed-foot`,由组件按档位加,页面不用管。宽 / 中档保持 naive 默认(整张卡随遮罩层滚)。全屏态(`.smart-form--fullscreen`)自带同一套,不再叠加。
+
+内容层的选择器写成 `:is(.n-card-content, .n-card__content)`:naive-ui 2.45 输出的是 `.n-card-content`,`.n-card__content` 只在 `content-scrollable` 时作为滚动外层 `...__content-scrollbar` 的前缀出现,只写后者一条也命不中。
+
 ## Slots
 
 | Slot           | 说明                                              |
