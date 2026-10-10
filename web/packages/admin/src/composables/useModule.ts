@@ -6,7 +6,10 @@ import { useTabsStore } from '#/stores/tabs'
 import { useUserStore } from '#/stores/user'
 import { personalApi } from '#/api'
 import { buildRoutesForModule } from './useAuthMenu'
+import { menuHasPath, normalizeRoutePath } from './authMenuRoute'
+import { viewComponentPaths } from '#/router/viewRegistry'
 import { router } from '#/router'
+import type { AppModule, MenuNode } from '#/types/menu'
 
 type EnterResult = { chooser: true } | { chooser: false; moduleId: number }
 
@@ -78,10 +81,34 @@ export function useModule() {
     return { chooser: true }
   }
 
-  async function switchModule(moduleId: number): Promise<void> {
+  /** `target` 缺省落新应用自己的首页;给了就落到那个地址(跨应用深链:先切过去再打开它)。 */
+  async function switchModule(moduleId: number, target?: string): Promise<void> {
     await enter(moduleId)
     useTabsStore().clearTabs() // 切应用 → 标签归零(新应用路由已重建)
-    router.replace(auth.homePath) // 落到新应用自己的首页
+    router.replace(target ?? auth.homePath)
+  }
+
+  /**
+   * 用户有权进入的其它应用里,哪个注册了 `path` 这个页面;没有则 null。
+   * 动态路由只按当前应用的菜单注册,别的应用的页面地址会落到通配 404 —— 404 页靠它把
+   * 「地址不存在」和「页面属于别的应用」分开。只在命中 404 时才调,所以不预拉各应用的菜单。
+   * 某个应用的菜单拉取失败按「没有」处理:这是个提示,不该因它再报一层错。
+   */
+  async function findOwnerModule(path: string): Promise<AppModule | null> {
+    const target = normalizeRoutePath(path)
+    const others = auth.modules.filter(m => m.id !== auth.currentModuleId)
+    // defaultRoute 是现成的索引,命中就不必拉菜单
+    const byDefault = others.find(
+      m => m.defaultRoute && normalizeRoutePath(m.defaultRoute) === target,
+    )
+    if (byDefault) return byDefault
+
+    const viewKeys = new Set(viewComponentPaths())
+    const trees = await Promise.all(
+      others.map(m => personalApi.menu(m.id).catch(() => [] as MenuNode[])),
+    )
+    const hit = trees.findIndex(tree => menuHasPath(tree, target, viewKeys))
+    return hit < 0 ? null : others[hit]!
   }
 
   async function setDefault(moduleId: number): Promise<void> {
@@ -89,5 +116,5 @@ export function useModule() {
     auth.defaultModuleId = moduleId // 本地同步,选择页角标立刻转移,不必重拉 /personal/modules
   }
 
-  return { enter, enterInitial, switchModule, setDefault }
+  return { enter, enterInitial, switchModule, findOwnerModule, setDefault }
 }

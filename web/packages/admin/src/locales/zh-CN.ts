@@ -60,6 +60,9 @@ export default {
   notFound: {
     desc: '页面不存在',
     back: '返回工作台',
+    currentApp: '当前应用：{app}',
+    otherApp: '该页面属于「{app}」应用，不在当前应用里',
+    switchAndOpen: '切换到「{app}」并打开',
   },
   // 内容区渲染异常兜底(components/ErrorBoundary)
   errorBoundary: {

@@ -42,6 +42,9 @@ export default {
   notFound: {
     desc: 'Page not found',
     back: 'Back to workbench',
+    currentApp: 'Current app: {app}',
+    otherApp: 'This page belongs to the "{app}" app, not the one you are in',
+    switchAndOpen: 'Switch to "{app}" and open it',
   },
   // Content-area render fallback (components/ErrorBoundary)
   errorBoundary: {
