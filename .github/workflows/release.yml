@@ -1,5 +1,11 @@
-# 发版：推 v* tag 触发。verify 全绿才进 publish；publish 用 Trusted Publishing 发 nuget.org 与 npm（都是 GitHub OIDC
-# 换发布权限），仓库里不放任何 NuGet API key 或 npm token。两边都要先建好信任关系，都指向本文件：
+# 发版：合并进 main 的提交里前端版本号变了、且还没有对应的 v* tag，就自动发。
+#   detect（是不是发版）→ verify（全绿才继续）→ publish（Trusted Publishing 发 nuget.org 与 npm，都是 GitHub OIDC
+#   换发布权限，仓库里不放任何 NuGet API key 或 npm token）→ 最后一步才建 tag 与 GitHub Release。
+# tag 放最后建：publish 中途失败时没有 tag，修好外部配置后原样重跑就行（NuGet 带 --skip-duplicate，npm 先查版本）。
+# 版本没变的合并（文档、修复）detect 判成「不是发版」，verify 与 publish 整个跳过，所以普通合并永远不会发包。
+# 手动演练：Actions 里手动跑本 workflow（默认 dry_run），完整跑 verify，publish 只换 NuGet 临时 key、npm 只 --dry-run，
+# 不推包、不建 tag。npm 的 OIDC 在不真发布时无法验证，这一点演练证明不了。
+# 两边都要先建好信任关系，都指向本文件（两边只校验仓库与 workflow 文件名，不校验触发的分支或事件）：
 #   nuget.org 策略：Repository Owner=SimpleOne-X、Repository=SmartAdmin、Workflow File=release.yml（只填文件名）。
 #   npmjs.com 包 smart-admin-web 的 Trusted Publisher：GitHub Actions、SimpleOne-X / SmartAdmin / release.yml，
 #   Allowed actions 要勾上直接 npm publish（不只 stage publish）。
@@ -9,22 +15,79 @@ name: release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '演练：跑完整 verify，publish 只换 NuGet 临时 key 与 npm publish --dry-run，不推包、不建 tag / Release'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+
+# 永不取消正在进行的发布。同组最多一个在跑、一个在等，更晚的等待运行会顶掉更早的等待运行：
+# 发版运行期间若又有推送，被顶掉的发版运行用手动触发补跑。
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 env:
   DOTNET_NOLOGO: 1
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
+  # 这次推送是不是一次发版：版本号相对推送前变了、且还没有对应 tag。
+  # 手动触发：演练不看 tag；真发布只能从 main，且同样要求还没有 tag。
+  detect:
+    name: detect (is this a release?)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.d.outputs.release }}
+      version: ${{ steps.d.outputs.version }}
+      dry_run: ${{ steps.d.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Decide
+        id: d
+        env:
+          DRY: ${{ inputs.dry_run }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          ver=$(node -p "require('./web/packages/admin/package.json').version")
+          dry=false; [ "$DRY" = "true" ] && dry=true
+          tagged=false
+          git ls-remote --exit-code --tags origin "refs/tags/v$ver" > /dev/null 2>&1 && tagged=true
+          release=false
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$dry" = "true" ]; then
+              release=true
+            elif [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::真发布只能从 main 触发(当前 $GITHUB_REF);要演练请勾 dry_run"; exit 1
+            elif [ "$tagged" = "false" ]; then
+              release=true
+            fi
+          else
+            before_ver=$(git show "$BEFORE:web/packages/admin/package.json" 2>/dev/null \
+              | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || true)
+            if [ "$before_ver" != "$ver" ] && [ "$tagged" = "false" ]; then release=true; fi
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
+          echo "version=$ver tagged=$tagged dry_run=$dry release=$release"
+
   verify:
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
-      actions: read    # 查同一 SHA 的 ci run 结果（下面的 Reuse 步骤）
+      actions: read    # 查要发布的那个提交的 ci run 结果（下面的 CI gate 步骤）
     outputs:
       version: ${{ steps.ver.outputs.version }}
     services:
@@ -40,48 +103,49 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0
-      - name: Tag must sit on main
-        run: |
-          git fetch origin main --quiet
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
-            || { echo "::error::tag $GITHUB_REF_NAME is not on main"; exit 1; }
-      - name: Version from tag, cross-check CHANGELOG / web / site badge
+      - name: Cross-check version against CHANGELOG / web / site badge
         id: ver
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          ver="${{ needs.detect.outputs.version }}"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           grep -q "^## ${ver//./\\.} - " CHANGELOG.md \
             || { echo "::error::CHANGELOG.md has no '## $ver - <date>' section"; exit 1; }
-          admin_ver=$(node -p "require('./web/packages/admin/package.json').version")
-          [ "$admin_ver" = "$ver" ] \
-            || { echo "::error::web/packages/admin/package.json version is $admin_ver, tag is $ver"; exit 1; }
           web_ver=$(node -p "require('./web/package.json').version")
-          [ "$web_ver" = "$ver" ] || { echo "::error::web/package.json version is $web_ver, tag is $ver"; exit 1; }
+          [ "$web_ver" = "$ver" ] || { echo "::error::web/package.json version is $web_ver, release is $ver"; exit 1; }
           template_ver=$(node -p "require('./web/template/package.json').version")
           [ "$template_ver" = "$ver" ] \
-            || { echo "::error::web/template/package.json version is $template_ver, tag is $ver"; exit 1; }
+            || { echo "::error::web/template/package.json version is $template_ver, release is $ver"; exit 1; }
           # degit 出去的模板精确钉住同号的前端包：前端页面调的端点跟着后端版本走，浮动范围会装到比 NuGet 新的包
           template_dep=$(node -p "require('./web/template/package.json').dependencies['smart-admin-web']")
           [ "$template_dep" = "$ver" ] \
             || { echo "::error::web/template depends on smart-admin-web $template_dep, expected exactly $ver"; exit 1; }
           [ "$(grep -c "text: '$ver'" site/.vitepress/config.ts)" -eq 2 ] \
             || { echo "::error::site/.vitepress/config.ts nav badges are not both '$ver'"; exit 1; }
-      # 同一 SHA 的 ci 已把 backend (sqlite) 跑绿，这里就不重跑（构建一次、晋级发布，省 5 分钟）；查不到照旧全跑。
-      # 只认那个 job 本身 success：ci 有 changes 门控，run 成功不代表后端腿跑过。
-      - name: Reuse the green ci run for this commit
+      # 铁律：发出去的必须是 CI 已经跑绿的那一棵树。main 上不重跑 ci，所以认的是被合并进来的那个提交（第二父提交，即 PR 的 head）：
+      # 合并提交的树与它逐字节相同，才算「测过的就是发的」，且那个提交上要有 ci gate 成功的记录。
+      # 不是这种合并提交（比如手动演练时在分支上跑）就要求提交自己有绿的 ci gate；没有就不发，不是重测一遍了事。
+      # 同时顺带决定要不要重跑 SQLite 测试：只认 backend (sqlite) 这个 job 本身 success（ci 有 changes 门控，run 成功
+      # 不代表后端腿跑过），已经跑绿就不重跑（构建一次、晋级发布，省 5 分钟）。
+      - name: CI gate must be green for the tree being released
         id: ci
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          reuse=false
-          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[].databaseId'); do
-            if gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[] | select(.name == "backend (sqlite)") | .conclusion' | grep -qx success; then
-              echo "ci run $id already ran backend (sqlite) green for $GITHUB_SHA; skipping the test step"
-              reuse=true
-              break
-            fi
+          tested="$GITHUB_SHA"
+          if [ "$(git rev-list --parents -n1 "$GITHUB_SHA" | wc -w)" -eq 3 ] \
+             && [ "$(git rev-parse "$GITHUB_SHA^{tree}")" = "$(git rev-parse "$GITHUB_SHA^2^{tree}")" ]; then
+            tested="$(git rev-parse "$GITHUB_SHA^2")"
+            echo "merge commit with the same tree as its second parent; the tested commit is $tested"
+          fi
+          gate=false; sqlite=false
+          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$tested" --status success --json databaseId --jq '.[].databaseId'); do
+            jobs=$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"')
+            grep -qxF $'ci gate\tsuccess' <<<"$jobs" && gate=true
+            grep -qxF $'backend (sqlite)\tsuccess' <<<"$jobs" && sqlite=true
           done
-          echo "reuse=$reuse" >> "$GITHUB_OUTPUT"
+          [ "$gate" = true ] || { echo "::error::ci gate has no successful run on $tested; not releasing"; exit 1; }
+          [ "$sqlite" = true ] && echo "backend (sqlite) already green on $tested; skipping the test step"
+          echo "reuse=$sqlite" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
         with:
           dotnet-version: 10.0.x
@@ -133,12 +197,12 @@ jobs:
           retention-days: 7   # 包同时挂在 GitHub Release 上，这份中转产物不用留 90 天
 
   publish:
-    needs: verify
+    needs: [detect, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       id-token: write   # GitHub OIDC → nuget.org 临时 API key、npm 发布权限
-      contents: write   # 建 GitHub Release
+      contents: write   # 建 tag 与 GitHub Release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c   # v8.0.1
@@ -148,13 +212,14 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
         with:
           dotnet-version: 10.0.x
-      # 临时 key 只有 1 小时，紧贴 push 再申请
+      # 临时 key 只有 1 小时，紧贴 push 再申请。演练也会走到这里：能换到临时 key，就证明 nuget.org 的策略接受这次触发。
       - name: NuGet login (OIDC → temp API key)
         id: login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841   # v1.2.0
         with:
           user: ${{ vars.NUGET_USER || 'Andy_Zhong' }}   # nuget.org 用户名（不是邮箱），可用仓库变量 NUGET_USER 覆盖
       - name: Push to nuget.org
+        if: needs.detect.outputs.dry_run != 'true'
         run: >-
           dotnet nuget push "artifacts/*.nupkg"
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
@@ -168,30 +233,49 @@ jobs:
           package-manager-cache: false
       # 发 verify 打好的 tgz：解开后从目录发布（官方文档写明的形态），--ignore-scripts 跳过 prepack，
       # 这里没有源码和依赖，也不该再构建一次。公开仓库 + 公开包，provenance 由 npm 自动生成。
-      # 该版本已在 npm 上就跳过，job 重跑不会卡在「不能覆盖已发布版本」。
+      # 该版本已在 npm 上就跳过，job 重跑不会卡在「不能覆盖已发布版本」。演练只做 --dry-run：不推包。
       - name: Publish to npm
         run: |
           ver="${{ needs.verify.outputs.version }}"
+          dry="${{ needs.detect.outputs.dry_run }}"
           npm_ver=$(npm --version)
           node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$npm_ver" \
             || { echo "::error::npm trusted publishing needs npm >= 11.5.1, got $npm_ver"; exit 1; }
-          if [ "$(npm view "smart-admin-web@$ver" version 2>/dev/null)" = "$ver" ]; then
+          if [ "$dry" != "true" ] && [ "$(npm view "smart-admin-web@$ver" version 2>/dev/null)" = "$ver" ]; then
             echo "smart-admin-web@$ver is already on npm; skipping"
             exit 0
           fi
           mkdir npm-publish
           tar -xzf "artifacts/smart-admin-web-$ver.tgz" -C npm-publish
-          npm publish ./npm-publish/package --ignore-scripts
+          if [ "$dry" = "true" ]; then
+            npm publish ./npm-publish/package --ignore-scripts --dry-run
+          else
+            npm publish ./npm-publish/package --ignore-scripts
+          fi
       - name: Release notes from CHANGELOG
+        if: needs.detect.outputs.dry_run != 'true'
         run: |
           ver="${{ needs.verify.outputs.version }}"
           awk -v ver="$ver" '$0 ~ ("^## " ver " - ") { f = 1; next } /^## / { if (f) exit } f' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "见 CHANGELOG.md。" > notes.md
+      # 没有 tag 时由创建 Release 一并建 tag（目标就是被发布的这个提交）；用 GITHUB_TOKEN 建的 tag 不会再触发别的 workflow。
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64   # v3.0.3
+        if: needs.detect.outputs.dry_run != 'true'
         with:
+          tag_name: v${{ needs.verify.outputs.version }}
+          target_commitish: ${{ github.sha }}
           name: v${{ needs.verify.outputs.version }}
           body_path: notes.md
           files: |
             artifacts/*.nupkg
             artifacts/*.tgz
             artifacts/openapi.json
+      - name: Tag must point at the released commit
+        if: needs.detect.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.verify.outputs.version }}"
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$ver" --jq .object.sha)
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "::error::tag v$ver points at $sha, not the released commit $GITHUB_SHA"; exit 1; }
+          echo "tag v$ver -> $sha"
