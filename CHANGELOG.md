@@ -14,6 +14,23 @@
 
 ## Unreleased
 
+## 10.24.0 - 2026-10-11
+
+### Added
+
+- **`createSmartAdmin({ table })` 新增 `emptyText`：统一改表格的空值占位。**
+  值为 `null` / `undefined` 时，带 `format`（如日期时间）或 `options` 的列、以及可编辑表的静态格显示这个占位，库内置是 `—`。
+  传 `emptyText: ''` 就留空；不传沿用 `—`，现有应用不受影响。
+  此前应用只能自己再 `app.provide(SMART_TABLE_DEFAULTS, ...)`，而 inject 取最近一次 provide、不合并，会把内核注入的 `labels`、`density`、`filterSerializer` 整份挡掉。
+
+### Fixed
+
+- 弹窗、抽屉、浮层里的表格设了固定列后，横向滚动时不再有下面那些列的字从固定列背后透出来。
+  现象是表头和表体的固定列上叠着一层淡淡的重影，亮色、暗色都有。
+  影响所有放进 `FormContainer`（弹窗与抽屉两种形态）、`n-modal`、`n-drawer`、`n-popover` 并设了 `fixed: 'left'` 或 `fixed: 'right'` 的表格；放在页面里的表格不受影响。
+  原因是 naive-ui 的表格放进这几类容器时，单元格底色改取 `Modal` / `Popover` 一族变体，而这一族没被主题覆盖，仍由半透明的弹层底色 `--bg-elevated`（亮色约 88%、暗色约 90% 不透明）派生。
+  现在主题把这两族变体里 `td`、`th` 的默认、悬停、排序、斑马纹底色都补成与页面内表格相同的不透明实色，随明暗主题切换；边框色不变。
+
 ## 10.23.1 - 2026-10-11
 
 ### 升级说明

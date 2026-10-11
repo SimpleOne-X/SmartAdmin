@@ -38,6 +38,11 @@ describe('createSmartAdmin', () => {
     )
   })
 
+  it('表格空值占位不传时不覆盖库内置的 —,应用可以用 table.emptyText 改成空串', () => {
+    expect(tableDefaults(createSmartAdmin().app).emptyText).toBeUndefined()
+    expect(tableDefaults(createSmartAdmin({ table: { emptyText: '' } }).app).emptyText).toBe('')
+  })
+
   it('应用可以用 table.filterSerializer 换回 3.0 默认协议', () => {
     const { app } = createSmartAdmin({ table: { filterSerializer: defaultFilterSerializer } })
     expect(tableDefaults(app).filterSerializer).toBe(defaultFilterSerializer)

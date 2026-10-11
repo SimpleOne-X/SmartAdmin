@@ -7,8 +7,9 @@
    - 斑马纹:不加(HIG 建议多列表格用,但 ERP 宽表叠上选中色、悬停色会显得花,保持细分隔线);
    - 列分隔竖线 + 表格外框:用 Naive 原生的(smart-naive-table 3.x 内部是 single-line:false,bordered 走默认的 true),
      线色取主题 DataTable.borderColor(= --separator,标准见 DESIGN.md §5「表格线色」),这里不覆盖。要给某张表去线,传 single-line / :bordered="false";
-   - 固定列 / 固定表头的实底:DataTable 的 tdColor / thColor 本身就是不透明实色,固定列 sticky 叠在别的列上不会透底,
-     不必逐态覆盖;
+   - 固定列 / 固定表头的实底:DataTable 的 tdColor / thColor 是不透明实色,固定列 sticky 叠在别的列上不会透底,不必逐态覆盖。
+     放进弹窗 / 抽屉 / 浮层的表,Naive 改取 *Modal(.n-modal 与 .n-drawer)/ *Popover 变体,默认由半透明的 --bg-elevated 派生,会透底;
+     主题已把这两套变体补成与非 Modal 变体同值的实色(naive-theme.ts 的 DataTable),这里同样不必覆盖;
    - SmartTable 当前行(activeRowKey)的固定列补丁:库自己对整行 td 叠 background-image,固定列同样被覆盖,不需要补丁。 */
 
 /* 选中态底色:强调色淡底,叠在行原有的不透明底色之上(用 background-image 叠,不覆盖 background-color,

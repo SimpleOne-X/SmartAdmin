@@ -88,7 +88,7 @@ app.provide(
 )
 ```
 
-页面层因此不用写 `:labels`，只有要覆盖某一页的个别文案时才单独传。默认密度和每页条数选项，应用可以经 `createSmartAdmin({ table: { density, pageSizes } })` 改。每页条数的档位不写时，没开 `fill-height` 是 `100 / 500 / 1000`，开了是 `100 / 1000 / 10000`；上限是后端的 `SmartAdmin:Api:MaxPageSize`（默认 10000），应用把它调小，就要同步传 `pageSizes`。但列标题是个例外，它必须写成函数形式 `title: () => t('...')`。直接写 `title: t('...')`，只在建列那一刻求值，切语言不会更新。
+页面层因此不用写 `:labels`，只有要覆盖某一页的个别文案时才单独传。默认密度、每页条数选项和空值占位，应用可以经 `createSmartAdmin({ table: { density, pageSizes, emptyText } })` 改。每页条数的档位不写时，没开 `fill-height` 是 `100 / 500 / 1000`，开了是 `100 / 1000 / 10000`；上限是后端的 `SmartAdmin:Api:MaxPageSize`（默认 10000），应用把它调小，就要同步传 `pageSizes`。空值占位默认是 `—`，带 `format` 或 `options` 的列遇到 `null` 时显示它，想留空就传 `emptyText: ''`。但列标题是个例外，它必须写成函数形式 `title: () => t('...')`。直接写 `title: t('...')`，只在建列那一刻求值，切语言不会更新。
 
 **错误留在视图层。** 包内不弹任何 UI，`fetcher` 抛错会 emit 到 `@error`，由页面决定怎么提示。全站统一写 `@error="(e) => message.error(translateError(e))"`：`translateError` 把后端的数字 `ErrorCode` 映射成当前语言的文案。
 
