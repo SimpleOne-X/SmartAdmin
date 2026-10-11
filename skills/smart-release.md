@@ -72,9 +72,9 @@ or your spending limit needs to be increased
 
 ## 1. 准备（可逆，在 `$source`）
 
-### 1.1 CHANGELOG
+### 1.1 写 CHANGELOG 条目
 
-保留顶部空的 `## Unreleased`，把待发布条目移到紧随其后的 `## X.Y.Z - YYYY-MM-DD`。条目按 **真实 diff** 写，按 Keep a Changelog 归类（Added / Fixed / Changed / Removed）。别照提交标题猜。
+把待发布的条目写进顶部的 `## Unreleased`（定版——移到 `## X.Y.Z - YYYY-MM-DD`、顶部留空的 `## Unreleased`——由 1.2 的脚本完成）。条目按 **真实 diff** 写，按 Keep a Changelog 归类（Added / Fixed / Changed / Removed）。别照提交标题猜。
 
 拉自上个 tag 以来的提交：
 
@@ -82,34 +82,28 @@ or your spending limit needs to be increased
 git log "v<上一版>..$source" --oneline
 ```
 
-**完成标准**：`CHANGELOG.md` 已有 `## X.Y.Z - ` 标题；`## Unreleased` 空段保留在顶部（给下一版攒）；用户看过条目无异议。
+**完成标准**：`## Unreleased` 下已有按真实 diff 写好的条目；用户看过条目无异议。
 
-### 1.2 bump 版本号（前端 + 文档站）
+### 1.2 定版并 bump 版本号（脚本）
 
-后端不用改文件版本，pack 时 `-p:Version` 注入。**前端三个 package.json、模板依赖版本、文档站导航徽章必须一起改到 `X.Y.Z`**：`release.yml` 的 verify 逐一核对，任何一处不对都拦发版；漏文档站会在站顶导航显示旧版。
+```powershell
+node scripts/release-prepare.mjs X.Y.Z [YYYY-MM-DD]   # 发布日缺省取今天；先加 --dry-run 只看不写
+```
 
-| 位置 | 改什么 |
-|------|--------|
+脚本一次做完下表所有位置，并按 `release.yml` 的 verify 同样的口径自检：每处替换都断言恰好命中预期次数，对不上就整体中止、一个文件都不写。它不提交，也不替你写条目。后端不用改文件版本，pack 时 `-p:Version` 注入。**前端三个 package.json、模板依赖版本、文档站导航徽章必须一起改到 `X.Y.Z`**：`release.yml` 的 verify 逐一核对，任何一处不对都拦发版；漏文档站会在站顶导航显示旧版。
+
+| 位置 | 脚本改什么 |
+|------|-----------|
+| `CHANGELOG.md` | 把 `## Unreleased` 下的条目移到 `## X.Y.Z - YYYY-MM-DD`，顶部留空的 `## Unreleased` 给下一版攒 |
 | `web/packages/admin/package.json` | `version`（发到 npm 的就是这个号） |
 | `web/package.json` | `version`（workspace 根） |
 | `web/template/package.json` | `version`（模板登录页页脚显示它）+ `dependencies["smart-admin-web"]` 改成 `X.Y.Z`（精确版本，不带 `^`：前端页面调的端点跟着后端版本走） |
-| `web/package-lock.json` | 不手改：上面三处改完，在 `web/` 下跑 `npm install --package-lock-only`；diff 应只有这几个包的 `version` 与模板的依赖版本 |
-| **`site/.vitepress/config.ts`** | **英文 nav + 中文（`zh`）nav 各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' }`。搜 `text: 'P.Q.R'` 应正好两处，都改成新版 |
+| `web/package-lock.json` | 在 `web/` 下跑 `npm install --package-lock-only` 同步；diff 只许是这几个包的 `version` 与模板的依赖版本，脚本会核对 |
+| **`site/.vitepress/config.ts`** | **英文 nav + 中文（`zh`）nav 各一处**版本徽章 `{ text: 'X.Y.Z', link: … }`，必须正好两处 |
 
-不要改文档正文里第三方包的版本号（如 `smart-naive-table` 的依赖范围），那些不是发布徽章。
+不要改文档正文里第三方包的版本号（如 `smart-naive-table` 的依赖范围），那些不是发布徽章。脚本只动上表这几处。
 
-核对无残留（旧版 `P.Q.R`）：
-
-```bash
-# PowerShell
-Select-String -Path web/package.json,web/packages/admin/package.json,web/template/package.json -Pattern "P\.Q\.R"
-git diff --stat -- web/package-lock.json
-Select-String -Path site/.vitepress/config.ts -Pattern "P\.Q\.R"
-# 文档站徽章必须已是新版（期望 2 处）
-Select-String -Path site/.vitepress/config.ts -Pattern "text: 'X.Y.Z'"
-```
-
-**完成标准**：三个前端 version、模板依赖 `X.Y.Z`、两处文档站徽章、CHANGELOG 标题一致；lockfile 已同步；`config.ts` 无旧版 `text: 'P.Q.R'`。
+**完成标准**：脚本以「自检通过」结束（三个前端 version、模板依赖 `X.Y.Z`、两处文档站徽章、CHANGELOG 标题一致，lockfile 只改了版本相关的行）。
 
 ### 1.3 本地验绿
 
@@ -153,54 +147,39 @@ chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号
 
 ## 2. 发布（不可逆：合 main + 打 tag，tag 触发发包）
 
-### 2.1 推 `$source` 并等 `ci`
+### 2.1 推 `$source`
 
 ```powershell
 git fetch origin
 git push origin $source
 ```
 
-等这次推送触发的 `ci` 与 `docs` 跑完且全绿（整轮含 SqlServer 腿约 20 分钟）。**逐 job 核对，别只看总状态**，被门控跳过的后端腿也会让总状态显示成功：
+**不必等这次推送的 `ci` 跑完再开 PR**：PR 上的 `ci` 对同一个 SHA 跑同一套检查，和推送触发的那轮并行；先等 `$source` 再开 PR，只会把约 20 分钟的等待变成两倍。
 
-```powershell
-gh run list --branch $source --limit 3
-gh run view <run id> --json jobs --jq '.jobs[] | "\(.conclusion // .status)\t\(.name)"'
-```
+`main` 上有历史发版留下的 PR 合并提交，`$source` 没有它们，所以 `main` 通常不是 `$source` 的祖先——这是正常的，合并由 2.2 的 PR 完成。PR 页面显示冲突时，才把 `origin/main` 合进 `$source`，确认 CHANGELOG / 版本号没被顶回旧值后再推。
 
-`ci gate` 与后端四库（sqlite / mysql / postgres / sqlserver）、`template-smoke`、`web`、`web-e2e`、codeql、`deps-audit` 都应是 `success`；只有 `dependency-review (PR only)` 在非 PR 运行里按预期 `skipped`。
+**完成标准**：`origin/$source` 的 tip 含 `chore(release): 准备 X.Y.Z`。
 
-`main` 上有历史发版留下的 PR 合并提交，`$source` 没有它们，所以 `main` 通常不是 `$source` 的祖先——这是正常的，合并由 2.2 的 PR 完成，不需要在本地处理。PR 页面显示冲突时，才把 `origin/main` 合进 `$source`，确认 CHANGELOG / 版本号没被顶回旧值后再推。
+### 2.2 开 PR 并设自动合并（需用户确认）
 
-**完成标准**：`$source` 最新提交的 `ci` 与 `docs` 全部 job 通过；`origin/$source` 的 tip 含 `chore(release): 准备 X.Y.Z`。
+`main` 开了分支保护：禁止直接 push，只能从 `$source` 经 PR 合并，且必检 `ci gate` 通过（它汇总 `ci` 里的所有 job：后端四库、模板冒烟、前端、e2e、codeql、依赖审计，被门控跳过的算通过，失败或取消才变红；对管理员也生效，不需要人工 review）。本地合并后直接 `git push origin main` 会被拒（`GH006`）。仓库已开启 `Allow auto-merge`，所以 PR 可以设成「必检绿了自动合并」，不用盯着等。
 
-### 2.2 合 main（需用户确认）
+先向用户复述将执行的事，**请用户确认 CHANGELOG 条目，并同意「`ci gate` 绿了就自动合并到 `main`」**（合并本身不打 tag、不发包）：
 
-`main` 开了分支保护：禁止直接 push，只能从 `$source` 经 PR 合并，且必检 `ci gate` 通过（它汇总 `ci` 里的所有 job：后端四库、模板冒烟、前端、e2e、codeql、依赖审计，被门控跳过的算通过，失败或取消才变红；对管理员也生效，不需要人工 review）。本地合并后直接 `git push origin main` 会被拒（`GH006`）。
-
-开 PR（标题沿用历史写法 `chore(release): X.Y.Z`）：
+1. 开 PR（标题沿用历史写法 `chore(release): X.Y.Z`），说明里写 CHANGELOG 该版本的要点、提交清单
+2. `gh pr merge <N> --auto --merge`：保持 merge commit，不 squash、不 rebase，与历史记录一致
 
 ```powershell
 gh pr create --base main --head $source --title "chore(release): X.Y.Z" --body-file <说明文件>
+gh pr merge <N> --auto --merge
+gh pr view <N> --json state,mergeStateStatus,autoMergeRequest   # 等 state 变成 MERGED
 ```
 
-说明里写：CHANGELOG 该版本的要点、提交清单、验证结果。然后等必检：
+整轮 `ci` 约 20 分钟。同一个 head SHA 上有两批同名检查（`$source` 推送触发的和 PR 触发的），PR 触发的那批没跑完前 `mergeStateStatus` 一直是 `BLOCKED`。`ci gate` 红了不会自动合并：修好后推到 `$source`，PR 自动更新并重跑，推完核对 `autoMergeRequest` 仍在。`ci gate` 一直没出现、PR 一直 `BLOCKED` 时，说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了（纯文档改动）；发版 PR 必然改 `web/` 里的版本号，不会这样，先用 `gh run list --branch $source` 看 `ci` 有没有跑起来。
+
+PR 合并后，本地 `main` 快进到 `origin/main`。此处绝不重置或强推本地 `main`；本地 `main` 有 `origin/main` 没有的提交时停下，查明归属后再继续。PowerShell：
 
 ```powershell
-gh pr checks <N> --required
-gh pr view <N> --json mergeStateStatus   # 必检跑完后应是 CLEAN
-```
-
-同一个 head SHA 上会有两批同名检查（`$source` 推送触发的和 PR 触发的），`gh pr checks` 会把两批都列出来；PR 触发的那批没跑完前 `mergeStateStatus` 一直是 `BLOCKED`，整轮约 20 分钟。`ci gate` 一直没出现、PR 一直 `BLOCKED` 时，说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了（纯文档改动）；发版 PR 必然改 `web/` 里的版本号，不会这样，先用 `gh run list --branch $source` 看 `ci` 有没有跑起来。
-
-必检全绿后，向用户复述将执行：
-
-1. `gh pr merge <N> --merge`：保持 merge commit，不 squash、不 rebase，与历史记录一致
-2. 本地 `main` 快进到 `origin/main`
-
-用户同意后再跑。此处绝不重置或强推本地 `main`；本地 `main` 有 `origin/main` 没有的提交时停下，查明归属后再继续。PowerShell：
-
-```powershell
-gh pr merge <N> --merge
 git fetch origin
 if (git show-ref --verify --quiet refs/heads/main) {
   git switch main
@@ -214,7 +193,7 @@ if ($LASTEXITCODE -ne 0) {
 git merge --ff-only origin/main
 ```
 
-**完成标准**：PR 已合并；`HEAD`、`main`、`origin/main` 是同一 SHA，其历史含 `chore(release): 准备 X.Y.Z`。
+**完成标准**：PR 已合并（`state` 为 `MERGED`）；`HEAD`、`main`、`origin/main` 是同一 SHA，其历史含 `chore(release): 准备 X.Y.Z`。
 
 ### 2.3 打 tag 并推（需用户二次确认）
 

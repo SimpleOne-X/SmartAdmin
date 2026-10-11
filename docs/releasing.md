@@ -8,18 +8,26 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
 ## 一、准备(可逆,在 `dev` 上做)
 
-1. **定版 CHANGELOG**:保留顶部空的 `## Unreleased`,把待发布条目移到紧随其后的 `## X.Y.Z - YYYY-MM-DD`,按 Keep a Changelog 归类(Added / Fixed / Changed / Removed)。条目按**真实 diff** 写,别照提交标题猜——快速拉自上个 tag 以来的提交:
+1. **写 CHANGELOG 条目**:把待发布的条目写进顶部的 `## Unreleased`(定版由下一条的脚本完成),按 Keep a Changelog 归类(Added / Fixed / Changed / Removed)。条目按**真实 diff** 写,别照提交标题猜——快速拉自上个 tag 以来的提交:
 
    ```powershell
    git log vX.Y.<上一个>..dev --oneline
    ```
 
-2. **bump 版本号**(后端不用改文件,pack 时注入;前端三个 package.json + 模板依赖版本 + **文档站导航徽章**一起改):
+2. **定版并 bump 版本号**:一条命令做完(后端不用改文件,pack 时注入):
+
+   ```powershell
+   node scripts/release-prepare.mjs X.Y.Z [YYYY-MM-DD]   # 发布日缺省取今天;先加 --dry-run 只看不写
+   ```
+
+   它按 `release.yml` 的 verify 同样的口径一次改完并自检:每处替换都断言恰好命中预期次数,对不上就整体中止、一个文件都不写;不提交,也不替你写条目。
+   - CHANGELOG:把 `## Unreleased` 下的条目移到 `## X.Y.Z - YYYY-MM-DD`,顶部留空的 `## Unreleased` 给下一版攒
    - `web/packages/admin/package.json`(npm 包本身)、`web/package.json`(workspace 根)、`web/template/package.json` 的 `version`
    - `web/template/package.json` 的 `dependencies["smart-admin-web"]` 改成 `X.Y.Z`(精确版本,不带 `^`)
-   - `web/package-lock.json`:改完上面几处,在 `web/` 下跑 `npm install --package-lock-only` 同步(会改 5 处:顶层 `version`、`packages[""]`、`packages["packages/admin"]`、`packages["template"]` 的 `version` 与模板的依赖版本;diff 里不该出现别的变化)
-   - **`site/.vitepress/config.ts`**:英文 nav 与中文(`zh`)nav **各一处**版本徽章 `{ text: 'X.Y.Z', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' }`(文档站顶栏显示的版本号;`release.yml` 的 verify 会数这两处,不是 `X.Y.Z` 直接拦)。agent 流程见 `skills/smart-release.md`(`/smart-release`)。
-   - 核对无残留(PowerShell):`Select-String -Path web/package.json,web/packages/admin/package.json,web/template/package.json -Pattern 'X\.Y\.<旧>'` 与 `Select-String -Path site/.vitepress/config.ts -Pattern "'X.Y.<旧>'"` 都应为空;`Select-String -Path site/.vitepress/config.ts -Pattern "text: 'X.Y.Z'"` 应正好 2 处。
+   - `web/package-lock.json`:在 `web/` 下跑 `npm install --package-lock-only` 同步,并核对 diff 只有版本号相关的 5 对行
+   - **`site/.vitepress/config.ts`**:英文 nav 与中文(`zh`)nav **各一处**版本徽章(文档站顶栏显示的版本号;`release.yml` 的 verify 会数这两处)
+
+   脚本以「自检通过」结束即可。agent 流程见 `skills/smart-release.md`(`/smart-release`)。
 
 3. **本地验绿**(可选但推荐):`ci` workflow 会在 push 上跑同样的检查,本地先过一遍能少等一轮。本机内存紧,**别并发**跑 vue-tsc 和 dotnet test,一次一个:
 
@@ -31,21 +39,21 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
    模板冒烟(`smoke-test.ps1`)把内核打进临时本地 feed,再 `dotnet new smart-app` 生成消费方项目并 build、启动,验的是消费方拿到包后的第一条命令。改了 `site/**` 还要跑 `cd site; npm run lint:prose; npx vitepress build`。
 
-4. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`,等 `ci`(以及改了容器相关文件时的 `docker-smoke`)绿。
+4. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`(`ci` 在 PR 上并行跑,见第二节;改了容器相关文件时的 `docker-smoke` 另看)。
 
 ## 二、发布(合 `main` + 打 tag;tag 触发发包)
 
 `main` 受保护:禁止直接 push,只能从 `dev` 经 PR 合并,且必检 `ci gate` 通过(它汇总 `ci` 里的所有 job:后端四库、模板冒烟、前端、e2e、codeql、依赖审计,被门控跳过的算通过,失败或取消才变红;对管理员也生效,不需要人工 review)。本地合并后直接 `git push origin main` 会被拒(`GH006`)。`main` 上有历史发版留下的 PR 合并提交,`dev` 没有它们,所以 `main` 通常不是 `dev` 的祖先,这是正常的,合并由 PR 完成。
 
 ```powershell
-# 1. 推 dev,等这次推送的 ci 与 docs 全绿(逐 job 核对:被门控跳过的后端腿也会让总状态显示成功)
+# 1. 推 dev(不必等这次推送的 ci:PR 上的 ci 对同一 SHA 并行跑同一套检查,先等再开 PR 只会把约 20 分钟变成两倍)
 git fetch origin
 git push origin dev
 
-# 2. 开 PR,等必检 ci gate,全绿后合并(保持 merge commit,不 squash、不 rebase)
+# 2. 开 PR,并设成「必检 ci gate 绿了自动合并」(仓库已开 Allow auto-merge;保持 merge commit,不 squash、不 rebase)
 gh pr create --base main --head dev --title "chore(release): X.Y.Z" --body-file <说明文件>
-gh pr checks <N> --required
-gh pr merge <N> --merge
+gh pr merge <N> --auto --merge
+gh pr view <N> --json state,mergeStateStatus,autoMergeRequest   # 等 state 变成 MERGED
 
 # 3. 本地 main 快进到 origin/main;不重置本地分支
 git fetch origin
@@ -62,7 +70,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟;`ci gate` 一直没出现、PR 一直 BLOCKED 时,说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了(纯文档改动);发版 PR 必然改 `web/` 里的版本号,不会这样,先看 `ci` 有没有跑起来。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
+同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟,跑绿后自动合并。`ci gate` 红了不会合并:修好后推到 `dev`,PR 自动更新并重跑,推完核对 `autoMergeRequest` 仍在。`ci gate` 一直没出现、PR 一直 BLOCKED 时,说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了(纯文档改动);发版 PR 必然改 `web/` 里的版本号,不会这样,先看 `ci` 有没有跑起来。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
 
 合并后 `main` 上会再跑一轮 `ci`(约 20 分钟),它测的树与已经跑绿的 `dev` 逐字节相同。等它绿了再打 tag:`release` 在同一 SHA 的 `backend (sqlite)` 已绿时直接晋级、不重跑 SQLite 测试;不等也可以(`release` 的 verify 自己是闸门)。`ci` 红着不打 tag。
 
