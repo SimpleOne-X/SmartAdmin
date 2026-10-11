@@ -1,10 +1,10 @@
 # 发布流程(Release Runbook)
 
-SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发布(版本在 CI 打包时经 `-p:Version` 注入,取 tag 的号);前端内核以 npm 包 `smart-admin-web` 发布,版本写在 `web/packages/admin/package.json`,workspace 根与 `web/template` 的 `version` 和它同号(模板的号就是模板登录页页脚显示的版本),模板对 `smart-admin-web` 的依赖精确钉在 `X.Y.Z`(前端页面调的端点跟着后端版本走,浮动范围会装到比 NuGet 新的包);文档站顶栏徽章在 `site/.vitepress/config.ts`(中/英各一处)。这几处必须一起 bump,否则 npm 上的包、用户在 UI / 文档站看到的版本和实际跑的 NuGet 包对不上。
+SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发布(版本在 CI 打包时经 `-p:Version` 注入,取 `web/packages/admin/package.json` 的版本号,也就是将要建的 tag 的号);前端内核以 npm 包 `smart-admin-web` 发布,版本写在 `web/packages/admin/package.json`,workspace 根与 `web/template` 的 `version` 和它同号(模板的号就是模板登录页页脚显示的版本),模板对 `smart-admin-web` 的依赖精确钉在 `X.Y.Z`(前端页面调的端点跟着后端版本走,浮动范围会装到比 NuGet 新的包);文档站顶栏徽章在 `site/.vitepress/config.ts`(中/英各一处)。这几处必须一起 bump,否则 npm 上的包、用户在 UI / 文档站看到的版本和实际跑的 NuGet 包对不上。
 
 版本号规则:**主版本号 = 内核所用的 .NET 主版本**(10.x 对应 .NET 10,下一次大版本跟随下一个 .NET LTS),次版本号加功能,修订号修 bug;全部包共用一个版本号。破坏性变更尽量攒到换 .NET 大版本时一起发;周期内确需破坏的在次版本发,并在 CHANGELOG 对应版本段落顶部加粗提示。
 
-节奏:**开发在 `dev`,发布在 `main`**——先经 PR 把 `dev` 合进 `main`(`main` 受保护,不能直接 push),再在 **`main`** 上打 `v*` tag。tag 一推,`.github/workflows/release.yml` 接手:校验 tag 落在 `main` 上、CHANGELOG / 前端版本 / 模板依赖版本 / 文档站徽章一致,构建、测试、模板冒烟、打 13 个 nupkg 与前端 tgz,全绿才经 **Trusted Publishing** 推 nuget.org、发 npm,并建 GitHub Release。仓库里不保存任何 NuGet API key 或 npm token。**发出去的版本不可撤回**:nuget.org 只能 unlist,npm 上用过的版本号也不能再用。真正的闸门是 workflow 的 verify 阶段:它红了不会发包。
+节奏:**开发在 `dev`,发布在 `main`**——先经 PR 把 `dev` 合进 `main`(`main` 受保护,不能直接 push)。**合并后 `.github/workflows/release.yml` 自动接手**:合并进 `main` 的提交里前端版本号变了、且还没有对应的 `v*` tag,就校验 CHANGELOG / 前端版本 / 模板依赖版本 / 文档站徽章一致、被发布的提交上 `ci gate` 已绿,构建、测试、模板冒烟、打 13 个 nupkg 与前端 tgz,全绿才经 **Trusted Publishing** 推 nuget.org、发 npm,**最后一步才建 `v*` tag 与 GitHub Release**。仓库里不保存任何 NuGet API key 或 npm token。**合并发版 PR 就等于发包,发出去的版本不可撤回**:nuget.org 只能 unlist,npm 上用过的版本号也不能再用;唯一的否决点是合并之前(取消自动合并)。真正的闸门是 workflow 的 verify 阶段:它红了不会发包。
 
 ## 一、准备(可逆,在 `dev` 上做)
 
@@ -41,7 +41,7 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
 4. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`(`ci` 在 PR 上并行跑,见第二节;改了容器相关文件时的 `docker-smoke` 另看)。
 
-## 二、发布(合 `main` + 打 tag;tag 触发发包)
+## 二、发布(合并进 `main` 即触发发包)
 
 `main` 受保护:禁止直接 push,只能从 `dev` 经 PR 合并,且必检 `ci gate` 通过(它汇总 `ci` 里的所有 job:后端四库、模板冒烟、前端、e2e、codeql、依赖审计,被门控跳过的算通过,失败或取消才变红;对管理员也生效,不需要人工 review)。本地合并后直接 `git push origin main` 会被拒(`GH006`)。`main` 上有历史发版留下的 PR 合并提交,`dev` 没有它们,所以 `main` 通常不是 `dev` 的祖先,这是正常的,合并由 PR 完成。
 
@@ -61,37 +61,32 @@ if (git show-ref --verify --quiet refs/heads/main) { git switch main } else { gi
 git merge-base --is-ancestor main origin/main
 if ($LASTEXITCODE -ne 0) { throw 'Local main has commits origin/main does not; inspect it before merging.' }
 git merge --ff-only origin/main
-
-# 4. 等 main 上那轮 ci 绿了(见下),在当前 origin/main tip 打 tag 并推——推 tag 就是发包的扳机
-git fetch origin
-$head = git rev-parse HEAD; $main = git rev-parse main; $originMain = git rev-parse origin/main
-if (($head -ne $main) -or ($head -ne $originMain)) { throw 'Tag target is not the current origin/main tip.' }
-git tag vX.Y.Z
-git push origin vX.Y.Z
 ```
 
 同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟,跑绿后自动合并。`ci gate` 红了不会合并:修好后推到 `dev`,PR 自动更新并重跑,推完核对 `autoMergeRequest` 仍在。`ci gate` 一直没出现、PR 一直 BLOCKED 时,说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了(纯文档改动);发版 PR 必然改 `web/` 里的版本号,不会这样,先看 `ci` 有没有跑起来。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
 
-合并后 `main` 上会再跑一轮 `ci`(约 20 分钟),它测的树与已经跑绿的 `dev` 逐字节相同。等它绿了再打 tag:`release` 在同一 SHA 的 `backend (sqlite)` 已绿时直接晋级、不重跑 SQLite 测试;不等也可以(`release` 的 verify 自己是闸门)。`ci` 红着不打 tag。
+合并进 `main` 之后 `release` workflow 自动接手,**不需要也不应该手动打 tag**:
 
-推完 tag 去 Actions 页盯 `release` workflow(或 `gh run list --workflow release.yml --limit 1` 拿到 id 后 `gh run watch <id> --exit-status`):
+- **detect**:前端版本号相对这次推送前变了、且还没有对应的 `vX.Y.Z` tag,才算发版;版本没变的合并(文档、修复)整个跳过 verify 与 publish,普通合并永远不会发包。
+- **verify**:CHANGELOG / 前端版本 / 模板依赖版本 / 文档站徽章一致;被合并进来的提交(合并提交的第二父,即 PR 的 head)上必须有 `ci gate` 成功的记录,且合并提交的树与它逐字节相同,否则直接失败、不发包。`main` 上因此不再重跑一轮 `ci`:发出去的就是 PR 上已经跑绿的那棵树。通过后构建、测试(该提交上 `backend (sqlite)` 已绿时跳过 SQLite + Redis 测试)、模板冒烟、打 13 个 nupkg 与前端 tgz、抓 openapi。
+- **publish**:OIDC 换临时 key 推 nuget.org、发 npm,**最后一步才**建 `vX.Y.Z` tag 与 GitHub Release,并核对 tag 指向被发布的提交。
 
-- **verify** 红了不会进 publish,此时删 tag 重打是安全的:
+去 Actions 页盯 `release` workflow(或 `gh run list --workflow release.yml --limit 1` 拿到 id 后 `gh run watch <id> --exit-status`):
 
-  ```bash
-  git tag -d vX.Y.Z
-  git push origin :refs/tags/vX.Y.Z
-  ```
+- **verify** 红了不会发包,也没有 tag:修好后推到 `dev` 再走一遍 PR。
+- **publish** 跑完,包就在 nuget.org 与 npm 上了,只能 unlist / 弃号、再发修订版。publish 中途失败(比如 NuGet 推完、npm 没发出去)时没有 tag(tag 最后才建),修好外部配置后重跑失败的 job,或在 `main` 上手动触发 `gh workflow run release.yml --ref main -f dry_run=false`:NuGet 带 `--skip-duplicate`,npm 那步先查版本在不在,已发的都会跳过。
 
-- **publish** 跑完,包就在 nuget.org 与 npm 上了,只能 unlist / 弃号、再发修订版。publish 中途失败(比如 NuGet 推完、npm 没发出去)直接重跑这个 job:NuGet 带 `--skip-duplicate`,npm 那步先查版本在不在,已发的都会跳过。
+**手动演练**:`gh workflow run release.yml --ref <分支> -f dry_run=true`。完整跑 verify,publish 只换 NuGet 临时 key、npm 只 `--dry-run`(版本已在 npm 上则跳过),不推包、不建 tag;演练的提交上同样要有 `ci gate` 成功记录。npm 的 OIDC 在不真发布时验证不了,演练证明不了这一点。
 
-`release` 只跑 SQLite 腿 + Redis 契约测试,而且同一 SHA 的 `ci` 已把 `backend (sqlite)` 跑绿时连这一步也跳过(构建一次、晋级发布;带版本号的构建、模板冒烟、打包、抓 openapi 照跑);四库矩阵与 Docker 冒烟由 `ci` / `docker-smoke` 在 push 上跑,发版前确认 `main` 最近一次都是绿的。
+**不要手动推 `v*` tag**:`release` 不再由 tag 触发,而 detect 看到版本已有 tag 就判成「不是发版」,这次发布会被悄悄跳过。
+
+`release` 只跑 SQLite 腿 + Redis 契约测试,而且被发布的提交上 `backend (sqlite)` 已跑绿时连这一步也跳过(构建一次、晋级发布;带版本号的构建、模板冒烟、打包、抓 openapi 照跑);四库矩阵与 Docker 冒烟由 `ci` / `docker-smoke` 在 dev 推送与 PR 上跑,`ci gate` 是 `main` 的必检,release 还会再核对一次。
 
 ## 三、发布后
 
 - **核对 nuget.org**:`SmartAdmin`、`SmartAdmin.Templates` 等的 `X.Y.Z` 可见(索引有几分钟延迟);空目录里 `dotnet new install SmartAdmin.Templates::X.Y.Z` 后 `dotnet new smart-app` 能还原。
 - **核对 npm**:`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`;npmjs.com 包页的版本旁有 provenance 标记(证明是从本仓库 `release.yml` 构建发布的)。空目录里 `npx degit SimpleOne-X/SmartAdmin/web/template web; cd web; npm install` 能装上新版。
-- **GitHub Release**:workflow 自动建,说明取自 CHANGELOG 对应版本段落,附 13 个 nupkg、前端 tgz 与 `openapi.json`,不用手工建。「发了什么」的真源始终是 tag + CHANGELOG.md。
+- **GitHub Release 与 tag**:workflow 在发布成功后自动建,说明取自 CHANGELOG 对应版本段落,附 13 个 nupkg、前端 tgz 与 `openapi.json`,不用手工建。「发了什么」的真源始终是 tag + CHANGELOG.md。
 - **文档站**:`docs` workflow 在 `main` 上构建并自动部署到 GitHub Pages(仓库设置里 Pages 的 Source 选 GitHub Actions)。部署步骤按运行时的仓库可见性门控,仓库若转私有会退回只构建不部署,那时需要把 `site/.vitepress/dist` 发到自己的静态托管。核对站顶导航徽章已是 `X.Y.Z`。
 - **仅当 `main` 出现 `dev` 没有的内容时,才把 `main` 合回 `dev`**(比如 hotfix 直接落在 `main`、发布工具往 `main` 提交了版本号),否则 `dev` 会真的分叉。常规发版不需要:PR 合并提交不带内容,`main` 的树与已发布的 `dev` 相同,`dev` 显示「落后 `main`」只是整洁问题,不影响下一次 PR(`dev` 落后几个合并提交时开 PR 照常合并)。先看有没有内容差异,为空就不用合;有差异再合,提交信息用 `-m` 传,`git merge` 不支持 `-F -` 从标准输入读消息,会直接报错、合并也不会发生:
 
@@ -108,7 +103,7 @@ git push origin vX.Y.Z
 ## 四、一次性准备(换账号 / 换仓库时才需要)
 
 - **nuget.org Trusted Publishing 策略**:登录 nuget.org → 用户名 → Trusted Publishing → Create。Package owner `Andy_Zhong`,Repository Owner `SimpleOne-X`,Repository `SmartAdmin`,Workflow File `release.yml`(只填文件名,不带路径),Environment 留空,Scopes 允许发布新包,glob `SmartAdmin*`(不带点,否则匹配不到元包 `SmartAdmin` 本身)。注意:**在仓库还是私有时建的策略只临时生效 7 天**,窗口内必须完成一次成功发布才会永久激活;过期了在页面上重新激活即可。仓库已公开时建的策略没有这个窗口。
-- **⚠ 删掉 GitHub 仓库重建(哪怕同名)会废掉现有策略,必须删了重建。** 策略成功发过一次包之后,nuget.org 会把 GitHub 的 **repository id 与 owner id 永久锁进策略**——这是防"resurrection attack"的设计:否则谁都能删掉一个仓库、用同名重建,再冒充它发包。重建后的仓库是**新的 id**,策略页面照旧显示 `Active`,但锁的是那个已经不存在的旧 id,发版会在 `NuGet/login` 那步被拒。**没有改绑入口,只能 Delete 再 Create。** 危险之处在于它不会提前报错:等你发现时 tag 已经推出去了,而 tag 不可逆,只能弃号补发下一版。
+- **⚠ 删掉 GitHub 仓库重建(哪怕同名)会废掉现有策略,必须删了重建。** 策略成功发过一次包之后,nuget.org 会把 GitHub 的 **repository id 与 owner id 永久锁进策略**——这是防"resurrection attack"的设计:否则谁都能删掉一个仓库、用同名重建,再冒充它发包。重建后的仓库是**新的 id**,策略页面照旧显示 `Active`,但锁的是那个已经不存在的旧 id,发版会在 `NuGet/login` 那步被拒。**没有改绑入口,只能 Delete 再 Create。** 危险之处在于它不会提前报错:等你发现时发版 PR 已经合并、包已经发出去了,而发出去的包不可逆,只能弃号补发下一版。
   - **怎么自查**(30 秒,换仓库后务必做一次):策略卡片上 `Repository: SmartAdmin #<数字>` 里的数字,要和 `gh api repos/<owner>/<repo> --jq .id` 的输出一致;`Repository Owner` 后面的数字对应 `--jq .owner.id`。
 - nuget.org 用户名默认写在 `release.yml` 里(`Andy_Zhong`);换账号时改仓库变量 `NUGET_USER`,不用改 workflow。
 - **npm Trusted Publisher**:npm 只能给已经存在的包建信任关系,所以包的**第一个版本**由 npm 账号 `smartcode-x` 在本地手动发:
@@ -121,7 +116,7 @@ git push origin vX.Y.Z
 
   发完到 npmjs.com → `smart-admin-web` → Settings → Trusted Publisher,选 GitHub Actions:Organization or user `SimpleOne-X`,Repository `SmartAdmin`,Workflow filename `release.yml`(只填文件名),Environment 留空,**Allowed actions 勾上直接 `npm publish`**(新建的配置默认只允许 `npm stage publish`,不勾的话 `release.yml` 的发布会被拒)。字段区分大小写,npm 保存时不校验,填错要到发版那一步才报错;建好的配置不能改,只能删了重建。再到 Settings → Publishing access 选 "Require two-factor authentication and disallow tokens":之后任何 token 都发不了版,能发的只有 `release.yml`(OIDC)和维护者本人过 2FA 的交互式 `npm publish`。
   - 信任关系还核对 `web/packages/admin/package.json` 的 `repository.url`(`git+https://github.com/SimpleOne-X/SmartAdmin.git`,区分大小写),仓库搬家或改名时两边一起改。
-  - **⚠ 删掉 GitHub 仓库重建(哪怕同名)同样会废掉 npm 这边的配置,必须在 npmjs.com 上删除后重建。** npm 官方文档写明:第一次成功发布会校验配置并把它绑定到仓库的不可变身份,所以重建出的新仓库(新的仓库 id)与已绑定的配置对不上,发版会在 npm 那一步被拒,而此时 NuGet 往往已经推出去了。重建后、推 tag 之前,先把这条配置删掉再按上面的字段新建。
+  - **⚠ 删掉 GitHub 仓库重建(哪怕同名)同样会废掉 npm 这边的配置,必须在 npmjs.com 上删除后重建。** npm 官方文档写明:第一次成功发布会校验配置并把它绑定到仓库的不可变身份,所以重建出的新仓库(新的仓库 id)与已绑定的配置对不上,发版会在 npm 那一步被拒,而此时 NuGet 往往已经推出去了。重建后、合并发版 PR 之前,先把这条配置删掉再按上面的字段新建。
   - Trusted Publishing 只支持 GitHub 托管的 runner,npm CLI 要 11.5.1 以上;`release.yml` 的 npm 那步用 Node 24 并在发布前断言 npm 版本。
 - 仓库公开,GitHub Actions 不计分钟数,`ci` 的 SqlServer 全量定时腿每晚照跑。若哪天转回私有,每月只有 2000 分钟免费额度,那条定时腿会按可见性自动停。
 
