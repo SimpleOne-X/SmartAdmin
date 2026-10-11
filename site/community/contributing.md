@@ -5,7 +5,7 @@ A PR opened against `main` gets sent back: `main` only receives release merges, 
 ## Before you start
 
 - Fork the repo and clone it locally.
-- **Development happens on the `dev` branch; `main` only accepts release merges** — target your PR at `dev`, not `main`. `dev` is merged into `main` and tagged only at release time (see [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)).
+- **Development happens on the `dev` branch; `main` only accepts release merges** — target your PR at `dev`, not `main`. `dev` is merged into `main` only at release time, and the release workflow then publishes and tags automatically (see [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)).
 - File bugs / feature requests through one of the three GitHub Issue templates (Bug report / Feature request / Question) — the repo has blank issues disabled. **Do not** open a public issue for a security vulnerability; see "Security issues" below.
 
 ## Local development environment

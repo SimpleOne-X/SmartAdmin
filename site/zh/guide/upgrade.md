@@ -40,6 +40,6 @@ npm install --save-exact smart-admin-web@X.Y.Z
 ## 跟踪版本
 
 - [更新日志](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)：Keep a Changelog 格式，每个版本一段，前后端都在里面。破坏性变更尽量攒到换 .NET 大版本时一起发。
-- 包只从 `main` 上的 `v*` tag 发布：NuGet 包到 nuget.org，`smart-admin-web` 到 npmjs.com，号码相同。`dev` 分支上的改动在发版之前不会出现在任何一个包里。
+- 包只从 `main` 发布，合并进去且版本号变了，就由发版流水线自动发：NuGet 包到 nuget.org，`smart-admin-web` 到 npmjs.com，号码相同。`v*` tag 在发布成功后才建。`dev` 分支上的改动在发版之前不会出现在任何一个包里。
 
 反过来，想把自己的修复贡献回 SmartAdmin，看[贡献指南](/zh/community/contributing)。

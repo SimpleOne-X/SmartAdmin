@@ -64,8 +64,7 @@ export function rootExpandableIds<T extends { id: number; children?: T[] }>(node
 
 /**
  * 树 → 深度优先平铺行(父在前、子紧随其后),每行带 depth(根 = 0),children 置空。
- * 给窄档卡片列表用:smart-naive-table 的卡片模式只画传入的这一层行,不认 children,
- * 树表在手机上要想看到子节点,就得由页面自己把整棵树摊成一列。行是浅拷贝,不改入参。
+ * 行是浅拷贝,不改入参。
  */
 export function flattenTree<T extends { children?: T[] }>(
   nodes: T[],

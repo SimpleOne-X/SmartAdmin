@@ -4,15 +4,40 @@
 
 版本号规则：**主版本号 = 内核所用的 .NET 主版本**（10.x 对应 .NET 10，下一次大版本跟随下一个 .NET LTS），次版本号加功能，修订号修 bug；全部 NuGet 包、前端包 `smart-admin-web` 与 `SmartAdmin.Templates` 共用一个版本号。破坏性变更尽量攒到换 .NET 大版本时一起发；周期内确需破坏的在次版本发，并在该版本段落顶部加粗提示，升级前先读该版本的「升级说明」。
 
-发布节奏：**开发在 `dev` 上进行，发布在 `main` 上完成**。先把 `dev` 合进 `main`，再**在 `main` 上**打 `v*` tag。tag 一推，`release` workflow 校验 tag 落在 `main` 上，跑构建、测试和模板冒烟（`dotnet new smart-app` 必须能还原并编译通过），全绿才打包，经 Trusted Publishing 推 nuget.org、发 npm，同时建 GitHub Release。
+发布节奏：**开发在 `dev` 上进行，发布在 `main` 上完成**。先经 PR 把 `dev` 合进 `main`，合并后 `release` workflow 自动接手：合并进去的提交里版本号变了、且还没有对应的 `v*` tag，就先确认该提交的 CI 已经全绿，再跑构建、测试和模板冒烟（`dotnet new smart-app` 必须能还原并编译通过），全绿才打包，经 Trusted Publishing 推 nuget.org、发 npm，最后才建 `v*` tag 与 GitHub Release。
 
-逐步的发版操作清单（改版本号、验证、合 `main`、打 tag）见 [`docs/releasing.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)。
+逐步的发版操作清单（写条目、定版、开 PR、核对发布）见 [`docs/releasing.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)。
 
-> 发版时**前后端版本号必须一起改**：后端版本由 tag 经 `-p:Version` 注入；前端版本写在 `web/package.json`、`web/packages/admin/package.json`（发到 npm 的包）与 `web/template/package.json`（**显示在模板登录页页脚**），模板对 `smart-admin-web` 的依赖钉同一个号，文档站导航的两处版本徽章也跟着改。漏改一处，`release` 的 verify 就会拦下，否则 npm 上的包、界面上的版本会和实际安装的 NuGet 包对不上。
+> 发版时**前后端版本号必须一起改**：后端版本由发版的版本号经 `-p:Version` 注入；前端版本写在 `web/package.json`、`web/packages/admin/package.json`（发到 npm 的包）与 `web/template/package.json`（**显示在模板登录页页脚**），模板对 `smart-admin-web` 的依赖钉同一个号，文档站导航的两处版本徽章也跟着改。漏改一处，`release` 的 verify 就会拦下，否则 npm 上的包、界面上的版本会和实际安装的 NuGet 包对不上。
 
 > **发了什么，以本文件为准**，而不是仓库的发行版页面：那里只是可选的镜像，内容从本文件对应版本的段落复制过去。
 
 ## Unreleased
+
+## 10.23.1 - 2026-10-11
+
+### 升级说明
+
+- **本版只有前端有改动。**
+  后端、数据库与种子没有变化，NuGet 包按统一版本号一并发布。
+
+- **`smart-naive-table` 的 peerDependency 升到 `^3.2.2`。**
+  应用要同步升级该包，模板依赖已随版本升到 `^3.2.2`。
+  内核此前钉在 3.1.3，这次一并吃进 3.2.0、3.2.1 与 3.2.2，不改公开导出，外观上有这几处变化：
+  - 下拉表格 `SmartSelectTable`（以及可编辑表格里 `select-table` 的编辑态）触发器右侧的箭头由 ▾ 改为放大镜。
+    内核自带页面没有用到它，应用里用了的会看到图标变化，没有回退开关。
+  - 开了 `card-on-narrow` 且传了 `#toolbar` 的页面，窄档工具栏多一行（约 50px）：「标题 + `#toolbar`」独占第一行，「操作 ▾」靠左、内置图标靠右落到第二行。
+    没传 `#toolbar` 的页面不变；内核里受影响的是菜单管理和用户管理的窄档。
+    原本在窄档用 CSS 隐藏 `#toolbar` 的内容、另在 `#toolbar-right` 里放一份的应用，升级后头部那一行是空的，可以删掉那段绕行。
+  - 窄档卡片列表认树表的 `children`，带 `children-key` 的树表切成卡片后不再只剩根节点。
+    自己把树摊平再喂给卡片的应用，摊平后的行若仍带 `children` 字段，会被再展开一次、出现重复：去掉摊平直接传原树，或摊平时把 `children` 置空。
+
+### Changed
+
+- **机构管理、菜单管理的窄档（手机）卡片列表直接用库的树形卡片，不再自己把树摊平。**
+  每个节点一张卡，有子级的卡片标题前有展开 / 折叠箭头，子级按层缩进；「展开 / 折叠全部」在窄档也可用，收在「操作 ▾」里。
+  菜单管理在窄档进门由「全部展开」变为与桌面一致的「全折叠」，可逐级展开；机构管理本来就默认全展开，不变。
+  卡片的层级缩进改为取表格的 `indent`：机构管理每层 16px，不变；菜单管理每层由 16px 变为 26px。
 
 ## 10.23.0 - 2026-10-10
 
