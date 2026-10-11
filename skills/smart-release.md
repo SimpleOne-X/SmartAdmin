@@ -275,9 +275,24 @@ verify 红了不会发包，删 tag 重打即可；publish 跑完包就在 nuget
 2. **核对 npm**：`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`；空目录里 `npx degit SimpleOne-X/SmartAdmin/web/template web`、`cd web`、`npm install` 能装上新版。
 3. **GitHub Release**：workflow 已自动建好，说明取自 CHANGELOG 对应段落，附 nupkg、前端 tgz 与 openapi.json；核对一眼即可，不用手工建。
 4. **文档站**：`docs` workflow 在 `main` 上构建并自动部署到 GitHub Pages；部署按仓库可见性门控，仓库若转私有会退回只构建不部署，那时需要把 `site/.vitepress/dist` 发到静态托管。核对站顶导航徽章已是 `X.Y.Z`。
-5. 切回 `$source` 继续开发；下一版从新的 `## Unreleased` 攒。
+5. **把 `main` 合回 `$source`**：每次 PR 合并都会在 `main` 上留下一个合并提交，`$source` 没有它，不回合并的话下一次发版开 PR 时 `$source` 仍显示落后于 `main`。合并不改内容（`main` 的树与已发布的 `$source` 相同），照常推送：
 
-**完成标准**：nuget.org 与 npm 都可见 `X.Y.Z`；三个前端 version、模板依赖版本**与文档站导航徽章**均为 `X.Y.Z`；文档站线上已是新版。
+   ```powershell
+   git fetch origin
+   git switch $source
+   git merge origin/main --no-ff -m "chore(release): 把 main 的发版合并提交同步回 $source"
+   git push origin $source
+   ```
+
+   提交信息用 `-m` 传：`git merge` 不支持 `-F -` 从标准输入读消息，会直接报错、合并也不会发生，别拿「树一致」的空检查当成功。合并后核对：
+
+   ```powershell
+   git rev-list --left-right --count "origin/main...origin/$source"   # 左边应为 0
+   ```
+
+6. 切回 `$source` 继续开发；下一版从新的 `## Unreleased` 攒。
+
+**完成标准**：nuget.org 与 npm 都可见 `X.Y.Z`；三个前端 version、模板依赖版本**与文档站导航徽章**均为 `X.Y.Z`；文档站线上已是新版；`origin/main` 已是 `origin/$source` 的祖先（上面那条核对的左边为 0）。
 
 ---
 
