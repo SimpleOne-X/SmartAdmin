@@ -1,7 +1,10 @@
 # 主 CI：后端四库矩阵 + 模板冒烟 + 前端（lint/vitest/build）+ 前端 e2e（Playwright，双 webServer）。
-# push / PR 到 main、dev 触发；文档类改动（site/、docs/、*.md）不跑。
+# push 到 dev、PR 到 main / dev 触发；文档类改动（site/、docs/、*.md）不跑。
+# main 上不重跑：合进 main 的就是 PR 上已经跑绿的那棵树（main 只接受 dev 来的 PR），重跑一遍只是白等约 20 分钟；
+# release.yml 发版前会核对被合并进来的那个提交上有 ci gate 成功的记录，并要求树逐字节相同。main 的代码扫描由每晚的 schedule 补。
 # changes 前置 job 按改动路径决定跑哪一半：只改 web/ 不起后端腿，只改 backend/ 不起前端；schedule、手动触发全跑。
 # 例外是 web-e2e：它同时起前后端，两边任一改动都跑。
+# 末尾的 ci gate 汇总所有 job，分支保护只要求它这一项。
 # 每条后端腿只起自己那个数据库容器（sqlite 腿一个都不起），容器在 dotnet build 期间后台拉起。
 # SqlServer 全量套件要 40–60 分钟（每个测试库的 CodeFirst 建表约 20 s，200 个库），
 # 所以 push / PR 只跑方言敏感子集，全量留给定时任务与手动触发。
@@ -9,7 +12,7 @@ name: ci
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
     paths-ignore: ['site/**', 'docs/**', '**/*.md']
   pull_request:
     branches: [main, dev]
@@ -67,12 +70,6 @@ jobs:
           # 用 here-string 而不是管道喂 grep:管道里 grep -q 一命中就退出,清单很大时上游 printf 会
           # Broken pipe,pipefail 下整条管道失败,hit 误输出 false,backend / web 被整个跳过(但分支保护把跳过当通过)
           hit() { if grep -Eq "$1" <<<"$files"; then echo true; else echo false; fi; }
-          # 注意:后端腿被整个跳过时,main 的必检项 `backend (sqlite)` / `backend (sqlserver)` 不会出现在 PR 上。
-          # 矩阵任务在 job 级 if 为假时不展开矩阵,检查名是没展开的表达式原文,对不上这两个名字;
-          # workflow_dispatch 手动触发的运行不计入 PR 的必检项。所以只改了 web/ 与 site/ 的发版 PR 会一直 BLOCKED,
-          # 要让它跑全后端腿,就在 PR 里动一下本文件(它在下面 backend 的路径里)。
-          # 整轮连 SqlServer 腿约 20 分钟,而 ci 有并发取消(后推的提交会取消前一轮),
-          # 所以动本文件的提交要和发版准备提交放在同一次推送里,别先后各推一次。
           echo "backend=$(hit '^(backend/|templates/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "web=$(hit '^(web/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
 
@@ -363,3 +360,25 @@ jobs:
       - name: npm advisories (site)
         working-directory: site
         run: npm audit --omit=dev --audit-level=high
+
+  # ── 汇总门 ────────────────────────────────────────────────────────────────────
+  # 分支保护只要求这一个检查(`ci gate`),不再逐个列 job 名:矩阵任务被 changes 门控整个跳过时,
+  # 检查名是没展开的表达式原文,对不上任何一个必检项名字,PR 会一直 BLOCKED。汇总门每次都会出现。
+  # if: always() 不能省:没有它,上游失败时汇总门自己会被「跳过」,而被跳过的必检项等同通过。
+  # 上游被门控跳过(没改后端就不起后端腿)算通过;只有失败或被取消才让它变红。
+  ci-gate:
+    name: ci gate
+    if: always()
+    needs: [changes, backend, template-smoke, web, web-e2e, codeql, dependency-review, deps-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Upstream results
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS"
+      - name: Fail if any upstream job failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "::error::有上游 job 失败或被取消,见上一步的清单"
+          exit 1
