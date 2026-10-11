@@ -233,7 +233,8 @@ jobs:
           package-manager-cache: false
       # 发 verify 打好的 tgz：解开后从目录发布（官方文档写明的形态），--ignore-scripts 跳过 prepack，
       # 这里没有源码和依赖，也不该再构建一次。公开仓库 + 公开包，provenance 由 npm 自动生成。
-      # 该版本已在 npm 上就跳过，job 重跑不会卡在「不能覆盖已发布版本」。演练只做 --dry-run：不推包。
+      # 该版本已在 npm 上就跳过，job 重跑不会卡在「不能覆盖已发布版本」；演练也一样，npm publish --dry-run 同样会因为
+# 版本已存在而报这个错（它会查 registry，只是不上传）。演练只做 --dry-run：不推包。
       - name: Publish to npm
         run: |
           ver="${{ needs.verify.outputs.version }}"
@@ -241,7 +242,7 @@ jobs:
           npm_ver=$(npm --version)
           node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$npm_ver" \
             || { echo "::error::npm trusted publishing needs npm >= 11.5.1, got $npm_ver"; exit 1; }
-          if [ "$dry" != "true" ] && [ "$(npm view "smart-admin-web@$ver" version 2>/dev/null)" = "$ver" ]; then
+          if [ "$(npm view "smart-admin-web@$ver" version 2>/dev/null)" = "$ver" ]; then
             echo "smart-admin-web@$ver is already on npm; skipping"
             exit 0
           fi
