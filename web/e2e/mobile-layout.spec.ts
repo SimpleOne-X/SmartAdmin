@@ -87,8 +87,8 @@ test.describe('手机宽度布局', () => {
     expect(problems, '手机宽度下这些页面看不全').toEqual([])
   })
 
-  test('树表(机构、菜单):手机宽度下每个节点都有一张卡片', async ({ page }) => {
-    // 库的卡片模式只画传入的这一层行、不认 children;页面不自己把树摊平,子节点在手机上就消失了
+  test('树表(机构、菜单):手机宽度下卡片是树的可见行,与桌面同一套展开态', async ({ page }) => {
+    // 库的卡片列表认 children 与受控的 expanded-row-keys:展开的节点才有子卡片,卡片上的箭头可折叠
     test.setTimeout(120_000)
     await login(page, ADMIN_ACCOUNT, ADMIN_PASSWORD)
     await enterApp(page, SYSTEM_APP)
@@ -112,10 +112,26 @@ test.describe('手机宽度布局', () => {
 
       await page.setViewportSize({ width: 390, height: 844 })
       await page.goto(path)
-      await expect(
-        page.locator('.smart-table-cards > *'),
-        `${path} 手机卡片数应等于节点数`,
-      ).toHaveCount(nodes, { timeout: 15_000 })
+      const cards = page.locator('.smart-table-cards > *')
+      if (expandAll) {
+        // 菜单窄档与桌面一样进门全折叠(只有根节点),「展开全部」收在「操作 ▾」里
+        await expect(cards.first()).toBeVisible({ timeout: 15_000 })
+        expect(await cards.count(), `${path} 手机默认折叠,卡片应少于节点数`).toBeLessThan(nodes)
+        await page.locator('.smart-table-toolbar-ops').click()
+        await page
+          .locator('.smart-table-toolbar-actions .n-button')
+          .filter({ hasText: /展开全部|Expand all/ })
+          .click()
+      }
+      await expect(cards, `${path} 手机展开后卡片数应等于节点数`).toHaveCount(nodes, {
+        timeout: 15_000,
+      })
+
+      // 卡片上的箭头真能折叠:点第一个已展开的节点,卡片数减少
+      await page.locator('.smart-table-cards [aria-expanded="true"]').first().click()
+      await expect
+        .poll(() => cards.count(), { message: `${path} 折叠一个节点后卡片数应减少` })
+        .toBeLessThan(nodes)
     }
   })
 })
