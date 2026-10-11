@@ -72,7 +72,7 @@ createSmartAdmin({
 | `install(app)` | 挂载前的注册动作，比如 `registerHeaderTool`、`registerMenuBadge`、自己的 `app.use` |
 | `plugins` | 与上面同形的对象数组。覆盖顺序是内核、插件、应用，后注册的优先 |
 | `brand` | `{ title, logo }`，品牌默认值：配置 `sys.site.title`、`sys.site.logo` 为空时用它们，站点信息到达前的首帧也用它们。配置有值时以配置为准 |
-| `table` | SmartTable 全局默认的密度和每页条数选项 |
+| `table` | SmartTable 全局默认：密度、每页条数、空值占位 `emptyText`（默认 `—`，传 `''` 就留空） |
 
 ## 改内置页
 

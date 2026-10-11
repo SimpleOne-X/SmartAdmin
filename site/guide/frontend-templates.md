@@ -72,7 +72,7 @@ A page's key is its path after `views/` minus `.vue`: `src/views/sample/doc/inde
 | `install(app)` | Registration that runs before mount, such as `registerHeaderTool`, `registerMenuBadge` or your own `app.use` |
 | `plugins` | An array of objects shaped like the options above. Precedence runs kernel, then plugins, then the app; later registrations win |
 | `brand` | `{ title, logo }`, branding defaults: used while the `sys.site.title` / `sys.site.logo` configs are empty, and for the first frame before site info arrives. A configured value always wins |
-| `table` | SmartTable's global default density and page-size options |
+| `table` | SmartTable's global defaults: density, page-size options, and the empty-value placeholder `emptyText` (`—` by default; pass `''` to leave cells blank) |
 
 ## Changing a Built-in Page
 

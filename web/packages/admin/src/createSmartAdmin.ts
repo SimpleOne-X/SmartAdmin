@@ -69,6 +69,8 @@ export interface SmartAdminOptions extends SmartAdminPlugin {
     filterSerializer?: FilterSerializer
     /** 所有数据列默认可拖拽列宽。内核默认 true;设 false 全局关掉,单列用列上的 `resizable` 覆盖。 */
     resizable?: boolean
+    /** 值为 null / undefined 时单元格显示的占位。不传沿用库内置的 `—`;传 `''` 就是留空。 */
+    emptyText?: string
   }
 }
 
@@ -146,6 +148,8 @@ export function createSmartAdmin(options: SmartAdminOptions = {}): SmartAdminApp
       // 列宽拖拽全站统一开:表头右缘拖动改宽,宽度跟着 storage-key 记忆。库内置默认是 false;
       // 某列不想让拖(操作列、序号列)在列上写 resizable: false,列上的值永远优先于这里。
       resizable: options.table?.resizable ?? true,
+      // 空值占位:undefined 不会覆盖库内置的 '—',所以不传时对现有应用零影响。
+      emptyText: options.table?.emptyText,
       // 当前行(activeRowKey)高亮:指向选中态令牌(强调色淡底,跟强调色与明暗走),不用库默认的主色 9%。
       // 库用 background-image 叠色、不覆盖行底色,所以半透明的令牌值也不会让固定列透底。
       activeRowBg: 'var(--sel-bg)',
