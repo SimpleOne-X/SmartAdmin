@@ -149,20 +149,6 @@ chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号
 
 **完成标准**：该提交在 `$source` 上，且 diff 含 `site/.vitepress/config.ts`；`git status` 干净。
 
-### 1.5 纯前端发版：多带一个 `ci.yml` 提交
-
-自上个 tag 以来 `backend/`、`templates/`、`.github/workflows/ci.yml` 都没动时（下面的 diff 为空），`ci` 的 `changes` 任务会把后端腿整个跳过：
-
-```powershell
-git diff --stat "v<上一版>..HEAD" -- backend templates .github
-```
-
-后端腿被跳过，`dev` → `main` 的 PR 上就不会出现 `backend (sqlite)`、`backend (sqlserver)`、`template-smoke` 这三项必检，PR 会一直 `BLOCKED`。矩阵任务在 job 级 `if` 为假时不展开，检查名是没展开的表达式原文，对不上必检项的名字；手动触发（`workflow_dispatch`）的运行不计入 PR 的必检项，补不上。
-
-解法是在 `.github/workflows/ci.yml` 里动一下（它在后端路径的匹配里），比如改一行说明注释，单独提一个 `ci:` 提交。**这个提交要和准备提交放在同一次推送里**：`ci` 有并发取消，后推的提交会取消前一轮，先后各推一次会白跑一整轮（含 SqlServer 腿约 20 分钟）。
-
-**完成标准**：diff 为空时，`ci.yml` 已有一个独立的 `ci:` 提交，并和准备提交一起进入 2.1 的推送；diff 不为空时跳过本节。
-
 ---
 
 ## 2. 发布（不可逆：合 main + 打 tag，tag 触发发包）
@@ -174,8 +160,6 @@ git fetch origin
 git push origin $source
 ```
 
-纯前端发版（1.5）要保证 `ci.yml` 的提交和准备提交在这同一次推送里。
-
 等这次推送触发的 `ci` 与 `docs` 跑完且全绿（整轮含 SqlServer 腿约 20 分钟）。**逐 job 核对，别只看总状态**，被门控跳过的后端腿也会让总状态显示成功：
 
 ```powershell
@@ -183,7 +167,7 @@ gh run list --branch $source --limit 3
 gh run view <run id> --json jobs --jq '.jobs[] | "\(.conclusion // .status)\t\(.name)"'
 ```
 
-后端四库（sqlite / mysql / postgres / sqlserver）、`template-smoke`、`web`、`web-e2e` 都应是 `success`；只有 `dependency-review (PR only)` 在非 PR 运行里按预期 `skipped`。
+`ci gate` 与后端四库（sqlite / mysql / postgres / sqlserver）、`template-smoke`、`web`、`web-e2e`、codeql、`deps-audit` 都应是 `success`；只有 `dependency-review (PR only)` 在非 PR 运行里按预期 `skipped`。
 
 `main` 上有历史发版留下的 PR 合并提交，`$source` 没有它们，所以 `main` 通常不是 `$source` 的祖先——这是正常的，合并由 2.2 的 PR 完成，不需要在本地处理。PR 页面显示冲突时，才把 `origin/main` 合进 `$source`，确认 CHANGELOG / 版本号没被顶回旧值后再推。
 
@@ -191,7 +175,7 @@ gh run view <run id> --json jobs --jq '.jobs[] | "\(.conclusion // .status)\t\(.
 
 ### 2.2 合 main（需用户确认）
 
-`main` 开了分支保护：禁止直接 push，只能从 `$source` 经 PR 合并，且 `backend (sqlite)`、`backend (sqlserver)`、`web (lint + vitest + build)`、`template-smoke (dotnet new smart-app)` 四项必检通过（对管理员也生效，不需要人工 review）。本地合并后直接 `git push origin main` 会被拒（`GH006`）。
+`main` 开了分支保护：禁止直接 push，只能从 `$source` 经 PR 合并，且必检 `ci gate` 通过（它汇总 `ci` 里的所有 job：后端四库、模板冒烟、前端、e2e、codeql、依赖审计，被门控跳过的算通过，失败或取消才变红；对管理员也生效，不需要人工 review）。本地合并后直接 `git push origin main` 会被拒（`GH006`）。
 
 开 PR（标题沿用历史写法 `chore(release): X.Y.Z`）：
 
@@ -206,7 +190,7 @@ gh pr checks <N> --required
 gh pr view <N> --json mergeStateStatus   # 必检跑完后应是 CLEAN
 ```
 
-同一个 head SHA 上会有两批同名检查（`$source` 推送触发的和 PR 触发的），`gh pr checks` 会把两批都列出来；PR 触发的那批没跑完前 `mergeStateStatus` 一直是 `BLOCKED`，整轮约 20 分钟。必检一项都没出现、PR 一直 `BLOCKED` 时，回头看 1.5。
+同一个 head SHA 上会有两批同名检查（`$source` 推送触发的和 PR 触发的），`gh pr checks` 会把两批都列出来；PR 触发的那批没跑完前 `mergeStateStatus` 一直是 `BLOCKED`，整轮约 20 分钟。`ci gate` 一直没出现、PR 一直 `BLOCKED` 时，说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了（纯文档改动）；发版 PR 必然改 `web/` 里的版本号，不会这样，先用 `gh run list --branch $source` 看 `ci` 有没有跑起来。
 
 必检全绿后，向用户复述将执行：
 

@@ -31,20 +31,18 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
    模板冒烟(`smoke-test.ps1`)把内核打进临时本地 feed,再 `dotnet new smart-app` 生成消费方项目并 build、启动,验的是消费方拿到包后的第一条命令。改了 `site/**` 还要跑 `cd site; npm run lint:prose; npx vitepress build`。
 
-4. **纯前端发版要多带一个 `ci:` 提交**(自上个 tag 以来 `backend/`、`templates/`、`.github/workflows/ci.yml` 都没动,即 `git diff --stat vX.Y.<上一个>..dev -- backend templates .github` 为空)。`ci` 的 `changes` 任务会把后端腿整个跳过,`dev` → `main` 的 PR 上就不会出现 `backend (sqlite)`、`backend (sqlserver)`、`template-smoke` 这三项必检,PR 会一直 BLOCKED(矩阵任务在 job 级 `if` 为假时不展开,检查名对不上必检项;手动触发的运行不计入必检项,补不上)。在 `.github/workflows/ci.yml` 里动一下(它在后端路径的匹配里),比如改一行说明注释,单独提交,并**和下一条的准备提交一起推**:`ci` 有并发取消,先后各推一次会白跑一整轮(含 SqlServer 腿约 20 分钟)。
-
-5. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`,等 `ci`(以及改了容器相关文件时的 `docker-smoke`)绿。
+4. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`,等 `ci`(以及改了容器相关文件时的 `docker-smoke`)绿。
 
 ## 二、发布(合 `main` + 打 tag;tag 触发发包)
 
-`main` 受保护:禁止直接 push,只能从 `dev` 经 PR 合并,且 `backend (sqlite)`、`backend (sqlserver)`、`web (lint + vitest + build)`、`template-smoke (dotnet new smart-app)` 四项必检通过(对管理员也生效,不需要人工 review)。本地合并后直接 `git push origin main` 会被拒(`GH006`)。`main` 上有历史发版留下的 PR 合并提交,`dev` 没有它们,所以 `main` 通常不是 `dev` 的祖先,这是正常的,合并由 PR 完成。
+`main` 受保护:禁止直接 push,只能从 `dev` 经 PR 合并,且必检 `ci gate` 通过(它汇总 `ci` 里的所有 job:后端四库、模板冒烟、前端、e2e、codeql、依赖审计,被门控跳过的算通过,失败或取消才变红;对管理员也生效,不需要人工 review)。本地合并后直接 `git push origin main` 会被拒(`GH006`)。`main` 上有历史发版留下的 PR 合并提交,`dev` 没有它们,所以 `main` 通常不是 `dev` 的祖先,这是正常的,合并由 PR 完成。
 
 ```powershell
 # 1. 推 dev,等这次推送的 ci 与 docs 全绿(逐 job 核对:被门控跳过的后端腿也会让总状态显示成功)
 git fetch origin
 git push origin dev
 
-# 2. 开 PR,等四项必检,全绿后合并(保持 merge commit,不 squash、不 rebase)
+# 2. 开 PR,等必检 ci gate,全绿后合并(保持 merge commit,不 squash、不 rebase)
 gh pr create --base main --head dev --title "chore(release): X.Y.Z" --body-file <说明文件>
 gh pr checks <N> --required
 gh pr merge <N> --merge
@@ -64,7 +62,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟;一项必检都没出现、PR 一直 BLOCKED 时,回头看「一、准备」第 4 条(纯前端发版)。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
+同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟;`ci gate` 一直没出现、PR 一直 BLOCKED 时,说明这次改动整个被 `ci` 的 `paths-ignore` 跳过了(纯文档改动);发版 PR 必然改 `web/` 里的版本号,不会这样,先看 `ci` 有没有跑起来。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
 
 合并后 `main` 上会再跑一轮 `ci`(约 20 分钟),它测的树与已经跑绿的 `dev` 逐字节相同。等它绿了再打 tag:`release` 在同一 SHA 的 `backend (sqlite)` 已绿时直接晋级、不重跑 SQLite 测试;不等也可以(`release` 的 verify 自己是闸门)。`ci` 红着不打 tag。
 
