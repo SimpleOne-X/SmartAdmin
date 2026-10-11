@@ -1,5 +1,7 @@
 # 主 CI：后端四库矩阵 + 模板冒烟 + 前端（lint/vitest/build）+ 前端 e2e（Playwright，双 webServer）。
-# push / PR 到 main、dev 触发；文档类改动（site/、docs/、*.md）不跑。
+# push 到 dev、PR 到 main / dev 触发；文档类改动（site/、docs/、*.md）不跑。
+# main 上不重跑：合进 main 的就是 PR 上已经跑绿的那棵树（main 只接受 dev 来的 PR），重跑一遍只是白等约 20 分钟；
+# release.yml 发版前会核对被合并进来的那个提交上有 ci gate 成功的记录，并要求树逐字节相同。main 的代码扫描由每晚的 schedule 补。
 # changes 前置 job 按改动路径决定跑哪一半：只改 web/ 不起后端腿，只改 backend/ 不起前端；schedule、手动触发全跑。
 # 例外是 web-e2e：它同时起前后端，两边任一改动都跑。
 # 末尾的 ci gate 汇总所有 job，分支保护只要求它这一项。
@@ -10,7 +12,7 @@ name: ci
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
     paths-ignore: ['site/**', 'docs/**', '**/*.md']
   pull_request:
     branches: [main, dev]
