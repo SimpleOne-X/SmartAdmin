@@ -4,7 +4,7 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
 版本号规则:**主版本号 = 内核所用的 .NET 主版本**(10.x 对应 .NET 10,下一次大版本跟随下一个 .NET LTS),次版本号加功能,修订号修 bug;全部包共用一个版本号。破坏性变更尽量攒到换 .NET 大版本时一起发;周期内确需破坏的在次版本发,并在 CHANGELOG 对应版本段落顶部加粗提示。
 
-节奏:**开发在 `dev`,发布在 `main`**——先把 `dev` 合进 `main`,再在 **`main`** 上打 `v*` tag。tag 一推,`.github/workflows/release.yml` 接手:校验 tag 落在 `main` 上、CHANGELOG / 前端版本 / 模板依赖版本 / 文档站徽章一致,构建、测试、模板冒烟、打 13 个 nupkg 与前端 tgz,全绿才经 **Trusted Publishing** 推 nuget.org、发 npm,并建 GitHub Release。仓库里不保存任何 NuGet API key 或 npm token。**发出去的版本不可撤回**:nuget.org 只能 unlist,npm 上用过的版本号也不能再用。真正的闸门是 workflow 的 verify 阶段:它红了不会发包。
+节奏:**开发在 `dev`,发布在 `main`**——先经 PR 把 `dev` 合进 `main`(`main` 受保护,不能直接 push),再在 **`main`** 上打 `v*` tag。tag 一推,`.github/workflows/release.yml` 接手:校验 tag 落在 `main` 上、CHANGELOG / 前端版本 / 模板依赖版本 / 文档站徽章一致,构建、测试、模板冒烟、打 13 个 nupkg 与前端 tgz,全绿才经 **Trusted Publishing** 推 nuget.org、发 npm,并建 GitHub Release。仓库里不保存任何 NuGet API key 或 npm token。**发出去的版本不可撤回**:nuget.org 只能 unlist,npm 上用过的版本号也不能再用。真正的闸门是 workflow 的 verify 阶段:它红了不会发包。
 
 ## 一、准备(可逆,在 `dev` 上做)
 
@@ -31,32 +31,32 @@ SmartAdmin 前后端同仓、**同版本号一起发**。后端以 NuGet 包发�
 
    模板冒烟(`smoke-test.ps1`)把内核打进临时本地 feed,再 `dotnet new smart-app` 生成消费方项目并 build、启动,验的是消费方拿到包后的第一条命令。改了 `site/**` 还要跑 `cd site; npm run lint:prose; npx vitepress build`。
 
-4. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`,等 `ci`(以及改了容器相关文件时的 `docker-smoke`)绿。
+4. **纯前端发版要多带一个 `ci:` 提交**(自上个 tag 以来 `backend/`、`templates/`、`.github/workflows/ci.yml` 都没动,即 `git diff --stat vX.Y.<上一个>..dev -- backend templates .github` 为空)。`ci` 的 `changes` 任务会把后端腿整个跳过,`dev` → `main` 的 PR 上就不会出现 `backend (sqlite)`、`backend (sqlserver)`、`template-smoke` 这三项必检,PR 会一直 BLOCKED(矩阵任务在 job 级 `if` 为假时不展开,检查名对不上必检项;手动触发的运行不计入必检项,补不上)。在 `.github/workflows/ci.yml` 里动一下(它在后端路径的匹配里),比如改一行说明注释,单独提交,并**和下一条的准备提交一起推**:`ci` 有并发取消,先后各推一次会白跑一整轮(含 SqlServer 腿约 20 分钟)。
+
+5. 提交:`chore(release): 准备 X.Y.Z — changelog 定版 + 前端与文档站版本号`(提交信息规范见 [`skills/write-commit.md`](../skills/write-commit.md):中文主题 + conventional-commit),推 `dev`,等 `ci`(以及改了容器相关文件时的 `docker-smoke`)绿。
 
 ## 二、发布(合 `main` + 打 tag;tag 触发发包)
 
-先确认 `main` 能干净快进(理想情况,`dev` 一路领先没分叉):
+`main` 受保护:禁止直接 push,只能从 `dev` 经 PR 合并,且 `backend (sqlite)`、`backend (sqlserver)`、`web (lint + vitest + build)`、`template-smoke (dotnet new smart-app)` 四项必检通过(对管理员也生效,不需要人工 review)。本地合并后直接 `git push origin main` 会被拒(`GH006`)。`main` 上有历史发版留下的 PR 合并提交,`dev` 没有它们,所以 `main` 通常不是 `dev` 的祖先,这是正常的,合并由 PR 完成。
 
 ```powershell
+# 1. 推 dev,等这次推送的 ci 与 docs 全绿(逐 job 核对:被门控跳过的后端腿也会让总状态显示成功)
 git fetch origin
-git merge-base --is-ancestor origin/main origin/dev
-if ($LASTEXITCODE -eq 0) { Write-Host '可 ff' } else { Write-Host '有分叉，需真合并' }
-```
-
-然后:
-
-```powershell
-# 1. 推 dev
 git push origin dev
 
-# 2. main 快进到 dev；不重置本地分支
+# 2. 开 PR,等四项必检,全绿后合并(保持 merge commit,不 squash、不 rebase)
+gh pr create --base main --head dev --title "chore(release): X.Y.Z" --body-file <说明文件>
+gh pr checks <N> --required
+gh pr merge <N> --merge
+
+# 3. 本地 main 快进到 origin/main;不重置本地分支
 git fetch origin
 if (git show-ref --verify --quiet refs/heads/main) { git switch main } else { git switch --track -c main origin/main }
-if ((git rev-parse main) -ne (git rev-parse origin/main)) { throw 'Local main differs from origin/main; inspect it before merging.' }
-git merge --ff-only origin/dev
-git push origin main
+git merge-base --is-ancestor main origin/main
+if ($LASTEXITCODE -ne 0) { throw 'Local main has commits origin/main does not; inspect it before merging.' }
+git merge --ff-only origin/main
 
-# 3. 在当前 origin/main tip 打 tag 并推——推 tag 就是发包的扳机
+# 4. 等 main 上那轮 ci 绿了(见下),在当前 origin/main tip 打 tag 并推——推 tag 就是发包的扳机
 git fetch origin
 $head = git rev-parse HEAD; $main = git rev-parse main; $originMain = git rev-parse origin/main
 if (($head -ne $main) -or ($head -ne $originMain)) { throw 'Tag target is not the current origin/main tip.' }
@@ -64,7 +64,9 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-`--ff-only` 失败,说明有人直接改了 `main`(它有 `dev` 没有的提交):先 `git merge dev` 解冲突,确认版本号/CHANGELOG 没被顶回旧值,再推。
+同一个 head SHA 上会有两批同名检查(`dev` 推送触发的和 PR 触发的),PR 触发的那批没跑完前 `mergeStateStatus` 一直是 BLOCKED,整轮约 20 分钟;一项必检都没出现、PR 一直 BLOCKED 时,回头看「一、准备」第 4 条(纯前端发版)。PR 页面显示冲突,说明有人直接改了 `main`(它有 `dev` 没有的内容提交):先在本地把 `origin/main` 合进 `dev`,确认版本号 / CHANGELOG 没被顶回旧值,再推。
+
+合并后 `main` 上会再跑一轮 `ci`(约 20 分钟),它测的树与已经跑绿的 `dev` 逐字节相同。等它绿了再打 tag:`release` 在同一 SHA 的 `backend (sqlite)` 已绿时直接晋级、不重跑 SQLite 测试;不等也可以(`release` 的 verify 自己是闸门)。`ci` 红着不打 tag。
 
 推完 tag 去 Actions 页盯 `release` workflow(或 `gh run list --workflow release.yml --limit 1` 拿到 id 后 `gh run watch <id> --exit-status`):
 
@@ -85,6 +87,16 @@ git push origin vX.Y.Z
 - **核对 npm**:`npm view smart-admin-web@X.Y.Z version` 输出 `X.Y.Z`;npmjs.com 包页的版本旁有 provenance 标记(证明是从本仓库 `release.yml` 构建发布的)。空目录里 `npx degit SimpleOne-X/SmartAdmin/web/template web; cd web; npm install` 能装上新版。
 - **GitHub Release**:workflow 自动建,说明取自 CHANGELOG 对应版本段落,附 13 个 nupkg、前端 tgz 与 `openapi.json`,不用手工建。「发了什么」的真源始终是 tag + CHANGELOG.md。
 - **文档站**:`docs` workflow 在 `main` 上构建并自动部署到 GitHub Pages(仓库设置里 Pages 的 Source 选 GitHub Actions)。部署步骤按运行时的仓库可见性门控,仓库若转私有会退回只构建不部署,那时需要把 `site/.vitepress/dist` 发到自己的静态托管。核对站顶导航徽章已是 `X.Y.Z`。
+- **仅当 `main` 出现 `dev` 没有的内容时,才把 `main` 合回 `dev`**(比如 hotfix 直接落在 `main`、发布工具往 `main` 提交了版本号),否则 `dev` 会真的分叉。常规发版不需要:PR 合并提交不带内容,`main` 的树与已发布的 `dev` 相同,`dev` 显示「落后 `main`」只是整洁问题,不影响下一次 PR(`dev` 落后几个合并提交时开 PR 照常合并)。先看有没有内容差异,为空就不用合;有差异再合,提交信息用 `-m` 传,`git merge` 不支持 `-F -` 从标准输入读消息,会直接报错、合并也不会发生:
+
+  ```powershell
+  git fetch origin
+  git diff --stat origin/dev origin/main   # 为空 = 无内容差异,不用合;有差异才继续往下
+  git switch dev
+  git merge origin/main --no-ff -m "chore(release): 把 main 上的内容同步回 dev"
+  git push origin dev
+  ```
+
 - 发布成功后,前端 `package.json` 与文档站导航徽章已是新版本,`dev` 继续开发,下一版从新的 `## Unreleased` 攒起。
 
 ## 四、一次性准备(换账号 / 换仓库时才需要)
