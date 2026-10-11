@@ -40,6 +40,6 @@ The login page footer shows the `version` that `main.ts` passes to `createSmartA
 ## Tracking releases
 
 - [Changelog](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md): Keep a Changelog format, one section per release, covering both halves. Breaking changes are batched into the next .NET major release wherever possible.
-- Packages are published only from `v*` tags on `main`: the NuGet packages to nuget.org, `smart-admin-web` to npmjs.com, under the same number. Changes on the `dev` branch don't reach any package until they are released.
+- Packages are published only from `main`, automatically by the release workflow once a merge brings in a new version number: the NuGet packages to nuget.org, `smart-admin-web` to npmjs.com, under the same number. The `v*` tag is created after publishing succeeds. Changes on the `dev` branch don't reach any package until they are released.
 
 Going the other way, contributing your own fixes back to SmartAdmin, is covered in the [Contributing Guide](/community/contributing).

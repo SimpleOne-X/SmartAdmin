@@ -5,7 +5,7 @@
 ## 开始之前
 
 - Fork 仓库，clone 到本地。
-- **提 PR 请对准 `dev`，不要对准 `main`**：日常开发都在 `dev` 上进行，发版时才会把它合进 `main` 再打 tag（见 [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)）。
+- **提 PR 请对准 `dev`，不要对准 `main`**：日常开发都在 `dev` 上进行，发版时才会把它合进 `main`，合并后由发版流水线自动发包并打 tag（见 [CHANGELOG.md](https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md)）。
 - 报 bug / 提需求走 GitHub Issues 的三个模板（Bug report / Feature request / Question），仓库关闭了空白 issue。安全漏洞不要开公开 issue。
 
 ## 本地开发环境

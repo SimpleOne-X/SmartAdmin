@@ -4,11 +4,11 @@
 
 版本号规则：**主版本号 = 内核所用的 .NET 主版本**（10.x 对应 .NET 10，下一次大版本跟随下一个 .NET LTS），次版本号加功能，修订号修 bug；全部 NuGet 包、前端包 `smart-admin-web` 与 `SmartAdmin.Templates` 共用一个版本号。破坏性变更尽量攒到换 .NET 大版本时一起发；周期内确需破坏的在次版本发，并在该版本段落顶部加粗提示，升级前先读该版本的「升级说明」。
 
-发布节奏：**开发在 `dev` 上进行，发布在 `main` 上完成**。先把 `dev` 合进 `main`，再**在 `main` 上**打 `v*` tag。tag 一推，`release` workflow 校验 tag 落在 `main` 上，跑构建、测试和模板冒烟（`dotnet new smart-app` 必须能还原并编译通过），全绿才打包，经 Trusted Publishing 推 nuget.org、发 npm，同时建 GitHub Release。
+发布节奏：**开发在 `dev` 上进行，发布在 `main` 上完成**。先经 PR 把 `dev` 合进 `main`，合并后 `release` workflow 自动接手：合并进去的提交里版本号变了、且还没有对应的 `v*` tag，就先确认该提交的 CI 已经全绿，再跑构建、测试和模板冒烟（`dotnet new smart-app` 必须能还原并编译通过），全绿才打包，经 Trusted Publishing 推 nuget.org、发 npm，最后才建 `v*` tag 与 GitHub Release。
 
-逐步的发版操作清单（改版本号、验证、合 `main`、打 tag）见 [`docs/releasing.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)。
+逐步的发版操作清单（写条目、定版、开 PR、核对发布）见 [`docs/releasing.md`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/docs/releasing.md)。
 
-> 发版时**前后端版本号必须一起改**：后端版本由 tag 经 `-p:Version` 注入；前端版本写在 `web/package.json`、`web/packages/admin/package.json`（发到 npm 的包）与 `web/template/package.json`（**显示在模板登录页页脚**），模板对 `smart-admin-web` 的依赖钉同一个号，文档站导航的两处版本徽章也跟着改。漏改一处，`release` 的 verify 就会拦下，否则 npm 上的包、界面上的版本会和实际安装的 NuGet 包对不上。
+> 发版时**前后端版本号必须一起改**：后端版本由发版的版本号经 `-p:Version` 注入；前端版本写在 `web/package.json`、`web/packages/admin/package.json`（发到 npm 的包）与 `web/template/package.json`（**显示在模板登录页页脚**），模板对 `smart-admin-web` 的依赖钉同一个号，文档站导航的两处版本徽章也跟着改。漏改一处，`release` 的 verify 就会拦下，否则 npm 上的包、界面上的版本会和实际安装的 NuGet 包对不上。
 
 > **发了什么，以本文件为准**，而不是仓库的发行版页面：那里只是可选的镜像，内容从本文件对应版本的段落复制过去。
 
