@@ -19,6 +19,18 @@ public class SysRoleController(IRoleService roleService, IRbacService rbac) : Co
     public async Task<Result<PagedList<SysRole>>> Page([FromQuery] RolePageInput input) =>
         Result<PagedList<SysRole>>.Ok(await roleService.PageAsync(input));
 
+    /// <summary>
+    /// 角色选择器数据源(仅启用,id / name)。只回 Id 与名称,故 <c>[ActiveSession]</c>:
+    /// 没有角色页权限的角色也能在用户表单里选角色;能否真的分配仍由用户更新接口的授权与转授校验把关。
+    /// </summary>
+    [HttpGet("options")]
+    [ActiveSession]
+    public async Task<Result<IReadOnlyList<RoleOption>>> Options()
+    {
+        var data = await roleService.OptionsAsync();
+        return Result<IReadOnlyList<RoleOption>>.Ok(data);
+    }
+
     /// <summary>按 Id 取单条角色</summary>
     [HttpGet("{id}")]
     [RolePermission]

@@ -20,6 +20,12 @@ public interface IUserService
     /// </summary>
     Task<IReadOnlyList<UserItem>> ExportAsync(UserPageInput input);
 
+    /// <summary>
+    /// 用户选择器数据源:仅启用的用户,姓名/账号模糊 + 机构过滤,只回 Id、姓名、账号。
+    /// 数据范围与 <see cref="PageAsync"/> 一致(超管账号对非超管不可见)。
+    /// </summary>
+    Task<PagedList<UserOption>> OptionsAsync(UserOptionPageInput input);
+
     /// <summary>取用户详情(含角色 Id 集合);不存在抛 <see cref="ErrorCode.UserNotFound"/></summary>
     Task<UserDetail> GetAsync(long id);
 

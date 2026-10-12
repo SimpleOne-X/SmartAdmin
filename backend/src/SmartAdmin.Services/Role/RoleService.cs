@@ -30,6 +30,18 @@ public class RoleService(IRepository<SysRole> roles, IRbacService rbac, ICurrent
             .ToPagedListAsync(input.Current, input.Size);
 
     /// <inheritdoc />
+    public virtual async Task<IReadOnlyList<RoleOption>> OptionsAsync()
+    {
+        // 写成 `== true` 而非裸布尔:SqlServer 的谓词上下文不接受裸布尔
+        return await roles.AsQueryable()
+            .Where(r => r.Enabled == true)
+            .OrderBy(r => r.Sort)
+            .OrderBy(r => r.Id)
+            .Select(r => new RoleOption { Id = r.Id, Name = r.Name })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public virtual async Task<SysRole> GetAsync(long id)
     {
         var role = await roles.GetByIdAsync(id);

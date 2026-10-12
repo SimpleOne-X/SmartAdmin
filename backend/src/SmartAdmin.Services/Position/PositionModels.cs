@@ -25,3 +25,11 @@ public record PositionPageInput : PageInputBase
     public string? Name { get; init; }
 }
 
+/// <summary>职位选择器选项:只有 Id 与名称。</summary>
+public record PositionOption
+{
+    public required long Id { get; init; }
+
+    public required string Name { get; init; }
+}
+

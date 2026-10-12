@@ -88,6 +88,20 @@ public class UserService(
     }
 
     /// <inheritdoc />
+    public virtual async Task<PagedList<UserOption>> OptionsAsync(UserOptionPageInput input)
+    {
+        // 范围与列表同源(Guard.ScopeUsers);固定按 Id 排序、投影只取三列,
+        // 密码哈希、手机、邮箱从 SQL 层就不取
+        return await Guard.ScopeUsers(users.AsQueryable())
+            .Where(u => u.Enabled == true)
+            .WhereIF(!string.IsNullOrEmpty(input.Keyword), u => u.Name.Contains(input.Keyword!) || u.Account.Contains(input.Keyword!))
+            .WhereIF(input.OrgId.HasValue, u => u.OrgId == input.OrgId)
+            .OrderBy(u => u.Id)
+            .Select(u => new UserOption { Id = u.Id, Name = u.Name, Account = u.Account })
+            .ToPagedListAsync(input.Current, input.Size);
+    }
+
+    /// <inheritdoc />
     // 坑 1:不得走 PageAsync/ToPagedListAsync——单页有 MaxPageSize 上限,导出行数远大于它,会直接抛 48001。
     // 与 PageAsync 共用 BuildListQuery,保证导出筛选与列表一致。
     public virtual async Task<IReadOnlyList<UserItem>> ExportAsync(UserPageInput input)

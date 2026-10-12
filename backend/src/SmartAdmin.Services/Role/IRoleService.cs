@@ -11,6 +11,9 @@ public interface IRoleService
     /// <summary>分页查询角色,按名称模糊过滤,按排序升序返回。</summary>
     Task<PagedList<SysRole>> PageAsync(RolePageInput input);
 
+    /// <summary>角色选择器数据源:仅启用的角色,按排序升序,只回 Id 与名称。</summary>
+    Task<IReadOnlyList<RoleOption>> OptionsAsync();
+
     /// <summary>按 Id 取单条,不存在抛 <see cref="ErrorCode.RoleNotFound"/>。</summary>
     Task<SysRole> GetAsync(long id);
 

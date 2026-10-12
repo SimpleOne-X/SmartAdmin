@@ -10,6 +10,12 @@ public interface IOrgService
     /// <summary>取全部机构(平铺列表,按 Sort、Id 排序;前端自行拼树)</summary>
     Task<IReadOnlyList<SysOrg>> ListAsync();
 
+    /// <summary>
+    /// 机构选择器数据源:与 <see cref="ListAsync"/> 同一范围同一排序,只回 Id、父 Id、名称。
+    /// 供仅登录的调用者填表单用,不受机构页查询权限约束。
+    /// </summary>
+    Task<IReadOnlyList<OrgOption>> OptionsAsync();
+
     /// <summary>按 Id 取单个机构,不存在则抛 <see cref="SmartAdmin.Core.ErrorCode.OrgNotFound"/></summary>
     Task<SysOrg> GetAsync(long id);
 

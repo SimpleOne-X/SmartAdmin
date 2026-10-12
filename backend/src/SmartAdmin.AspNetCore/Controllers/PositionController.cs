@@ -15,6 +15,15 @@ public class PositionController(IPositionService positionService) : ControllerBa
     public async Task<Result<PagedList<SysPosition>>> Page([FromQuery] PositionPageInput input) =>
         Result<PagedList<SysPosition>>.Ok(await positionService.PageAsync(input));
 
+    /// <summary>职位选择器数据源(id / name)。只回 Id 与名称,故 <c>[ActiveSession]</c>:没有职位页权限的角色也能在表单里选职位。</summary>
+    [HttpGet("options")]
+    [ActiveSession]
+    public async Task<Result<IReadOnlyList<PositionOption>>> Options()
+    {
+        var data = await positionService.OptionsAsync();
+        return Result<IReadOnlyList<PositionOption>>.Ok(data);
+    }
+
     /// <summary>按 Id 取单条职位</summary>
     [HttpGet("{id}")]
     [RolePermission]

@@ -20,6 +20,16 @@ public class PositionService(
             .ToPagedListAsync(input, q => q.OrderBy(p => p.Sort));
 
     /// <inheritdoc />
+    public virtual async Task<IReadOnlyList<PositionOption>> OptionsAsync()
+    {
+        return await positions.AsQueryable()
+            .OrderBy(p => p.Sort)
+            .OrderBy(p => p.Id)
+            .Select(p => new PositionOption { Id = p.Id, Name = p.Name })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public virtual async Task<SysPosition> GetAsync(long id)
     {
         var position = await positions.GetByIdAsync(id);
