@@ -14,6 +14,38 @@
 
 ## Unreleased
 
+### 升级说明
+
+- **自己实现 `IOrgService`、`IPositionService`、`IRoleService`、`IUserService`（而不是继承内核默认实现）的项目，要补上各自新增的 `OptionsAsync`。**
+  继承 `OrgService`、`PositionService`、`SysRoleService`、`UserService` 的不受影响，构造器没有改。
+
+- **机构、人员、角色选择器改调下面的 options 端点，界面上有这几处变化：**
+  - `UserPicker`：一个搜索框同时匹配姓名与账号，去掉「姓名 / 账号」范围切换；每行只显示姓名和账号，不再显示机构名与头像（头像由姓名首字母代替）。
+    i18n 键 `userPicker.searchName`、`userPicker.searchAccount` 删除，换成 `userPicker.search`；应用若引用过旧键，要改。
+  - 用户管理的机构栏搜索只匹配机构名称，不再匹配机构编码；`org.searchPlaceholder` 文案随之改为只提名称。
+  - 用户管理的角色下拉、列表页「角色」搜索项只列启用角色。
+  - `RoleSelect` 一次取回全部启用角色，名称搜索改在浏览器里过滤；`pageSize` 仍是下拉最多列出的个数。
+  - 应用自己用 `userApi.page`、`roleApi.page`、`orgApi.list`、`positionApi.page` 当选择器数据源的页面不会自动改变，仍要对应的「查询」权限码，要的话自行改调 options。
+
+### Added
+
+- **机构、岗位、角色、用户新增四个 options 只读端点，给选择器用：登录即可调用，不占菜单按钮权限码。**
+  此前机构树、人员选择、角色选择、用户页的岗位 / 角色 / 主管下拉都借他页的「查询」接口取数，自建角色没有对应查询按钮时下拉会静默变空，没法选机构、岗位、人员。
+  - `GET /api/v1/sys/org/options`：平铺 `{ id, parentId, name }`，按 Sort、Id 排序；可见范围与 `org/list` 一致。
+  - `GET /api/v1/sys/position/options`：`{ id, name }`，按 Sort、Id 排序。
+  - `GET /api/v1/sys/role/options`：`{ id, name }`，仅启用。
+  - `GET /api/v1/sys/user/options`：分页，入参 `keyword`（姓名或账号模糊）、`orgId`、`current`、`size`，仅启用用户，只回 `{ id, name, account }`。
+    数据范围与 `user/page` 一致（非超管看不到超管账号，受数据范围约束）；固定按 Id 排序、不接受客户端排序字段；每页条数受 `SmartAdmin:Api:MaxPageSize` 限制，超过回 48001。
+
+  完整的 `list`、`page`、详情接口不变，仍在各页「查询」按钮权限后面。
+  前端对应是 `orgApi.options`、`positionApi.options`、`roleApi.options`、`userApi.options`，`OrgTreeSelect`、`UserSelect`、`RoleSelect`、`UserPicker` 与用户管理页改调它们；对外 props、事件、`UserSelect` 的「姓名(账号)」label 与回显行为不变。
+
+### Changed
+
+- **用户管理页的下拉数据拉取失败不再静默。**
+  机构栏失败时显示「加载失败」而不是「无数据」；职位、角色、主管下拉失败合并成一条提示，列表照常可用。
+  `OrgTreeSelect` 失败时下拉的空态同样写「加载失败」。新增 i18n 键 `common.loadFailed`、`user.optionsLoadFailed`。
+
 ## 10.24.0 - 2026-10-11
 
 ### Added

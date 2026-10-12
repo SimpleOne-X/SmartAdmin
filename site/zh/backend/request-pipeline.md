@@ -124,6 +124,7 @@ public static string Build(string httpMethod, string? routeTemplate) =>
 
 ::: tip `[ActiveSession]`：任意登录用户端点
 个人中心、登出这类端点，任何已登录用户都能用，但不需要具体的权限码。给它们挂 `ActiveSessionAttribute` 就行。它只做上面的第 1、2 步，也就是认证加会话活性，跳过权限码比对。要是只挂 `[Authorize]` 不挂它，会话被强退之后，没过期的令牌还能接着调。所以想让强退即时生效的端点，必须挂 `[ActiveSession]`。
+内核里机构、岗位、角色、用户四个选择器的数据源 `sys/org/options`、`sys/position/options`、`sys/role/options`、`sys/user/options` 也是这一类：只回编号和名称（人员多一个账号），没有对应「查询」按钮的角色也能选机构、岗位和人员，数据范围仍照常生效。
 :::
 
 ## ③ 数据范围：解析并注入 `IDataScopeContext`

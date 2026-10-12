@@ -124,6 +124,7 @@ Splitting and joining live in one place, `PermissionCode.Split` and `PermissionC
 
 ::: tip `[ActiveSession]`: endpoints for any logged-in user
 Endpoints like personal center or logout — usable by any logged-in user without a specific permission code — carry `ActiveSessionAttribute` instead. It performs only steps 1 and 2 above (authentication + session-activity check), skipping the permission-code match. Using `[Authorize]` alone without it means an unexpired token still works even after the session was force-revoked — so any endpoint that needs force-logout to take effect immediately must carry `[ActiveSession]`.
+The kernel's four selector data sources, `sys/org/options`, `sys/position/options`, `sys/role/options` and `sys/user/options`, are in this group too. They return only ids and names (plus the account for users), so a role without the matching query buttons can still pick orgs, positions and people, and the data scope still applies.
 :::
 
 ## ③ Data scope: resolved and injected into `IDataScopeContext`

@@ -1,6 +1,7 @@
 # UserSelect
 
-人员选择器。基于 [`ApiSelect`](../ApiSelect/README.md),`fetch = userApi.page`(账号/姓名远程搜索 + 可选 `orgId` 部门过滤)。
+人员选择器。基于 [`ApiSelect`](../ApiSelect/README.md),`fetch = userApi.options`(账号/姓名远程搜索 + 可选 `orgId` 部门过滤)。
+该端点登录即可调用,不要求用户页的「查询」权限码;只回 `id` / 姓名 / 账号,仅启用用户,数据范围与用户列表一致。
 选项 `label` 为「姓名(账号)」,`value` 为用户 `id`(`number`)。单/多选、`placeholder` 等经 `$attrs` 透传。
 
 ## Props
