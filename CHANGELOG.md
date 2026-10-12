@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.25.0 - 2026-10-11
+
 ### 升级说明
 
 - **自己实现 `IOrgService`、`IPositionService`、`IRoleService`、`IUserService`（而不是继承内核默认实现）的项目，要补上各自新增的 `OptionsAsync`。**
