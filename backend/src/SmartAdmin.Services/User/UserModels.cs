@@ -22,6 +22,35 @@ public record UserPageInput : PageInputBase
 }
 
 /// <summary>
+/// 用户选择器查询入参。刻意不继承 <see cref="PageInputBase"/>:没有客户端排序,
+/// 免得无权限的调用者按手机号、密码哈希等列排序来推测其内容。
+/// </summary>
+public record UserOptionPageInput
+{
+    /// <summary>姓名或账号(模糊)</summary>
+    public string? Keyword { get; init; }
+
+    /// <summary>主属机构 Id(精确)</summary>
+    public long? OrgId { get; init; }
+
+    /// <summary>页码(从 1 起)</summary>
+    public int Current { get; init; } = 1;
+
+    /// <summary>每页条数,上限同 <c>SmartAdmin:Api:MaxPageSize</c></summary>
+    public int Size { get; init; } = 20;
+}
+
+/// <summary>用户选择器选项:只有 Id、姓名、账号,其余字段(手机、邮箱、头像等)一律不出。</summary>
+public record UserOption
+{
+    public required long Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string Account { get; init; }
+}
+
+/// <summary>
 /// 用户列表/详情出参。<b>刻意不含 Password 字段</b>——密码哈希是敏感字段,绝不出接口。
 /// </summary>
 public record UserItem

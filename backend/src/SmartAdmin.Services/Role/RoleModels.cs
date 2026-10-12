@@ -33,3 +33,11 @@ public record RolePageInput : PageInputBase
     /// <summary>角色名称(模糊匹配,可选)</summary>
     public string? Name { get; init; }
 }
+
+/// <summary>角色选择器选项:只有 Id 与名称。</summary>
+public record RoleOption
+{
+    public required long Id { get; init; }
+
+    public required string Name { get; init; }
+}

@@ -1543,6 +1543,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/org/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 机构选择器数据源(平铺 id / parentId / name)。只回拼树所需字段,
+         *     故 `[ActiveSession]` 而非 `[RolePermission]`:没有机构页权限的角色也能在表单里选机构;数据范围与 list 一致。
+         */
+        get: operations["Org_Options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/org/{id}": {
         parameters: {
             query?: never;
@@ -1870,6 +1890,23 @@ export interface paths {
         };
         /** 分页查询职位 */
         get: operations["Position_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/position/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 职位选择器数据源(id / name)。只回 Id 与名称,故 `[ActiveSession]`:没有职位页权限的角色也能在表单里选职位。 */
+        get: operations["Position_Options"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2266,6 +2303,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/role/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 角色选择器数据源(仅启用,id / name)。只回 Id 与名称,故 `[ActiveSession]`:
+         *     没有角色页权限的角色也能在用户表单里选角色;能否真的分配仍由用户更新接口的授权与转授校验把关。
+         */
+        get: operations["SysRole_Options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/role/{id}": {
         parameters: {
             query?: never;
@@ -2464,6 +2521,26 @@ export interface paths {
         };
         /** 分页查询用户 */
         get: operations["User_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/user/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用户选择器数据源(仅启用,分页,id / name / account)。只回这三个字段,故 `[ActiveSession]`:
+         *     没有用户页权限的角色也能选人;数据范围与 page 一致,不接受客户端排序。
+         */
+        get: operations["User_Options"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3948,6 +4025,17 @@ export interface components {
             /** @description 是否启用 */
             enabled?: boolean;
         };
+        /** @description 机构选择器选项:只有拼树所需的三个字段。 */
+        OrgOption: {
+            /** Format: int64 */
+            id: number | string;
+            /**
+             * Format: int64
+             * @description 父机构 Id(0=根)
+             */
+            parentId: number | string;
+            name: string;
+        };
         /**
          * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
          *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
@@ -4480,6 +4568,34 @@ export interface components {
             /** @description 当前页数据 */
             items?: components["schemas"]["UserMenuGrantPageItem"][];
         };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
+        PagedListOfUserOption: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["UserOption"][];
+        };
         /** @description 密码复杂度策略(运行时可配置,见 ISecurityPolicyProvider)。 */
         PasswordPolicy: {
             /**
@@ -4537,6 +4653,12 @@ export interface components {
             sort?: number | string;
             /** @description 是否启用 */
             enabled?: boolean;
+        };
+        /** @description 职位选择器选项:只有 Id 与名称。 */
+        PositionOption: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
         };
         /** @description 再次认证入参。 */
         ReauthInput: {
@@ -5160,6 +5282,28 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfIReadOnlyListOfOrgOption: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["OrgOption"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfIReadOnlyListOfPermissionRouteItem: {
             /**
              * Format: int32
@@ -5174,6 +5318,50 @@ export interface components {
             message?: null | string;
             /** @description 业务数据载荷 */
             data?: null | components["schemas"]["PermissionRouteItem"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfPositionOption: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["PositionOption"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfRoleOption: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["RoleOption"][];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5843,6 +6031,27 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfPagedListOfUserOption: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfUserOption"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfPasswordPolicy: {
             /**
              * Format: int32
@@ -6193,6 +6402,12 @@ export interface components {
              *     故此处不加额外访问控制;留空/false 与显式声明"不可转授"同义(安全默认)。
              */
             isDelegatable?: null | boolean;
+        };
+        /** @description 角色选择器选项:只有 Id 与名称。 */
+        RoleOption: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
         };
         /**
          * @description 服务器监控快照。只报<b>进程与主机基础面</b>——系统级全量指标(APM/链路/告警)
@@ -7178,8 +7393,8 @@ export interface components {
              */
             isDelegatable?: null | boolean;
             /**
-             * @description 内置角色:内核种子播的固定 Id(1–999)。系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
-             *     与消费者种子里的角色(Id ≥ 1000)都授不了。只读计算属性,不建列。
+             * @description 内置角色:内核种子播的固定 Id(1–999)。除「用户管理」「角色管理」外,系统菜单只能授给内置角色,界面上新建的角色(雪花 Id)
+             *     与消费者种子里的角色(Id ≥ 1000)都授不了那部分。只读计算属性,不建列。
              */
             isBuiltin?: boolean;
             /** @description 软删除标记;`true` 即被全局查询过滤器排除,可经 `RestoreAsync` 恢复。 */
@@ -7546,6 +7761,13 @@ export interface components {
             title?: string;
             /** @description 可转授(内置 system 模块恒为 false) */
             delegatable?: boolean;
+        };
+        /** @description 用户选择器选项:只有 Id、姓名、账号,其余字段(手机、邮箱、头像等)一律不出。 */
+        UserOption: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
+            account: string;
         };
         /** @description 个人资料出参(当前登录用户视角;不含密码哈希)。 */
         UserProfile: {
@@ -10295,6 +10517,28 @@ export interface operations {
             };
         };
     };
+    Org_Options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfOrgOption"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfOrgOption"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfOrgOption"];
+                };
+            };
+        };
+    };
     Org_Get: {
         parameters: {
             query?: never;
@@ -10848,6 +11092,28 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfPagedListOfSysPosition"];
                     "application/json": components["schemas"]["ResultOfPagedListOfSysPosition"];
                     "text/json": components["schemas"]["ResultOfPagedListOfSysPosition"];
+                };
+            };
+        };
+    };
+    Position_Options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfPositionOption"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfPositionOption"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfPositionOption"];
                 };
             };
         };
@@ -11518,6 +11784,28 @@ export interface operations {
             };
         };
     };
+    SysRole_Options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfRoleOption"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfRoleOption"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfRoleOption"];
+                };
+            };
+        };
+    };
     SysRole_Get: {
         parameters: {
             query?: never;
@@ -11894,6 +12182,37 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfPagedListOfUserItem"];
                     "application/json": components["schemas"]["ResultOfPagedListOfUserItem"];
                     "text/json": components["schemas"]["ResultOfPagedListOfUserItem"];
+                };
+            };
+        };
+    };
+    User_Options: {
+        parameters: {
+            query?: {
+                /** @description 姓名或账号(模糊) */
+                Keyword?: string;
+                /** @description 主属机构 Id(精确) */
+                OrgId?: number | string;
+                /** @description 页码(从 1 起) */
+                Current?: number | string;
+                /** @description 每页条数,上限同 `SmartAdmin:Api:MaxPageSize` */
+                Size?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfUserOption"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfUserOption"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfUserOption"];
                 };
             };
         };

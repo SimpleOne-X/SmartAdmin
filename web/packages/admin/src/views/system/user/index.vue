@@ -7,6 +7,7 @@ import { createReusableTemplate, useStorage } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import {
   NButton,
+  NEmpty,
   NTree,
   NSpace,
   NTag,
@@ -50,7 +51,7 @@ import { TABLE_MIN_ROW_HEIGHT, TABLE_TOOLBAR } from '#/utils/tableToolbar'
 import TableTotal from '#/components/TableTotal/index.vue'
 import { triggerBlobDownload } from '#/utils/download'
 import { buildTree, expandableIds, rootExpandableIds } from '#/utils/tree'
-import type { ExportColumnDef, SysOrg, UserItem } from '#/types/api'
+import type { ExportColumnDef, OrgOption, UserItem } from '#/types/api'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -87,7 +88,8 @@ async function clearUserMfa(user: UserItem) {
   }
 }
 
-// 职位/角色/主管下拉:各拉一页足量。ponytail: 200 覆盖绝大多数系统;真超再上分页搜索。
+// 职位/角色/主管/机构下拉走各自的 options 端点(登录即可调,不依赖职位/角色/机构页的查询权限)。
+// 主管候选一页取 200。ponytail: 200 覆盖绝大多数系统;真超再上分页搜索。
 // roleOptions 一份两用:既喂编辑弹窗,也当列表页「角色」搜索项的选项源(SmartTable 支持 Ref 选项源)。
 const positionOptions = ref<{ label: string; value: number }[]>([])
 const roleOptions = ref<{ label: string; value: number }[]>([])
@@ -95,9 +97,11 @@ const directorOptions = ref<{ label: string; value: number }[]>([])
 // 左侧机构树筛选:选中节点即按其机构过滤用户;params 深监听联动 SmartTable(回第 1 页重查)。
 // 面板外观对齐内核 layout.css 的 .side-filter 约定:搜索走 NTree 自带 pattern/filter;
 // 展开受控,进页面只展开一级,选中节点自动展开其祖先链;整栏可向左收起。
-const orgFlat = ref<SysOrg[]>([])
+const orgFlat = ref<OrgOption[]>([])
 // 拉取期间给树位占位(见下方 n-spin),避免树从空白直接跳成展开好的一整棵——那一下比慢半拍更扎眼。
 const orgLoading = ref(true)
+// 拉取失败时面板显示「加载失败」,不能让人把它当成「没有机构」。
+const orgLoadFailed = ref(false)
 const orgTree = computed(() => buildTree(orgFlat.value))
 const selectedOrgId = ref<number | null>(null)
 const tableParams = computed<{ orgId?: number }>(() =>
@@ -139,8 +143,7 @@ const renderOrgSwitcher = () => h(AppIcon, { icon: 'ph:caret-right', size: 12 })
 function filterOrg(input: string, node: TreeOption) {
   const kw = input.trim().toLowerCase()
   if (!kw) return true
-  const org = node as unknown as SysOrg
-  return org.name.toLowerCase().includes(kw) || (org.code ?? '').toLowerCase().includes(kw)
+  return (node as unknown as OrgOption).name.toLowerCase().includes(kw)
 }
 
 const orgExpandedKeys = ref<number[]>([])
@@ -178,32 +181,35 @@ watch(selectedOrgId, id => {
   orgExpandedKeys.value = [...next]
 })
 onMounted(async () => {
+  // 三个表单下拉的失败合并成一条提示,不打断列表;机构树失败由面板自己显示。
+  const failed: string[] = []
   try {
-    const { items } = await positionApi.page({ page: 1, pageSize: 200 })
+    const items = await positionApi.options()
     positionOptions.value = items.map(p => ({ label: p.name, value: p.id }))
   } catch {
-    // 静默:职位是配角,不打断列表
+    failed.push(t('user.position'))
   }
   try {
-    const { items } = await roleApi.page({ page: 1, pageSize: 200 })
+    const items = await roleApi.options()
     roleOptions.value = items.map(r => ({ label: r.name, value: r.id }))
   } catch {
-    // 静默:角色下拉拉取失败不打断列表
+    failed.push(t('user.roles'))
   }
   try {
     // 主管候选就是用户自身;拉一页足量作下拉源(允许把某用户选为自己主管,后台系统无害,不加环检)
-    const { items } = await userApi.page({ page: 1, pageSize: 200 })
+    const { items } = await userApi.options({ page: 1, pageSize: 200 })
     directorOptions.value = items.map(u => ({ label: `${u.name}(${u.account})`, value: u.id }))
   } catch {
-    // 静默:主管下拉是配角,拉取失败不打断列表
+    failed.push(t('user.director'))
   }
+  if (failed.length) message.warning(t('user.optionsLoadFailed', { names: failed.join(' / ') }))
   try {
-    orgFlat.value = await orgApi.list()
+    orgFlat.value = await orgApi.options()
     // 受控展开:一旦传了 expanded-keys,naive 就以它为准,不会自己默认展开——数据到位时自己播种「只展开一级」。
     // 只在这一次播种,之后用户手动展开 / 收起的状态不会被覆盖。
     orgExpandedKeys.value = [...firstLevelOrgKeys.value]
   } catch {
-    // 静默:机构树是筛选辅助,拉取失败不打断列表
+    orgLoadFailed.value = true
   } finally {
     orgLoading.value = false
   }
@@ -592,7 +598,9 @@ deriveHeaderFilters(columns)
     <div class="side-filter__divider" />
 
     <n-spin :show="orgLoading" class="fill-pass">
+      <n-empty v-if="orgLoadFailed" size="small" :description="t('common.loadFailed')" />
       <n-tree
+        v-else
         class="side-tree"
         block-line
         selectable

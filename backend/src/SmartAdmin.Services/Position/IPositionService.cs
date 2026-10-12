@@ -10,6 +10,9 @@ public interface IPositionService
     /// <summary>分页查询职位,按名称模糊过滤,按排序升序返回。</summary>
     Task<PagedList<SysPosition>> PageAsync(PositionPageInput input);
 
+    /// <summary>职位选择器数据源:全部职位,按排序升序,只回 Id 与名称。</summary>
+    Task<IReadOnlyList<PositionOption>> OptionsAsync();
+
     /// <summary>按 Id 取单条,不存在抛 <see cref="ErrorCode.PositionNotFound"/>。</summary>
     Task<SysPosition> GetAsync(long id);
 

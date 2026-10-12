@@ -1,23 +1,27 @@
 <script setup lang="ts">
-// 机构树下拉:onMounted 拉 orgApi.list()(平铺)→ buildTree 拼树;value/placeholder/size… 一切经 $attrs 透传 n-tree-select。
+// 机构树下拉:onMounted 拉 orgApi.options()(平铺,不占机构页权限码)→ buildTree 拼树;value/placeholder/size… 一切经 $attrs 透传 n-tree-select。
 // excludeSubtreeOf:编辑机构选上级时剪掉自身子树(防把自己挂到自己后代下成环)——用户页传 null(不剪),机构页传 editingId。
 import { computed, onMounted, ref } from 'vue'
-import { NTreeSelect } from 'naive-ui'
+import { NEmpty, NTreeSelect } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { orgApi } from '#/api'
 import { buildTree, collectSubtreeIds } from '#/utils/tree'
-import type { SysOrg } from '#/types/api'
+import type { OrgOption } from '#/types/api'
 
 defineOptions({ inheritAttrs: false })
 const props = defineProps<{ excludeSubtreeOf?: number | null }>()
 
-const flat = ref<SysOrg[]>([])
+const { t } = useI18n()
+const flat = ref<OrgOption[]>([])
 const loading = ref(false)
+// 失败不弹 message(本组件不依赖 message provider),但下拉空态要说明是加载失败,不能让人当成「没有机构」
+const loadFailed = ref(false)
 onMounted(async () => {
   loading.value = true
   try {
-    flat.value = await orgApi.list()
+    flat.value = await orgApi.options()
   } catch {
-    // 静默留空:机构是配角,不打断主流程
+    loadFailed.value = true
   } finally {
     loading.value = false
   }
@@ -44,5 +48,9 @@ const options = computed(() => {
     children-field="children"
     clearable
     v-bind="$attrs"
-  />
+  >
+    <template v-if="loadFailed" #empty>
+      <n-empty :description="t('common.loadFailed')" />
+    </template>
+  </n-tree-select>
 </template>

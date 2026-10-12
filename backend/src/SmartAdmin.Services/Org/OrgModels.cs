@@ -22,6 +22,17 @@ public record OrgInput
     public bool Enabled { get; init; } = true;
 }
 
+/// <summary>机构选择器选项:只有拼树所需的三个字段。</summary>
+public record OrgOption
+{
+    public required long Id { get; init; }
+
+    /// <summary>父机构 Id(0=根)</summary>
+    public required long ParentId { get; init; }
+
+    public required string Name { get; init; }
+}
+
 /// <summary>复制机构入参</summary>
 public record OrgCopyInput
 {

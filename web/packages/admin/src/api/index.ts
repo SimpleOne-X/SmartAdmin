@@ -41,10 +41,13 @@ import type {
   NoticePublishInput,
   OnlineSessionItem,
   OrgInput,
+  OrgOption,
   PagedList,
   PermissionRouteItem,
   PositionInput,
+  PositionOption,
   RoleInput,
+  RoleOption,
   ServerInfoOutput,
   SysAiUsageLog,
   SysConfig,
@@ -70,6 +73,7 @@ import type {
   UserMenuGrantPageItem,
   UserMenuGrantStatus,
   UserMenuGrantUpsert,
+  UserOption,
   UserProfile,
   UserShortcutItem,
   WorkbenchTodoSummary,
@@ -557,6 +561,18 @@ export const userApi = {
         },
       })
       .then(r => toPage<UserItem>(r)),
+  /**
+   * 选择器数据源(仅启用用户,只回 id / 姓名 / 账号):不占用户页权限码,没有「用户-查询」的角色也能选人。
+   * keyword 同时匹配姓名与账号;范围同 page。人员选择器一律走它,不走 page。
+   */
+  options: (params: { page: number; pageSize: number; keyword?: string; orgId?: number }) =>
+    client
+      .GET('/api/v1/sys/user/options', {
+        params: {
+          query: { ...pageParams(params), Keyword: params.keyword, OrgId: params.orgId },
+        },
+      })
+      .then(r => toPage<UserOption>(r)),
   /** 用户详情(含 roleIds,编辑回显 + 提交时原样带回避免清空角色)。 */
   detail: (id: number) =>
     client
@@ -727,6 +743,8 @@ export const userApi = {
 export const orgApi = {
   /** 全部机构(平铺,按 Sort、Id 排序)。前端 buildTree 拼树。下拉 / 树表复用。 */
   list: () => client.GET('/api/v1/sys/org/list', {}).then(r => unwrap<SysOrg[]>(r)),
+  /** 选择器数据源(平铺 id / parentId / name,范围同 list):不占机构页权限码。机构下拉 / 树选择一律走它,不走 list。 */
+  options: () => client.GET('/api/v1/sys/org/options', {}).then(r => unwrap<OrgOption[]>(r)),
   add: (body: OrgInput) =>
     client.POST('/api/v1/sys/org/add', { body }).then(r => unwrap<number>(r)),
   update: (id: number, body: OrgInput) =>
@@ -766,6 +784,9 @@ export const positionApi = {
         },
       })
       .then(r => toPage<SysPosition>(r)),
+  /** 选择器数据源(全部职位,按排序,只回 id / name):不占职位页权限码。 */
+  options: () =>
+    client.GET('/api/v1/sys/position/options', {}).then(r => unwrap<PositionOption[]>(r)),
   add: (body: PositionInput) =>
     client.POST('/api/v1/sys/position/add', { body }).then(r => unwrap<number>(r)),
   update: (id: number, body: PositionInput) =>
@@ -787,6 +808,8 @@ export const roleApi = {
         params: { query: { ...pageParams(params), Name: params.name } },
       })
       .then(r => toPage<SysRole>(r)),
+  /** 选择器数据源(仅启用角色,按排序,只回 id / name):不占角色页权限码。 */
+  options: () => client.GET('/api/v1/sys/role/options', {}).then(r => unwrap<RoleOption[]>(r)),
   add: (body: RoleInput) =>
     client.POST('/api/v1/sys/role/add', { body }).then(r => unwrap<number>(r)),
   update: (id: number, body: RoleInput) =>

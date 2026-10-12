@@ -44,6 +44,14 @@ public class OrgService(
     }
 
     /// <inheritdoc />
+    public virtual async Task<IReadOnlyList<OrgOption>> OptionsAsync()
+    {
+        // 直接复用 ListAsync:范围收口(含子类覆写)与机构列表只有一份
+        var all = await ListAsync();
+        return [.. all.Select(o => new OrgOption { Id = o.Id, ParentId = o.ParentId, Name = o.Name })];
+    }
+
+    /// <inheritdoc />
     public virtual async Task<SysOrg> GetAsync(long id)
     {
         var org = await orgs.GetByIdAsync(id);

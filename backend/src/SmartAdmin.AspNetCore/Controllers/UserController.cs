@@ -33,6 +33,18 @@ public class UserController(
     public async Task<Result<PagedList<UserItem>>> Page([FromQuery] UserPageInput input) =>
         Result<PagedList<UserItem>>.Ok(await users.PageAsync(input));
 
+    /// <summary>
+    /// 用户选择器数据源(仅启用,分页,id / name / account)。只回这三个字段,故 <c>[ActiveSession]</c>:
+    /// 没有用户页权限的角色也能选人;数据范围与 page 一致,不接受客户端排序。
+    /// </summary>
+    [HttpGet("options")]
+    [ActiveSession]
+    public async Task<Result<PagedList<UserOption>>> Options([FromQuery] UserOptionPageInput input)
+    {
+        var data = await users.OptionsAsync(input);
+        return Result<PagedList<UserOption>>.Ok(data);
+    }
+
     /// <summary>用户详情(含角色 Id)</summary>
     [HttpGet("{id}")]
     [RolePermission]

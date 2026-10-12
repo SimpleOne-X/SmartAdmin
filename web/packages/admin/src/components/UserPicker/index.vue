@@ -2,7 +2,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
-  NDropdown,
   NEmpty,
   NInput,
   NSpin,
@@ -21,7 +20,7 @@ import { useShellBreakpoint } from '#/composables/useShellBreakpoint'
 import { orgApi, userApi } from '#/api'
 import { buildTree } from '#/utils/tree'
 import { translateError } from '#/utils/error'
-import type { SysOrg, UserItem } from '#/types/api'
+import type { OrgOption, UserOption } from '#/types/api'
 
 const props = defineProps<{ excludeIds?: number[] }>()
 const emit = defineEmits<{ (e: 'confirm', ids: number[]): void }>()
@@ -43,7 +42,7 @@ const variant = computed(() => (bp.value === 'narrow' ? 'drawer' : 'modal'))
 const tab = ref<'users' | 'selected'>('users')
 
 // ── 机构(左栏) ──
-const orgFlat = ref<SysOrg[]>([])
+const orgFlat = ref<OrgOption[]>([])
 const orgTree = computed(() => {
   const all = { id: 0, parentId: -1, name: t('common.all'), children: buildTree(orgFlat.value) }
   return [all]
@@ -55,9 +54,10 @@ const orgId = computed(() =>
 
 onMounted(async () => {
   try {
-    orgFlat.value = await orgApi.list()
-  } catch {
-    /* 静默 */
+    orgFlat.value = await orgApi.options()
+  } catch (e) {
+    // 机构只是筛选维度,失败不阻断选人,但要说出来,不能让左栏悄悄只剩「全部」
+    message.error(translateError(e))
   }
 })
 
@@ -72,38 +72,28 @@ function onOrgPick(key: number | null) {
 }
 
 // ── 可选用户(中栏) ──
-// 一页 20 人;接口只有「姓名 / 账号」两个独立的模糊条件、没有联合检索,所以搜索框带一个范围切换。
+// 一页 20 人;一个搜索框同时匹配姓名与账号。
 const PAGE_SIZE = 20
-type SearchField = 'name' | 'account'
 
-const field = ref<SearchField>('name')
 const keyword = ref('')
 const page = ref(1)
 const total = ref(0)
-const rows = ref<UserItem[]>([])
+const rows = ref<UserOption[]>([])
 const loading = ref(false)
 // 防乱序:输入停顿、翻页、换机构都会发请求,后发的先回来时,先发的结果不能覆盖它。
 let seq = 0
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
-const placeholder = computed(() =>
-  field.value === 'name' ? t('userPicker.searchName') : t('userPicker.searchAccount'),
-)
-const scopeOptions = computed(() => [
-  { key: 'name', label: t('user.name') },
-  { key: 'account', label: t('user.account') },
-])
 
 async function load() {
   const mine = ++seq
   loading.value = true
   try {
     const kw = keyword.value.trim() || undefined
-    const res = await userApi.page({
+    const res = await userApi.options({
       page: page.value,
       pageSize: PAGE_SIZE,
-      name: field.value === 'name' ? kw : undefined,
-      account: field.value === 'account' ? kw : undefined,
+      keyword: kw,
       orgId: orgId.value,
     })
     if (mine !== seq) return
@@ -130,10 +120,6 @@ function onSearchInput(v: string) {
   keyword.value = v
   void reloadDebounced()
 }
-function onScope(key: SearchField) {
-  field.value = key
-  if (keyword.value.trim()) reload()
-}
 function goPage(n: number) {
   if (n < 1 || n > pageCount.value || n === page.value) return
   page.value = n
@@ -141,7 +127,7 @@ function goPage(n: number) {
 }
 
 // ── 已选用户(右栏) ──
-const selected = reactive<UserItem[]>([])
+const selected = reactive<UserOption[]>([])
 const selectedSet = computed(() => new Set(selected.map(u => u.id)))
 const excludeSet = computed(() => new Set(props.excludeIds ?? []))
 const selectedSearch = ref('')
@@ -155,7 +141,7 @@ const filteredSelected = computed(() => {
   )
 })
 
-function addUsers(users: UserItem[]) {
+function addUsers(users: UserOption[]) {
   for (const u of users) {
     if (!selectedSet.value.has(u.id) && !excludeSet.value.has(u.id)) selected.push(u)
   }
@@ -164,7 +150,7 @@ function removeUser(id: number) {
   const idx = selected.findIndex(u => u.id === id)
   if (idx >= 0) selected.splice(idx, 1)
 }
-function toggleUser(u: UserItem) {
+function toggleUser(u: UserOption) {
   if (excludeSet.value.has(u.id)) return
   if (selectedSet.value.has(u.id)) removeUser(u.id)
   else addUsers([u])
@@ -186,9 +172,9 @@ function togglePage() {
   }
 }
 
-/** 次行:账号(与姓名相同就不重复)· 机构。 */
-function subline(u: UserItem) {
-  return [u.account !== u.name ? u.account : '', u.orgName].filter(Boolean).join(' · ')
+/** 次行:账号(与姓名相同就不重复)。 */
+function subline(u: UserOption) {
+  return u.account !== u.name ? u.account : ''
 }
 
 // ── 公共 API ──
@@ -197,7 +183,6 @@ async function open(ids?: number[]) {
   selectedSearch.value = ''
   selectedOrgKey.value = null
   keyword.value = ''
-  field.value = 'name'
   page.value = 1
   rows.value = []
   total.value = 0
@@ -210,16 +195,16 @@ async function open(ids?: number[]) {
     // ponytail: 拉一页,靠 id 过滤。取 200 是为了在应用把 Api:MaxPageSize 调小时也不会被后端回 48001。
     // 用户超过 200 个时,排在后面的 id 解析不出名字,走下面那条退回显示 id 的分支;
     // 真要支持更大规模的用户名单,再改成分页搜索。
-    const { items } = await userApi.page({ page: 1, pageSize: 200 })
+    const { items } = await userApi.options({ page: 1, pageSize: 200 })
     const all = items.filter(u => ids.includes(u.id))
     // 没拉到的 id(翻页之外),退回只显示 id
     const found = new Set(all.map(u => u.id))
     for (const u of all) selected.push(u)
     for (const id of ids) {
-      if (!found.has(id)) selected.push({ id, account: String(id), name: String(id) } as UserItem)
+      if (!found.has(id)) selected.push({ id, account: String(id), name: String(id) })
     }
   } catch {
-    for (const id of ids) selected.push({ id, account: String(id), name: String(id) } as UserItem)
+    for (const id of ids) selected.push({ id, account: String(id), name: String(id) })
   }
 }
 
@@ -283,17 +268,12 @@ defineExpose({ open })
             round
             clearable
             :size="compact ? 'large' : 'medium'"
-            :placeholder="placeholder"
+            :placeholder="t('userPicker.search')"
             class="picker-search"
             @update:value="onSearchInput"
           >
             <template #prefix>
-              <n-dropdown trigger="click" :options="scopeOptions" :value="field" @select="onScope">
-                <span class="scope-trigger" role="button" tabindex="0">
-                  <AppIcon icon="ph:magnifying-glass" :size="15" />
-                  <AppIcon icon="ph:caret-down" :size="10" />
-                </span>
-              </n-dropdown>
+              <AppIcon class="search-icon" icon="ph:magnifying-glass" :size="15" />
             </template>
           </n-input>
           <n-button
@@ -325,7 +305,7 @@ defineExpose({ open })
               @keydown.enter.prevent="toggleUser(u)"
               @keydown.space.prevent="toggleUser(u)"
             >
-              <UserAvatar :name="u.name" :src="u.avatar" :size="32" />
+              <UserAvatar :name="u.name" :size="32" />
               <span class="user-main">
                 <span class="user-name">{{ u.name }}</span>
                 <span v-if="subline(u)" class="user-sub">{{ subline(u) }}</span>
@@ -397,7 +377,7 @@ defineExpose({ open })
         />
         <div class="selected-list">
           <div v-for="u in filteredSelected" :key="u.id" class="selected-item">
-            <UserAvatar :name="u.name" :src="u.avatar" :size="28" />
+            <UserAvatar :name="u.name" :size="28" />
             <span class="user-main">
               <span class="user-name">{{ u.name }}</span>
               <span v-if="subline(u)" class="user-sub">{{ subline(u) }}</span>
@@ -483,12 +463,8 @@ defineExpose({ open })
   flex: 1;
   min-width: 0;
 }
-.scope-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+.search-icon {
   color: var(--text-3);
-  cursor: pointer;
 }
 .page-toggle {
   flex-shrink: 0;

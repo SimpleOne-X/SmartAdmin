@@ -20,6 +20,18 @@ public class OrgController(IOrgService orgService) : ControllerBase
         return Result<IReadOnlyList<SysOrg>>.Ok(data);
     }
 
+    /// <summary>
+    /// 机构选择器数据源(平铺 id / parentId / name)。只回拼树所需字段,
+    /// 故 <c>[ActiveSession]</c> 而非 <c>[RolePermission]</c>:没有机构页权限的角色也能在表单里选机构;数据范围与 list 一致。
+    /// </summary>
+    [HttpGet("options")]
+    [ActiveSession]
+    public async Task<Result<IReadOnlyList<OrgOption>>> Options()
+    {
+        var data = await orgService.OptionsAsync();
+        return Result<IReadOnlyList<OrgOption>>.Ok(data);
+    }
+
     /// <summary>按 Id 取单个机构</summary>
     [HttpGet("{id}")]
     [RolePermission]

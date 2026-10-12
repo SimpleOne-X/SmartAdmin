@@ -37,6 +37,7 @@ export default {
     batchDeleteConfirm: '确认删除选中的 {count} 项?此操作不可恢复。',
     all: '全部',
     noData: '暂无数据',
+    loadFailed: '加载失败',
     back: '返回',
     detail: '详情',
   },
@@ -45,8 +46,7 @@ export default {
     org: '机构',
     available: '可选用户',
     selected: '已选',
-    searchName: '搜索姓名',
-    searchAccount: '搜索账号',
+    search: '搜索姓名或账号',
     selectPage: '全选本页',
     unselectPage: '取消本页',
     total: '共 {n} 人',
@@ -532,6 +532,8 @@ export default {
     allOrgs: '全部',
     // 机构分组栏的分组名;内容区较窄时机构树收进抽屉,它同时是工具栏按钮与抽屉标题
     orgFilter: '机构',
+    // 下拉数据(职位/角色/主管)拉取失败只提示一次,不打断列表;{names} 是失败项名称
+    optionsLoadFailed: '{names}选项加载失败,新增/编辑表单里的下拉可能为空,请刷新页面重试',
     // 分组栏头部按钮的提示:展开到底后变成「折叠到一级」;「收起」向左收起整栏,收起后工具栏按钮的提示是「展开」
     collapseToFirstLevel: '折叠到一级',
     hideOrgPanel: '收起机构栏',
@@ -1120,7 +1122,7 @@ export default {
   // 机构管理(树表 + 上级机构树选)
   org: {
     title: '机构管理',
-    searchPlaceholder: '搜索机构名称/编码',
+    searchPlaceholder: '搜索机构名称',
     name: '机构名称',
     code: '机构编码',
     category: '分类',

@@ -156,7 +156,7 @@ test.describe('RBAC 权限', () => {
     // 记录初始已选数
     const initialCount = await picker.locator('.selected-item').count()
 
-    // ② 在中间面板搜"超级管理员"(默认按姓名),点整行选中
+    // ② 在中间面板搜"超级管理员"(一个关键字同时匹配姓名与账号),点整行选中
     await picker.locator('.picker-search input').fill('超级管理员')
     const adminRow = picker.locator('.user-row').filter({ hasText: '超级管理员' })
     await expect(adminRow).toBeVisible({ timeout: 5_000 })

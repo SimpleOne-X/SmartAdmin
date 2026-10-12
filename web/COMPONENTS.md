@@ -70,11 +70,11 @@ SmartAdmin 内接入约定:
 | TableTotal | 分页栏左侧的「共 N 条」,写在 SmartTable 的 `#pagination-prefix` 插槽里;每张分页表格都要有 | `src/components/TableTotal/README.md` |
 | DictSelect | 字典下拉,`$attrs` 全透传 n-select | `src/components/DictSelect/README.md` |
 | DictTag | 表格列字典翻译 + 语义色标签 | `src/components/DictTag/README.md` |
-| OrgTreeSelect | 机构树下拉;拉 `org/list` 平铺 → `utils/tree.buildTree` 拼树,`$attrs` 透传 n-tree-select;`excludeSubtreeOf` 剪自身子树防成环 | `src/components/OrgTreeSelect/README.md` |
+| OrgTreeSelect | 机构树下拉;拉 `org/options`(平铺,登录即可调用,不占机构页查询码)→ `utils/tree.buildTree` 拼树,`$attrs` 透传 n-tree-select;`excludeSubtreeOf` 剪自身子树防成环;取数失败时空态写「加载失败」 | `src/components/OrgTreeSelect/README.md` |
 | FileUpload | 封 n-upload `custom-request`;内部 `fileApi.upload` 自动带 Bearer,成功 `emit('uploaded', out)`,上传起止各 `emit('loadingChange', bool)`(try/finally 兜底,给触发器加"上传中"spinner);`$attrs` 透传(accept/multiple/show-file-list)。`chunked` 走分片/断点续传/秒传(`utils/chunkUpload`,进度回 n-upload) | `src/components/FileUpload/README.md` |
 | PasswordStrength | 密码强度条 + 规则清单(紧贴输入框、弱/中/强取 err/warn/ok 语义色);自包含,`:value` 传密码明文,内部拉当前生效密码策略动态构建规则(改密页 / 建用户页共用) | `src/components/PasswordStrength/README.md` |
 | ApiSelect | 通用远程分页下拉基座;`fetch(keyword)` 回归一选项,管加载/远程搜索防抖/竞态/loading,`$attrs` 透传 n-select | `src/components/ApiSelect/README.md` |
-| UserSelect | 人员选择器;基于 ApiSelect,`userApi.page` 搜索 + 可选 `orgId` 部门过滤,label 为「姓名(账号)」 | `src/components/UserSelect/README.md` |
+| UserSelect | 人员选择器;基于 ApiSelect,`userApi.options` 搜索(登录即可调用,不占用户页查询码)+ 可选 `orgId` 部门过滤,label 为「姓名(账号)」 | `src/components/UserSelect/README.md` |
 | MarkdownEditor / MarkdownView | 通知公告 Markdown 编辑/只读渲染(封 md-editor-v3);存 Markdown 纯文本,跟随明暗主题;正文里以单个 `/` 开头的站内链接走 vue-router(不整页刷新,Ctrl/Cmd + 点击仍新开标签),http(s) 外链新标签打开;通知页已落地 | `src/components/MarkdownEditor/README.md` |
 | Chart(+ LineChart/BarChart/PieChart) | ECharts 封装(封 vue-echarts);自动跟随明暗主题/accent、按需注册图种、自带 autoresize;预设传 data、BaseChart 传 option;工作台已落地 | `src/components/Chart/README.md` |
 | CodeBlock | 代码/JSON 只读展示;NCode + `hljs/lib/core` 按需注册(现仅 json),复制按钮 + 自动换行,配色随 Naive 主题;操作日志详情已落地 | `src/components/CodeBlock/README.md` |
@@ -83,9 +83,9 @@ SmartAdmin 内接入约定:
 | ExportColumnsModal | 导出选列弹窗;默认按 `defaultSelected` 勾选,确认后父级带 **SmartTable 当前筛选** 请求 blob 下载;用户管理 / 操作日志已落地 | `src/components/ExportColumnsModal/README.md` |
 | CronEditor | 6 段 cron 可视化编辑(秒/分/时/日/月/周 + 表达式直填,日 L/L-n/nW/LW、周 nL/n#m 专项);日/周互斥自动落 `?`,防抖 400ms 调 preview-cron 预览未来时刻;定时任务表单已落地 | `src/components/CronEditor/README.md` |
 | DictRadio / DictCheckbox | 字典单选(按钮组)/ 字典多选(复选框组);`typeCode` 取数经 `stores/dict` 缓存,其余 `$attrs` 透传 n-radio-group / n-checkbox-group;与 DictSelect 同源同范式 | `src/components/DictRadio/README.md`、`src/components/DictCheckbox/README.md` |
-| RoleSelect | 角色选择器;基于 ApiSelect,`roleApi.page` 名称搜索,只列启用角色,value=角色 id,多选经 `$attrs` | `src/components/RoleSelect/README.md` |
+| RoleSelect | 角色选择器;基于 ApiSelect,`roleApi.options`(登录即可调用,不占角色页查询码)一次取回,名称在浏览器里过滤,只列启用角色,value=角色 id,多选经 `$attrs` | `src/components/RoleSelect/README.md` |
 | JsonEditor | JSON 值编辑:textarea + 实时校验 + 一键格式化,零依赖;只给约定为 JSON 的配置字段用 | `src/components/JsonEditor/README.md` |
-| UserPicker | 授权用户选择器;机构列表过滤 + 搜索框 + 点整行勾选的用户列表,确认后回传用户 Id 数组;宽 / 中档是 920 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
+| UserPicker | 授权用户选择器;数据取自 `org/options`、`user/options`(登录即可调用);机构列表过滤 + 一个关键字同时搜姓名与账号的搜索框 + 点整行勾选的用户列表,确认后回传用户 Id 数组;宽 / 中档是 920 宽弹窗三栏,窄档(或内容区 < 900)收成「可选用户 / 已选」两页,窄档走底部抽屉 | `src/components/UserPicker/README.md` |
 | ErrorBoundary | 内容区渲染错误兜底;`onErrorCaptured` + 重试/回首页,chunk 失效自动重载一次。已包住 `layouts/default.vue` 的 `router-view`,页面作者不必再手动套 | `src/components/ErrorBoundary/README.md` |
 | TableZoomButton | 表格「放大/还原」按钮;形态与 SmartTable 工具栏按钮一致,状态由调用方的 `useTableZoom()` 持有,必须与表格一起进 `Teleport`。**已弃用,改用 `toolbar.maximize`**(内核页面的 `TABLE_TOOLBAR` 已统一开放大),下一个 .NET 大版本删除 | `src/components/TableZoomButton/README.md` |
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 人员选择器:基于 ApiSelect,fetch=userApi.page(name 搜索 + 可选 orgId 部门过滤)。
+// 人员选择器:基于 ApiSelect,fetch=userApi.options(姓名/账号搜索 + 可选 orgId 部门过滤;不占用户页权限码)。
 // 选项 label 为「姓名(账号)」,value 为用户 id。单/多选、placeholder 等一切经 $attrs 透传。
 import { computed } from 'vue'
 import type { SelectOption } from 'naive-ui'
@@ -12,10 +12,10 @@ const props = withDefaults(defineProps<{ orgId?: number | null; pageSize?: numbe
 })
 
 async function fetch(keyword: string): Promise<SelectOption[]> {
-  const { items } = await userApi.page({
+  const { items } = await userApi.options({
     page: 1,
     pageSize: props.pageSize,
-    name: keyword || undefined,
+    keyword: keyword || undefined,
     orgId: props.orgId ?? undefined,
   })
   return items.map(u => ({ label: `${u.name}(${u.account})`, value: u.id }))
