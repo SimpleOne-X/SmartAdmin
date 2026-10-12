@@ -36,6 +36,7 @@ export default {
     batchDeleteConfirm: 'Delete the {count} selected item(s)? This cannot be undone.',
     all: 'All',
     noData: 'No data',
+    loadFailed: 'Failed to load',
     back: 'Back',
     detail: 'Detail',
   },
@@ -69,8 +70,7 @@ export default {
     org: 'Organizations',
     available: 'Available',
     selected: 'Selected',
-    searchName: 'Search by name',
-    searchAccount: 'Search by account',
+    search: 'Search by name or account',
     selectPage: 'Select page',
     unselectPage: 'Deselect page',
     total: '{n} users',
@@ -535,6 +535,9 @@ export default {
     allOrgs: 'All',
     // Group name of the org panel; in a narrow content area the tree moves into a drawer, where it is also the toolbar button + drawer title
     orgFilter: 'Organization',
+    // Shown once when the position / role / manager options fail to load, without interrupting the list; {names} lists what failed
+    optionsLoadFailed:
+      'Failed to load options for {names}. Dropdowns in the add/edit form may be empty; refresh the page to retry',
     // Panel header button tips: once fully expanded it becomes "collapse to first level"; "hide" slides the whole panel left, after which the toolbar button's tip is "show"
     collapseToFirstLevel: 'Collapse to first level',
     hideOrgPanel: 'Hide organization panel',
@@ -1142,7 +1145,7 @@ export default {
   // Org management (tree table + parent-org tree select)
   org: {
     title: 'Organizations',
-    searchPlaceholder: 'Search name / code',
+    searchPlaceholder: 'Search by name',
     name: 'Name',
     code: 'Code',
     category: 'Category',

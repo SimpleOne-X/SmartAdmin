@@ -129,6 +129,13 @@ export interface UserItem {
   createTime: string
 }
 
+/** 用户选择器选项(后端 UserOption;只有 id / 姓名 / 账号,不含手机、邮箱、头像)。 */
+export interface UserOption {
+  id: number
+  name: string
+  account: string
+}
+
 /** 模块/应用管理行(后端 SysModule;列表全字段)。 */
 export interface ModuleRow {
   id: number
@@ -464,6 +471,13 @@ export interface SysOrg {
   createTime?: string
 }
 
+/** 机构选择器选项(后端 OrgOption;平铺,前端 buildTree)。 */
+export interface OrgOption {
+  id: number
+  parentId: number
+  name: string
+}
+
 /** 机构新增/编辑入参(后端 OrgInput;parentId 0=根,code 编辑禁用)。 */
 export interface OrgInput {
   parentId: number
@@ -482,6 +496,12 @@ export interface SysPosition {
   sort: number
   enabled: boolean
   createTime?: string
+}
+
+/** 职位选择器选项(后端 PositionOption)。 */
+export interface PositionOption {
+  id: number
+  name: string
 }
 
 /** 职位新增/编辑入参(后端 PositionInput;增改同一份字段,code 编辑禁用)。 */
@@ -504,6 +524,12 @@ export interface SysRole {
   /** 内置角色(种子里固定 Id 1–999):只有它们能被授系统菜单。 */
   isBuiltin?: boolean
   createTime?: string
+}
+
+/** 角色选择器选项(后端 RoleOption;仅启用角色)。 */
+export interface RoleOption {
+  id: number
+  name: string
 }
 
 /** 角色新增/编辑入参(后端 RoleInput;增改同一份字段,code 编辑禁用)。 */

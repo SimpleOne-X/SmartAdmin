@@ -6,13 +6,13 @@ import { NMessageProvider } from 'naive-ui'
 import { addCollection, type IconifyJSON } from '@iconify/vue'
 import zhCN from '#/locales/zh-CN'
 import phSubset from '#/assets/icons/ph-subset.json'
-import type { UserItem } from '#/types/api'
+import type { UserOption } from '#/types/api'
 
 // translateError 要用 ApiError 做 instanceof 判断,mock 里得有它。
 vi.mock('#/api', () => ({
   ApiError: class ApiError extends Error {},
-  orgApi: { list: vi.fn() },
-  userApi: { page: vi.fn() },
+  orgApi: { options: vi.fn() },
+  userApi: { options: vi.fn() },
 }))
 
 import { orgApi, userApi } from '#/api'
@@ -21,19 +21,11 @@ import UserPicker from './index.vue'
 // 图标走离线子集,否则 Iconify 会去请求公网。
 addCollection(phSubset as IconifyJSON)
 
-const pageMock = vi.mocked(userApi.page)
-const orgListMock = vi.mocked(orgApi.list)
+const pageMock = vi.mocked(userApi.options)
+const orgOptionsMock = vi.mocked(orgApi.options)
 
-function user(id: number, name: string, account = `acc${id}`): UserItem {
-  return {
-    id,
-    account,
-    name,
-    orgName: '技术部',
-    enabled: true,
-    isSuperAdmin: false,
-    createTime: '',
-  }
+function user(id: number, name: string, account = `acc${id}`): UserOption {
+  return { id, account, name }
 }
 
 const USERS = [user(1, '张三', 'zhangsan'), user(2, '李四', 'lisi'), user(3, '王五', 'wangwu')]
@@ -80,7 +72,7 @@ const qa = (sel: string) => [...document.body.querySelectorAll<HTMLElement>(sel)
 
 beforeEach(() => {
   confirmed.length = 0
-  orgListMock.mockResolvedValue([])
+  orgOptionsMock.mockResolvedValue([])
   pageMock.mockResolvedValue({ items: USERS, total: 3 })
 })
 
@@ -192,7 +184,7 @@ describe('UserPicker 选择与回显', () => {
 })
 
 describe('UserPicker 搜索与分页', () => {
-  it('输入停顿后才查询,默认按姓名,并回到第 1 页', async () => {
+  it('输入停顿后才查询,一个关键字同时匹配姓名与账号,并回到第 1 页', async () => {
     vi.useFakeTimers()
     mount()
     picker.open()
@@ -207,7 +199,7 @@ describe('UserPicker 搜索与分页', () => {
 
     await vi.advanceTimersByTimeAsync(400)
     expect(pageMock).toHaveBeenCalledTimes(1)
-    expect(pageMock.mock.calls[0]![0]).toMatchObject({ page: 1, name: '张', account: undefined })
+    expect(pageMock.mock.calls[0]![0]).toMatchObject({ page: 1, keyword: '张' })
   })
 
   it('翻页带着当前页码请求,「共 N 人」取自接口 total', async () => {
@@ -229,5 +221,54 @@ describe('UserPicker 搜索与分页', () => {
     picker.open()
     await settle()
     expect(qa('.user-row')).toHaveLength(0)
+  })
+})
+
+describe('UserPicker 机构与数据源', () => {
+  it('机构左栏取自 orgApi.options,选中一个机构后按该机构查人', async () => {
+    orgOptionsMock.mockClear()
+    orgOptionsMock.mockResolvedValue([
+      { id: 10, parentId: 0, name: '技术部' },
+      { id: 11, parentId: 10, name: '前端组' },
+    ])
+    mount()
+    picker.open()
+    await settle()
+    expect(orgOptionsMock).toHaveBeenCalledTimes(1)
+    expect(qa('.picker-org .n-tree-node-content__text').map(e => e.textContent)).toEqual([
+      '全部',
+      '技术部',
+      '前端组',
+    ])
+
+    pageMock.mockClear()
+    qa('.picker-org .n-tree-node-content')
+      .find(e => e.textContent === '前端组')!
+      .click()
+    await settle()
+    expect(pageMock.mock.calls[0]![0]).toMatchObject({ page: 1, orgId: 11 })
+  })
+
+  it('机构取数失败:弹出失败原因,选人本身不受影响', async () => {
+    orgOptionsMock.mockRejectedValue(new Error('机构接口挂了'))
+    mount()
+    picker.open()
+    await settle()
+    expect(document.body.textContent).toContain('机构接口挂了')
+    expect(qa('.user-row')).toHaveLength(3)
+  })
+
+  it('每行只给姓名与账号;姓名与账号相同时不重复显示', async () => {
+    pageMock.mockResolvedValue({
+      items: [user(1, '张三', 'zhangsan'), user(2, 'tom', 'tom')],
+      total: 2,
+    })
+    mount()
+    picker.open()
+    await settle()
+    const rows = qa('.user-row')
+    expect(rows[0]!.querySelector('.user-name')!.textContent).toBe('张三')
+    expect(rows[0]!.querySelector('.user-sub')!.textContent).toBe('zhangsan')
+    expect(rows[1]!.querySelector('.user-sub')).toBeNull()
   })
 })

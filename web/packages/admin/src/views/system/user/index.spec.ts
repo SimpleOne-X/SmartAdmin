@@ -14,7 +14,10 @@ const spies = vi.hoisted(() => ({
   tableRefresh: vi.fn(),
   overviewRefresh: vi.fn(),
   sheetOpen: vi.fn(),
-  orgList: vi.fn(),
+  orgOptions: vi.fn(),
+  positionOptions: vi.fn(),
+  roleOptions: vi.fn(),
+  userOptions: vi.fn(),
 }))
 
 // 页面在 watch 里读路由;路径不是 /system/user 时它直接返回,不去预置角色条件。
@@ -34,10 +37,13 @@ function setWidth(w: number) {
 vi.mock('#/api', () => ({
   ApiError: class ApiError extends Error {},
   mfaApi: { clear: async () => true },
-  positionApi: { page: async () => ({ items: [], total: 0 }) },
-  roleApi: { page: async () => ({ items: [], total: 0 }) },
-  orgApi: { list: () => spies.orgList() },
-  userApi: { page: async () => ({ items: [], total: 0 }) },
+  positionApi: { options: () => spies.positionOptions() },
+  roleApi: { options: () => spies.roleOptions() },
+  orgApi: { options: () => spies.orgOptions() },
+  userApi: {
+    page: async () => ({ items: [], total: 0 }),
+    options: (p: unknown) => spies.userOptions(p),
+  },
 }))
 
 // 表格桩:把工具栏「更多」里的项渲染成按钮,点了就发 more-select;刷新计数;工具栏最左的 #toolbar 插槽原样渲染。
@@ -178,7 +184,10 @@ const openOverview = async () => {
 beforeEach(() => {
   warnings = []
   for (const spy of Object.values(spies)) spy.mockReset()
-  spies.orgList.mockResolvedValue([])
+  spies.orgOptions.mockResolvedValue([])
+  spies.positionOptions.mockResolvedValue([])
+  spies.roleOptions.mockResolvedValue([])
+  spies.userOptions.mockResolvedValue({ items: [], total: 0 })
   setWidth(WIDE)
 })
 
@@ -255,7 +264,6 @@ const org = (id: number, parentId: number, name: string) => ({
   id,
   parentId,
   name,
-  code: `c${id}`,
 })
 const THREE_LEVELS = [
   org(1, 0, '总公司'),
@@ -282,14 +290,14 @@ const HIDDEN_KEY = 'sa-user-org-panel-hidden'
 
 describe('用户页 机构分组栏', () => {
   it('默认只展开一级:根展开露出第二层,更深的层级收起', async () => {
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
     expect(treeLabels()).toEqual(['总公司', '技术部', '产品部'])
     expect(expandedLabels()).toEqual(['总公司'])
   })
 
   it('头部「展开全部」在「全部展开」与「折叠到一级」之间切换', async () => {
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
 
     await click('.side-filter__toggle')
@@ -301,25 +309,25 @@ describe('用户页 机构分组栏', () => {
   })
 
   it('没有比第一层更深的层级时,不出「展开全部」按钮', async () => {
-    spies.orgList.mockResolvedValue(flatOrgs(3))
+    spies.orgOptions.mockResolvedValue(flatOrgs(3))
     await mount([])
     expect(q('.side-filter__toggle')).toBeNull()
   })
 
   it('机构数不超过 15 时没有搜索框', async () => {
-    spies.orgList.mockResolvedValue(flatOrgs(15))
+    spies.orgOptions.mockResolvedValue(flatOrgs(15))
     await mount([])
     expect(q('.side-filter input')).toBeNull()
   })
 
   it('机构数超过 15 时出现搜索框', async () => {
-    spies.orgList.mockResolvedValue(flatOrgs(16))
+    spies.orgOptions.mockResolvedValue(flatOrgs(16))
     await mount([])
     expect(q('.side-filter input')).not.toBeNull()
   })
 
   it('点「收起」:机构栏收起且不可聚焦,工具栏最左出恢复按钮,状态记进 localStorage', async () => {
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
     expect(q('.side-filter.is-hidden')).toBeNull()
     expect(q('.org-trigger')).toBeNull()
@@ -332,7 +340,7 @@ describe('用户页 机构分组栏', () => {
   })
 
   it('点恢复按钮:机构栏回来,恢复按钮消失', async () => {
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
     await click('.side-filter__hide')
 
@@ -344,7 +352,7 @@ describe('用户页 机构分组栏', () => {
 
   it('窄屏机构树进抽屉:抽屉里没有分组小标题与「收起」按钮,只留「展开全部」', async () => {
     setWidth(800)
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
     expect(q('.side-filter')).toBeNull()
 
@@ -357,7 +365,7 @@ describe('用户页 机构分组栏', () => {
 
   it('上次收起过:再进页面机构栏仍是收起的,恢复按钮上显示当前机构筛选', async () => {
     localStorage.setItem(HIDDEN_KEY, 'true')
-    spies.orgList.mockResolvedValue(THREE_LEVELS)
+    spies.orgOptions.mockResolvedValue(THREE_LEVELS)
     await mount([])
     expect(q('.side-filter.is-hidden')).not.toBeNull()
     expect(q('.org-trigger')!.textContent).toContain('机构')
@@ -366,5 +374,39 @@ describe('用户页 机构分组栏', () => {
     q('.side-tree .n-tree-node-content')!.click()
     await settle()
     expect(q('.org-trigger')!.textContent).toContain('总公司')
+  })
+})
+
+// ── 下拉数据走 options 端点 ──
+describe('用户页 下拉数据与失败提示', () => {
+  it('四个数据源都调各自的 options,主管候选一页取 200', async () => {
+    await mount([])
+    expect(spies.positionOptions).toHaveBeenCalledTimes(1)
+    expect(spies.roleOptions).toHaveBeenCalledTimes(1)
+    expect(spies.orgOptions).toHaveBeenCalledTimes(1)
+    expect(spies.userOptions).toHaveBeenCalledTimes(1)
+    expect(spies.userOptions).toHaveBeenCalledWith({ page: 1, pageSize: 200 })
+    expect(document.body.textContent).not.toContain('选项加载失败')
+  })
+
+  it('机构树拉取失败:面板显示「加载失败」而不是空树', async () => {
+    spies.orgOptions.mockRejectedValue(new Error('boom'))
+    await mount([])
+    expect(q('.side-filter')!.textContent).toContain('加载失败')
+    expect(q('.side-tree')).toBeNull()
+    // 机构失败不打断列表,也不触发下拉的合并提示
+    expect(q('.stub-table')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('选项加载失败')
+  })
+
+  it('职位 / 角色 / 主管拉取失败:合并成一条提示并点名失败项', async () => {
+    spies.positionOptions.mockRejectedValue(new Error('boom'))
+    spies.userOptions.mockRejectedValue(new Error('boom'))
+    await mount([])
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('职位 / 直属主管选项加载失败')
+    expect(text).not.toContain('角色选项加载失败')
+    expect(document.body.querySelectorAll('.n-message')).toHaveLength(1)
+    expect(q('.stub-table')).not.toBeNull()
   })
 })
