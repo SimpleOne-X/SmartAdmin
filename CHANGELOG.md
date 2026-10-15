@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.26.0 - 2026-10-15
+
 ### 升级说明
 
 - **自己实现 `INoticeService`（而不是继承 `NoticeService`）的项目，要补上新增的两个重载 `UnreadCountAsync(IReadOnlyCollection<NoticeType>?)` 与 `MarkAllReadAsync(IReadOnlyCollection<NoticeType>?)`。**
