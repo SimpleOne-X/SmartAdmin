@@ -112,6 +112,9 @@ export default {
     notice: {
       title: 'Notifications',
       empty: 'No notifications',
+      emptyMessage: 'No messages',
+      tabMessage: 'Messages',
+      tabNotice: 'Notices',
       markAllRead: 'Mark all read',
       viewAll: 'View all',
     },

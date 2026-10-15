@@ -107,6 +107,38 @@ public class NoticeTests
     }
 
     /// <summary>
+    /// 按类型分组(铃铛页签):mine 的 Types 多选过滤、unread-count 按 Types 计数、read-all 带 Types 只标这几类,
+    /// 不带 Types 的两个端点行为不变。
+    /// </summary>
+    [Fact]
+    public async Task Types_filter_mine_unread_and_read_all()
+    {
+        using var f = new AdminAppFactory();
+        var c = await SuperAdminClient(f);
+
+        await c.PostJson("/api/v1/sys/notice", new { title = "通知", type = 1 });
+        await c.PostJson("/api/v1/sys/notice", new { title = "公告", type = 2 });
+        await c.PostJson("/api/v1/sys/notice", new { title = "消息", type = 3 });
+
+        var noticeTab = "Types=1&Types=2";
+        var unread = async (string q) =>
+            (await (await c.GetAsync($"/api/v1/sys/notice/unread-count?{q}")).ReadEnvelope()).GetProperty("data").GetInt32();
+
+        Assert.Equal(["公告", "通知"], (await MineTitles(c, $"Current=1&Size=50&{noticeTab}")).Order());
+        Assert.Equal(["消息"], await MineTitles(c, "Current=1&Size=50&Types=3"));
+        Assert.Equal(2, await unread(noticeTab));
+        Assert.Equal(1, await unread("Types=3"));
+        Assert.Equal(3, await unread(""));
+
+        // 只标「通知」页签:消息仍未读
+        Assert.Equal(0, (await (await c.PutJson($"/api/v1/sys/notice/read-all?{noticeTab}", new { })).ReadEnvelope())
+            .GetProperty("code").GetInt32());
+        Assert.Equal(0, await unread(noticeTab));
+        Assert.Equal(1, await unread("Types=3"));
+        Assert.Equal(1, await unread(""));
+    }
+
+    /// <summary>
     /// 定向发送:发给指定用户 / 指定角色的通知只对目标可见;全体广播(receiverType 缺省=All)人人可见。
     /// 证明 mine/unread 已按接收范围收敛,且发布者(超管)不因发布就自动可见非定向消息。
     /// </summary>

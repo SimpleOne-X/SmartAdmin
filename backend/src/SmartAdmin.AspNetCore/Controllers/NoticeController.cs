@@ -47,11 +47,14 @@ public class NoticeController(INoticeService notices) : ControllerBase
     public async Task<Result<PagedList<NoticeMineItem>>> Mine([FromQuery] NoticePageInput input) =>
         Result<PagedList<NoticeMineItem>>.Ok(await notices.PageMineAsync(input));
 
-    /// <summary>当前用户未读通知数(顶栏角标)</summary>
+    /// <summary>当前用户未读通知数(顶栏角标);带 Types 时只数这几种类型(铃铛页签角标)</summary>
     [HttpGet("unread-count")]
     [ActiveSession]
-    public async Task<Result<int>> UnreadCount() =>
-        Result<int>.Ok(await notices.UnreadCountAsync());
+    public async Task<Result<int>> UnreadCount([FromQuery(Name = "Types")] NoticeType[]? types = null) =>
+        // 不带类型时走无参重载:覆写过它的子类在顶栏角标上的行为保持不变。
+        Result<int>.Ok(types is { Length: > 0 }
+            ? await notices.UnreadCountAsync(types)
+            : await notices.UnreadCountAsync());
 
     /// <summary>标记某条通知为已读(幂等)</summary>
     [HttpPut("{id}/read")]
@@ -62,12 +65,15 @@ public class NoticeController(INoticeService notices) : ControllerBase
         return Result<bool>.Ok(true);
     }
 
-    /// <summary>标记全部通知为已读</summary>
+    /// <summary>标记全部通知为已读;带 Types 时只标这几种类型(铃铛当前页签)</summary>
     [HttpPut("read-all")]
     [ActiveSession]
-    public async Task<Result<bool>> ReadAll()
+    public async Task<Result<bool>> ReadAll([FromQuery(Name = "Types")] NoticeType[]? types = null)
     {
-        await notices.MarkAllReadAsync();
+        if (types is { Length: > 0 })
+            await notices.MarkAllReadAsync(types);
+        else
+            await notices.MarkAllReadAsync();
         return Result<bool>.Ok(true);
     }
 }

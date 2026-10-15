@@ -113,6 +113,9 @@ export default {
     notice: {
       title: '消息通知',
       empty: '暂无通知',
+      emptyMessage: '暂无消息',
+      tabMessage: '消息',
+      tabNotice: '通知',
       markAllRead: '全部已读',
       viewAll: '查看全部',
     },

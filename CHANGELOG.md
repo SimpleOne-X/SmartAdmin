@@ -14,6 +14,30 @@
 
 ## Unreleased
 
+## 10.26.0 - 2026-10-15
+
+### 升级说明
+
+- **自己实现 `INoticeService`（而不是继承 `NoticeService`）的项目，要补上新增的两个重载 `UnreadCountAsync(IReadOnlyCollection<NoticeType>?)` 与 `MarkAllReadAsync(IReadOnlyCollection<NoticeType>?)`。**
+  继承 `NoticeService` 的不受影响；覆写过无参 `UnreadCountAsync` / `MarkAllReadAsync` 的，顶栏总角标与不带类型的「全部已读」行为不变。
+
+- **顶栏铃铛的面板分成「消息」「通知」两个页签。**
+  「消息」是 `NoticeType.Message`（业务系统推给个人的），「通知」是 `Notice` 与 `Announcement`（管理员发布的）；各页签带自己的未读数，打开面板时先停在第一个有未读的页签。
+  「全部已读」只标当前页签。「消息」页签里不再显示类型标签。页签名可在应用 locale 里覆盖 `app.notice.tabMessage`、`app.notice.tabNotice`。
+
+### Added
+
+- **通知接口可按类型多选筛选，供铃铛页签用。**
+  - `GET /api/v1/sys/notice/mine`、`GET /api/v1/sys/notice/page`：新增查询参数 `Types`（可重复，命中任一即可；与 `Type` 同时给时两条都要满足）。
+  - `GET /api/v1/sys/notice/unread-count`、`PUT /api/v1/sys/notice/read-all`：新增查询参数 `Types`，只数 / 只标这几种类型；不带时与原来一致。
+  - 前端 `noticeApi.mine({ types })`、`noticeApi.unreadCount(types?)`、`noticeApi.markAllRead(types?)`。
+  - 新增 i18n 键 `app.notice.tabMessage`、`app.notice.tabNotice`、`app.notice.emptyMessage`。
+
+### Fixed
+
+- **`SmartAdmin.SqlSugar` 直接引用 `System.Security.Cryptography.Pkcs` 10.0.13，盖过 Oracle 驱动（随 `SqlSugarCore` 传递）带来的 8.0.1。**
+  8.0.1 命中 GHSA-846f-f764-76mx（高危）与 GHSA-2fmv-rv2c-59x7（中危），`-warnaserror` 下报 NU1903 / NU1902 编不过；装本包即得修补版，应用不用改。
+
 ## 10.25.0 - 2026-10-11
 
 ### 升级说明
