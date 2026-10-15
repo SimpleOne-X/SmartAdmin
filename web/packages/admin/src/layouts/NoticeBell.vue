@@ -1,14 +1,17 @@
 <script setup lang="ts">
-// 顶栏消息通知铃铛。富面板(n-popover):无页签单列表 + 正文弹层。
-// 未读=圆点+加粗+淡主色底,已读=整行变淡;"读没读"是过滤器不是分类,不做成页签(筛选在个人通知页)。
-// 未读数每 30s 轮询;面板展开时拉取列表。
+// 顶栏消息通知铃铛。富面板(n-popover):按类型分页签的列表 + 正文弹层。
+// 页签按"消息从哪来"分:消息(业务系统推给个人的)与通知(管理员发的通知、公告);
+// "读没读"是过滤器不是分类,不做成页签(筛选在个人通知页)。
+// 未读=圆点+加粗+淡主色底,已读=整行变淡。总未读数每 30s 轮询;面板展开时取各页签未读数与当前页签列表。
 // 通知带动作列表时,正文弹层底部渲染成按钮(useNoticeAction):铃铛里直接"办",不必先跳到目标页面找按钮。
-import { ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NPopover,
   NBadge,
   NButton,
+  NTabs,
+  NTab,
   NTag,
   NEllipsis,
   NScrollbar,
@@ -35,32 +38,73 @@ const router = useRouter()
 const message = useMessage()
 const noticeAction = useNoticeAction()
 
+// 页签顺序即打开面板时的优先级:先停在第一个有未读的页签,都没有就停第一个。
+const TABS = [
+  {
+    key: 'message',
+    types: [NoticeType.Message],
+    label: 'app.notice.tabMessage',
+    empty: 'app.notice.emptyMessage',
+  },
+  {
+    key: 'notice',
+    types: [NoticeType.Notice, NoticeType.Announcement],
+    label: 'app.notice.tabNotice',
+    empty: 'app.notice.empty',
+  },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+const typesOf = (key: TabKey) => [...TABS.find(x => x.key === key)!.types]
+
 const unread = ref(0)
+const tab = ref<TabKey>(TABS[0].key)
+const tabUnread = reactive<Record<TabKey, number>>({ message: 0, notice: 0 })
+const current = computed(() => TABS.find(x => x.key === tab.value)!)
 const items = ref<NoticeMineItem[]>([])
 const loading = ref(false)
 const panelShow = ref(false)
 
+// 页签未读数只在面板开着时取:轮询只数总数,请求量不随页签数翻倍。
+async function fetchTabUnread() {
+  const counts = await Promise.all(TABS.map(x => noticeApi.unreadCount([...x.types])))
+  TABS.forEach((x, i) => (tabUnread[x.key] = counts[i]!))
+}
 async function fetchUnread() {
   try {
     unread.value = await noticeApi.unreadCount()
+    if (panelShow.value) await fetchTabUnread()
   } catch {
     /* 轮询失败静默,下次自愈 */
   }
 }
-// 无页签单列表:恒拉最近一页混排,未读靠条目样式强调;筛选能力在"查看全部"的个人通知页。
+// 每个页签拉最近一页,未读靠条目样式强调;筛选能力在"查看全部"的个人通知页。
 async function fetchList() {
+  const key = tab.value
   loading.value = true
   try {
-    const { items: list } = await noticeApi.mine({ page: 1, pageSize: 10 })
-    items.value = list
+    const { items: list } = await noticeApi.mine({ page: 1, pageSize: 10, types: typesOf(key) })
+    // 快速切页签时,先发的请求可能后回来,不能覆盖当前页签的列表。
+    if (key === tab.value) items.value = list
   } catch {
-    items.value = []
+    if (key === tab.value) items.value = []
   } finally {
-    loading.value = false
+    if (key === tab.value) loading.value = false
   }
 }
-function onShow(show: boolean) {
-  if (show) fetchList()
+async function onShow(show: boolean) {
+  if (!show) return
+  loading.value = true
+  try {
+    await fetchTabUnread()
+  } catch {
+    /* 取不到页签数就停在第一个页签 */
+  }
+  tab.value = TABS.find(x => tabUnread[x.key] > 0)?.key ?? TABS[0].key
+  fetchList()
+}
+function onTab(key: TabKey) {
+  tab.value = key
+  fetchList()
 }
 
 // 正文弹层:内容随列表取回,直接渲染(Markdown,不能纯文本直出);点条目即标记已读。
@@ -96,7 +140,7 @@ async function onAction(a: NoticeAction, index: number) {
 }
 async function markAllRead() {
   try {
-    await noticeApi.markAllRead()
+    await noticeApi.markAllRead(typesOf(tab.value))
     await Promise.all([fetchUnread(), fetchList()])
   } catch (e) {
     message.error(translateError(e))
@@ -116,6 +160,8 @@ const typeLabel = (ty: NoticeType) =>
     : ty === NoticeType.Message
       ? t('notice.typeMessage')
       : t('notice.typeNotice')
+// 页签里只有一种类型时标签不带信息,不显示。
+const showTag = computed(() => current.value.types.length > 1)
 
 // 正文摘要:去掉常见 Markdown 记号,压空白,截断。ponytail: 正则够用,要精准渲染再引 md 解析。
 function snippet(md?: string | null) {
@@ -160,16 +206,35 @@ fetchUnread()
     <div class="notice-panel">
       <div class="notice-head">
         <span class="notice-title">{{ t('app.notice.title') }}</span>
-        <n-button text size="tiny" :disabled="unread === 0" @click="markAllRead">
+        <n-button text size="tiny" :disabled="tabUnread[tab] === 0" @click="markAllRead">
           <template #icon><Icon icon="ph:checks" :width="15" /></template>
           {{ t('app.notice.markAllRead') }}
         </n-button>
       </div>
 
+      <n-tabs
+        :value="tab"
+        type="line"
+        size="small"
+        :tabs-padding="16"
+        class="notice-tabs"
+        @update:value="onTab"
+      >
+        <n-tab v-for="x in TABS" :key="x.key" :name="x.key">
+          {{ t(x.label) }}
+          <n-badge
+            :value="tabUnread[x.key]"
+            :max="99"
+            :show="tabUnread[x.key] > 0"
+            class="tab-badge"
+          />
+        </n-tab>
+      </n-tabs>
+
       <n-spin :show="loading">
         <n-scrollbar style="max-height: 360px">
           <div v-if="items.length === 0" class="notice-empty">
-            <n-empty :description="t('app.notice.empty')" size="small" />
+            <n-empty :description="t(current.empty)" size="small" />
           </div>
           <ul v-else class="notice-list">
             <li
@@ -181,7 +246,7 @@ fetchUnread()
               <span v-if="!n.isRead" class="dot" />
               <div class="notice-body">
                 <div class="line1">
-                  <n-tag :type="tagType(n.type)" size="tiny" :bordered="false" round>
+                  <n-tag v-if="showTag" :type="tagType(n.type)" size="tiny" :bordered="false" round>
                     {{ typeLabel(n.type) }}
                   </n-tag>
                   <n-ellipsis class="item-title" :class="{ unread: !n.isRead }">
@@ -254,6 +319,9 @@ fetchUnread()
 .notice-title {
   font-weight: 600;
   font-size: 15px;
+}
+.tab-badge {
+  margin-left: 6px;
 }
 .notice-empty {
   padding: 32px 0;

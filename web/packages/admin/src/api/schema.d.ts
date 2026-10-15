@@ -1482,7 +1482,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 当前用户未读通知数(顶栏角标) */
+        /** 当前用户未读通知数(顶栏角标);带 Types 时只数这几种类型(铃铛页签角标) */
         get: operations["Notice_UnreadCount"];
         put?: never;
         post?: never;
@@ -1517,7 +1517,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 标记全部通知为已读 */
+        /** 标记全部通知为已读;带 Types 时只标这几种类型(铃铛当前页签) */
         put: operations["Notice_ReadAll"];
         post?: never;
         delete?: never;
@@ -10344,6 +10344,8 @@ export interface operations {
                 Title?: string;
                 /** @description 类型(精确匹配,可选) */
                 Type?: components["schemas"]["NoticeType"];
+                /** @description 类型(多选,命中任一即可;可选,与 Type 同时给时两条都要满足) */
+                Types?: components["schemas"]["NoticeType"][];
                 /** @description 仅未读(用户端"未读"页签用;管理端列表忽略) */
                 OnlyUnread?: boolean;
                 Current?: number | string;
@@ -10401,6 +10403,8 @@ export interface operations {
                 Title?: string;
                 /** @description 类型(精确匹配,可选) */
                 Type?: components["schemas"]["NoticeType"];
+                /** @description 类型(多选,命中任一即可;可选,与 Type 同时给时两条都要满足) */
+                Types?: components["schemas"]["NoticeType"][];
                 /** @description 仅未读(用户端"未读"页签用;管理端列表忽略) */
                 OnlyUnread?: boolean;
                 Current?: number | string;
@@ -10429,7 +10433,9 @@ export interface operations {
     };
     Notice_UnreadCount: {
         parameters: {
-            query?: never;
+            query?: {
+                Types?: components["schemas"]["NoticeType"][];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10475,7 +10481,9 @@ export interface operations {
     };
     Notice_ReadAll: {
         parameters: {
-            query?: never;
+            query?: {
+                Types?: components["schemas"]["NoticeType"][];
+            };
             header?: never;
             path?: never;
             cookie?: never;

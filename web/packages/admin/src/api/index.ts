@@ -39,6 +39,7 @@ import type {
   MySessionItem,
   NoticeMineItem,
   NoticePublishInput,
+  NoticeType,
   OnlineSessionItem,
   OrgInput,
   OrgOption,
@@ -1282,20 +1283,29 @@ export const noticeApi = {
       .DELETE('/api/v1/sys/notice/{id}', { params: { path: { id } } })
       .then(r => unwrap<boolean>(r)),
   // ── 用户端(任何登录用户) ──
-  /** 我的通知分页(含已读标记);onlyUnread 供"未读"页签用。 */
-  mine: (params: { page: number; pageSize: number; onlyUnread?: boolean }) =>
+  /** 我的通知分页(含已读标记);onlyUnread 供"未读"页签用,types 供铃铛页签用。 */
+  mine: (params: { page: number; pageSize: number; onlyUnread?: boolean; types?: NoticeType[] }) =>
     client
       .GET('/api/v1/sys/notice/mine', {
-        params: { query: { ...pageParams(params), OnlyUnread: params.onlyUnread } },
+        params: {
+          query: { ...pageParams(params), OnlyUnread: params.onlyUnread, Types: params.types },
+        },
       })
       .then(r => toPage<NoticeMineItem>(r)),
-  /** 当前用户未读通知数(顶栏角标轮询)。 */
-  unreadCount: () => client.GET('/api/v1/sys/notice/unread-count', {}).then(r => unwrap<number>(r)),
+  /** 当前用户未读通知数(顶栏角标轮询);带 types 只数这几种类型。 */
+  unreadCount: (types?: NoticeType[]) =>
+    client
+      .GET('/api/v1/sys/notice/unread-count', { params: { query: { Types: types } } })
+      .then(r => unwrap<number>(r)),
   markRead: (id: number) =>
     client
       .PUT('/api/v1/sys/notice/{id}/read', { params: { path: { id } } })
       .then(r => unwrap<boolean>(r)),
-  markAllRead: () => client.PUT('/api/v1/sys/notice/read-all', {}).then(r => unwrap<boolean>(r)),
+  /** 全部标为已读;带 types 只标这几种类型。 */
+  markAllRead: (types?: NoticeType[]) =>
+    client
+      .PUT('/api/v1/sys/notice/read-all', { params: { query: { Types: types } } })
+      .then(r => unwrap<boolean>(r)),
 }
 
 // 菜单管理:菜单树 CRUD + 可授权路由清单(喂菜单表单「权限码」下拉)。
