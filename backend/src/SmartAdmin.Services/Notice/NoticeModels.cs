@@ -60,6 +60,10 @@ public record NoticePageInput : PageInputBase
     /// <summary>类型(精确匹配,可选)</summary>
     public NoticeType? Type { get; init; }
 
+    /// <summary>类型(多选,命中任一即可;可选,与 Type 同时给时两条都要满足)</summary>
+    /// <remarks>铃铛按页签分组时用:一个页签可以包含几种类型(如「通知」页签含通知与公告)。</remarks>
+    public NoticeType[]? Types { get; init; }
+
     /// <summary>仅未读(用户端"未读"页签用;管理端列表忽略)</summary>
     public bool? OnlyUnread { get; init; }
 }

@@ -120,10 +120,12 @@ public class NoticeService(
         // 管理端列表按发布人所在范围收敛:非超管只看得见自己范围内的人发过什么公告。
         // 用户端的"我的通知"不受此影响——那条走的是投递目标,与谁发的无关。
         var scopedIds = scopeGuard is null ? null : await scopeGuard.ResolveScopedUserIdsAsync();
+        var typeList = input.Types?.ToList() ?? [];
         return await notices.AsQueryable()
             .WhereIF(scopedIds != null, n => n.CreateUserId != null && scopedIds!.Contains(n.CreateUserId.Value))
             .WhereIF(!string.IsNullOrEmpty(input.Title), n => n.Title.Contains(input.Title!))
             .WhereIF(input.Type.HasValue, n => n.Type == input.Type!.Value)
+            .WhereIF(typeList.Count > 0, n => typeList.Contains(n.Type))
             .OrderBy(n => n.CreateTime, OrderByType.Desc)
             .ToPagedListAsync(input.Current, input.Size);
     }
@@ -143,10 +145,12 @@ public class NoticeService(
         var me = CurrentUserId;
         // 已读回执全量载入,既用于 OnlyUnread 过滤、也用于回填 IsRead。ponytail: 量大再改子查询。
         var readIds = await reads.AsQueryable().Where(r => r.UserId == me).Select(r => r.NoticeId).ToListAsync();
+        var typeList = input.Types?.ToList() ?? [];
         var visible = await VisibleToMeAsync(me);
         var page = await visible
             .WhereIF(!string.IsNullOrEmpty(input.Title), n => n.Title.Contains(input.Title!))
             .WhereIF(input.Type.HasValue, n => n.Type == input.Type!.Value)
+            .WhereIF(typeList.Count > 0, n => typeList.Contains(n.Type))
             .WhereIF(input.OnlyUnread == true && readIds.Count > 0, n => !readIds.Contains(n.Id))
             .OrderBy(n => n.CreateTime, OrderByType.Desc)
             .ToPagedListAsync(input.Current, input.Size);
@@ -245,13 +249,21 @@ public class NoticeService(
     }
 
     /// <inheritdoc />
-    public virtual async Task<int> UnreadCountAsync()
+    public virtual Task<int> UnreadCountAsync()
+    {
+        return UnreadCountAsync(null);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<int> UnreadCountAsync(IReadOnlyCollection<NoticeType>? types)
     {
         var me = CurrentUserId;
         // 未读 = 可见通知里当前用户没有已读回执的。ponytail: readIds 全量载入,量大再改 NotExists 子查询。
         var readIds = await reads.AsQueryable().Where(r => r.UserId == me).Select(r => r.NoticeId).ToListAsync();
+        var typeList = types?.ToList() ?? [];
         var visible = await VisibleToMeAsync(me);
         return await visible
+            .WhereIF(typeList.Count > 0, n => typeList.Contains(n.Type))
             .WhereIF(readIds.Count > 0, n => !readIds.Contains(n.Id))
             .CountAsync();
     }
@@ -271,12 +283,20 @@ public class NoticeService(
     }
 
     /// <inheritdoc />
-    public virtual async Task MarkAllReadAsync()
+    public virtual Task MarkAllReadAsync()
+    {
+        return MarkAllReadAsync(null);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task MarkAllReadAsync(IReadOnlyCollection<NoticeType>? types)
     {
         var me = CurrentUserId;
         var readIds = await reads.AsQueryable().Where(r => r.UserId == me).Select(r => r.NoticeId).ToListAsync();
+        var typeList = types?.ToList() ?? [];
         var visible = await VisibleToMeAsync(me);
         var unreadIds = await visible
+            .WhereIF(typeList.Count > 0, n => typeList.Contains(n.Type))
             .WhereIF(readIds.Count > 0, n => !readIds.Contains(n.Id))
             .Select(n => n.Id).ToListAsync();
         // ponytail: 逐条插入已读回执;未读量巨大再改批量插入。

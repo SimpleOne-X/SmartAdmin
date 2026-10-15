@@ -27,9 +27,15 @@ public interface INoticeService
     /// <summary>当前用户未读通知数(顶栏角标用)。</summary>
     Task<int> UnreadCountAsync();
 
+    /// <summary>当前用户指定类型里的未读数(铃铛页签角标用);空或 null 等同不限类型。</summary>
+    Task<int> UnreadCountAsync(IReadOnlyCollection<NoticeType>? types);
+
     /// <summary>标记某条通知为已读(幂等)。</summary>
     Task MarkReadAsync(long noticeId);
 
     /// <summary>标记当前用户全部通知为已读。</summary>
     Task MarkAllReadAsync();
+
+    /// <summary>标记当前用户指定类型的通知为已读;空或 null 等同不限类型。</summary>
+    Task MarkAllReadAsync(IReadOnlyCollection<NoticeType>? types);
 }
