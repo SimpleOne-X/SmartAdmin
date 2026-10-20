@@ -55,6 +55,7 @@ public class HostEndpointsTests
 
         var json = await r.Content.ReadAsStringAsync();
         Assert.Contains("msgKey", json);                       // Result 信封结构进契约
-        Assert.DoesNotContain("/api/v1/sys/file", json);       // 禁用 Upload 模块 → 文件路由不出现在文档
+        Assert.DoesNotContain("\"/api/v1/sys/file/", json);    // 禁用 Upload 模块 → 文件路由不出现在文档
+        Assert.Contains("\"/api/v1/sys/file-path/", json);     // 文件路径是另一个模块(FilePath),不跟着关
     }
 }
