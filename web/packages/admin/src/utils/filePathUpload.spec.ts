@@ -65,7 +65,10 @@ describe('uploadToFilePath', () => {
 
     expect(out).toBe(output)
     expect(upload).toHaveBeenCalledTimes(1)
-    expect(upload).toHaveBeenCalledWith('Order.Attachment', file, undefined, undefined)
+    // 20 MB 的 File 做深比较要一秒多,文件按身份比
+    const [code, sent, subPath, signal] = upload.mock.calls[0]
+    expect([code, subPath, signal]).toEqual(['Order.Attachment', undefined, undefined])
+    expect(sent).toBe(file)
     expect(chunkInit).not.toHaveBeenCalled()
   })
 
