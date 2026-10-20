@@ -114,6 +114,12 @@ public static class CacheKeys
     /// <summary>启用状态的 AI 厂商(含模型)列表,AiChatClient 解析路径读它;厂商增删改/启停时整体失效</summary>
     public static string AiProviders() => "ai:providers";
 
+    /// <summary>文件服务器整表(含加密信封,不含明文);文件服务器增删改时整体失效</summary>
+    public static string FileServers() => "filepath:servers";
+
+    /// <summary>文件路径整表;文件路径增删改时整体失效</summary>
+    public static string FilePaths() => "filepath:rows";
+
     /// <summary>库里配置的外部登录 provider 整表(含加密信封,不含明文);<c>ExternalAuthProviderService</c> 写路径整体失效,注册表读穿透</summary>
     public static string ExternalAuthProviders() => "extauth:providers";
 

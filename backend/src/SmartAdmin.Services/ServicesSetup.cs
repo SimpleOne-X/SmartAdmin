@@ -218,6 +218,10 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, OpenAiCompatibleAdapter>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, AnthropicAdapter>());
 
+        // 文件路径:默认连接器不支持账号连接(什么都不做),平台专用的连接器前置注册即整体替换
+        services.TryAddSingleton<IFileServerConnector, NoopFileServerConnector>();
+        services.TryAddScoped<IFileServerService, FileServerService>();
+
         // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞
         services.AddHostedService<WorkerIdLeaseGuard>();
 
