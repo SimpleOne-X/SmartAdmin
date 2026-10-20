@@ -12,7 +12,7 @@ namespace SmartAdmin.Services;
 ///   <item>同名处理只对「业务指定路径」有意义,其余命名规则一律存「拒绝」;</item>
 ///   <item>角色 Id:升序去重的逗号串,空集合存 null。</item>
 /// </list>
-/// 测试连接和在线状态经 <see cref="IFilePathCircuit"/> 探测:不受熔断阻挡、失败不打开熔断,成功时关闭熔断,仍受在途上限约束。
+/// 测试连接和在线状态经 <see cref="IFilePathCircuit"/> 探测:不受熔断阻挡、失败不打开熔断,连得上(含拒绝访问这类失败)时关闭熔断,仍受在途上限约束。
 /// </summary>
 public class FilePathConfigService(
     IRepository<SysFilePath> paths,

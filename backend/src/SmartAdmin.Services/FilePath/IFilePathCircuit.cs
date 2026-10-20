@@ -29,7 +29,7 @@ public interface IFilePathCircuit
     /// <param name="serverId">文件服务器 Id;熔断和在途名额都按它分开。</param>
     /// <param name="access">真正碰文件系统的那一段。</param>
     /// <param name="probe">测试连接、在线状态:它们本来就是用来发现服务器恢复的,所以不被熔断挡;
-    /// 测的可能是还没保存的配置,失败不拿来挡已保存的配置;成功说明服务器通了。</param>
+    /// 测的可能是还没保存的配置,网络类失败不拿来挡已保存的配置;成功或连得上的失败说明服务器通了。</param>
     Task<T> RunAsync<T>(long serverId, Func<Task<T>> access, bool probe = false);
 
     /// <summary>记一次在 <see cref="RunAsync{T}"/> 之外发生的失败(如建立连接):网络类失败打开熔断,其余不改变熔断。</summary>
