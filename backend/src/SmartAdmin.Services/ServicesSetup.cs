@@ -225,6 +225,8 @@ public static class ServicesSetup
         services.TryAddScoped<IFileServerService, FileServerService>();
         services.TryAddScoped<IFilePathConfigService, FilePathConfigService>();
         services.TryAddScoped<IFilePathResolver, FilePathResolver>();
+        services.TryAddScoped<IFilePathUploadService, FilePathUploadService>();
+        services.TryAddScoped<IFilePathAccessChecker, FilePathAccessChecker>();
 
         // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞
         services.AddHostedService<WorkerIdLeaseGuard>();

@@ -75,15 +75,16 @@ public sealed class FilePathTestEnv : IAsyncDisposable
             name ?? $"srv-{Guid.NewGuid():N}", Root, null, null, true, null));
 
     /// <summary>
-    /// 绕过配置服务直接插一行可写的文件路径(文件夹 <c>Docs</c>、后缀 <c>.pdf</c>、10 MB),角色串原样写入——
+    /// 绕过配置服务直接插一行可写的文件路径(文件夹 <c>Docs</c>,后缀与大小上限默认 <c>.pdf</c>、10 MB,可传 null),角色串原样写入——
     /// 用来造「种子数据、手工改库」才会出现的非规范值。不失效缓存,所以要在第一次解析之前插完。
     /// </summary>
-    public async Task<(long Id, string Code)> AddRawPathAsync(long serverId, string? uploadRoleIds, string? downloadRoleIds)
+    public async Task<(long Id, string Code)> AddRawPathAsync(
+        long serverId, string? uploadRoleIds, string? downloadRoleIds, string? extensions = ".pdf", int? maxSizeMb = 10)
     {
         var row = new SysFilePath
         {
             Code = $"raw-{Guid.NewGuid():N}", Name = "手工插入", ServerId = serverId, Folder = "Docs",
-            AllowedExtensions = ".pdf", MaxSizeMb = 10, UploadRoleIds = uploadRoleIds, DownloadRoleIds = downloadRoleIds, Enabled = true,
+            AllowedExtensions = extensions, MaxSizeMb = maxSizeMb, UploadRoleIds = uploadRoleIds, DownloadRoleIds = downloadRoleIds, Enabled = true,
         };
         await Service<IRepository<SysFilePath>>().InsertAsync(row);
         return (row.Id, row.Code);

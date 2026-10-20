@@ -56,3 +56,15 @@ public sealed record FilePathRule(
 
 /// <summary>已通过白名单复检、连接器已就绪的落盘位置;<see cref="FolderFullPath"/> 是文件夹的完全限定路径。</summary>
 public sealed record FilePathTarget(FilePathRule Rule, string FolderFullPath);
+
+/// <summary>
+/// 上传入参。<see cref="Size"/> 是调用方声明的字节数(HTTP 入口取自请求里的文件长度),只用来做大小校验和回填出参;
+/// <see cref="SubPath"/> 仅「业务指定路径」命名规则使用,其余规则忽略。
+/// </summary>
+public sealed record FilePathUploadInput(Stream Content, string FileName, long Size, string? SubPath);
+
+/// <summary>
+/// 上传出参。<see cref="Path"/> 是相对文件夹的路径(<c>/</c> 分隔),业务存它、之后凭它下载或删除;
+/// <see cref="Name"/> 是清洗后的原始文件名;<see cref="ViewUrl"/> 由 HTTP 入口按调用者的下载权限填写,服务本身不签发。
+/// </summary>
+public sealed record FilePathUploadOutput(string Path, string Name, long Size, string? ViewUrl = null);
