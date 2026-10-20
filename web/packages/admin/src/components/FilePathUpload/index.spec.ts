@@ -97,4 +97,28 @@ describe('FilePathUpload', () => {
     // 失败也要收到 loading=false,否则触发器一直转圈
     expect(onLoadingChange.mock.calls).toEqual([[true], [false]])
   })
+
+  it('aborts_in_flight_uploads_on_unmount_without_an_error_message', async () => {
+    let signal: AbortSignal | undefined
+    uploadMock.mockImplementation(
+      (_code, _file, opts) =>
+        new Promise((_, reject) => {
+          signal = opts?.signal
+          signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+    mount({ code: 'Order.Attachment' })
+    const hooks = { onFinish: vi.fn(), onError: vi.fn(), onProgress: vi.fn() }
+    const pending = stub.customRequest!({ file: { file: new File(['abc'], 'a.pdf') }, ...hooks })
+    expect(signal?.aborted).toBe(false)
+
+    app!.unmount()
+    app = undefined
+    await pending
+
+    expect(signal?.aborted).toBe(true)
+    // 页面已经不在了,不再弹错误
+    expect(stub.error).not.toHaveBeenCalled()
+    expect(hooks.onFinish).not.toHaveBeenCalled()
+  })
 })

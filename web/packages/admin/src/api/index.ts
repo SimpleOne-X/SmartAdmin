@@ -1362,12 +1362,14 @@ export const filePathApi = {
 }
 
 // 按编码上传 / 下载。任何登录用户都能调,谁能往哪个文件路径传、从哪个下载由该路径的角色配置决定,所以没有权限码。
+// 上传的几个方法都收一个可选的 signal,中止时取消请求(组件卸载、分片上传里别的分片已经失败)。
 export const filePathFileApi = {
   /** 单文件上传:返回相对文件夹的路径,业务存它、之后凭它下载。subPath 仅「业务指定路径」命名规则用。 */
-  upload: (code: string, file: File, subPath?: string) =>
+  upload: (code: string, file: File, subPath?: string, signal?: AbortSignal) =>
     client
       .POST('/api/v1/sys/file-path/upload/{code}', {
         timeout: LONG_TIMEOUT_MS,
+        signal,
         params: { path: { code } },
         body: { file: file as unknown as string, subPath },
         bodySerializer: body => {
@@ -1383,18 +1385,21 @@ export const filePathFileApi = {
   chunkInit: (
     code: string,
     input: { fileName: string; size: number; sha256: string; subPath?: string },
+    signal?: AbortSignal,
   ) =>
     client
       .POST('/api/v1/sys/file-path/upload/{code}/chunk/init', {
+        signal,
         params: { path: { code } },
         body: { ...input, subPath: input.subPath ?? null },
       })
       .then(r => unwrap<FilePathChunkInitOutput>(r)),
   /** 上传一个分片(multipart:uploadId + index + chunk),同 upload 用 bodySerializer 建 FormData。 */
-  chunk: (code: string, uploadId: string, index: number, blob: Blob) =>
+  chunk: (code: string, uploadId: string, index: number, blob: Blob, signal?: AbortSignal) =>
     client
       .POST('/api/v1/sys/file-path/upload/{code}/chunk', {
         timeout: LONG_TIMEOUT_MS,
+        signal,
         params: { path: { code } },
         body: { uploadId, index, chunk: blob as unknown as string },
         bodySerializer: body => {
@@ -1410,10 +1415,11 @@ export const filePathFileApi = {
         unwrap<boolean>(r)
       }),
   /** 完成:服务端合并、按实际大小和当前规则再校验、核对哈希后写入。 */
-  chunkComplete: (code: string, uploadId: string) =>
+  chunkComplete: (code: string, uploadId: string, signal?: AbortSignal) =>
     client
       .POST('/api/v1/sys/file-path/upload/{code}/chunk/complete', {
         timeout: LONG_TIMEOUT_MS,
+        signal,
         params: { path: { code } },
         body: { uploadId },
       })
