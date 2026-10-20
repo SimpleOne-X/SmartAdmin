@@ -19,6 +19,14 @@ const output = { path: '2026/10/a.bin', name: 'a.bin', size: 1, viewUrl: null }
 
 const fileOfSize = (size: number) => new File([new Uint8Array(size)], 'a.bin')
 
+/** 每个字节 = 所在位置 % 251:251 与分片大小互质,各片起点的首字节互不相同,切错偏移一眼能认出来。 */
+const patternByte = (pos: number) => pos % 251
+function patternedFile(size: number) {
+  const bytes = new Uint8Array(size)
+  for (let i = 0; i < size; i++) bytes[i] = patternByte(i)
+  return new File([bytes], 'a.bin')
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   upload.mockResolvedValue(output)
@@ -48,7 +56,7 @@ describe('uploadToFilePath', () => {
   })
 
   it('uses_chunks_above_threshold', async () => {
-    const file = fileOfSize(FILE_PATH_CHUNK_THRESHOLD + 1)
+    const file = patternedFile(FILE_PATH_CHUNK_THRESHOLD + 1)
     initFor(file.size, 5)
     const order: string[] = []
     chunkComplete.mockImplementation(async () => {
@@ -79,6 +87,16 @@ describe('uploadToFilePath', () => {
     // 按服务端给的 chunkSize 切:各片加起来正好是整个文件
     const total = chunk.mock.calls.reduce((sum, c) => sum + (c[3] as Blob).size, 0)
     expect(total).toBe(file.size)
+    // 每片从自己的偏移切起:首尾字节对得上原文件对应位置
+    const chunkSize = Math.ceil(file.size / 5)
+    for (const [, , index, blob] of chunk.mock.calls as [string, string, number, Blob][]) {
+      const start = index * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      expect(bytes.length).toBe(end - start)
+      expect(bytes[0]).toBe(patternByte(start))
+      expect(bytes.at(-1)).toBe(patternByte(end - 1))
+    }
     expect(chunkComplete).toHaveBeenCalledWith('Order.Attachment', 'u1')
 
     // complete 之前最多报 99,100 只在 complete 之后出现且是最后一次
@@ -112,6 +130,29 @@ describe('uploadToFilePath', () => {
     // 三个 worker 各领了一片,失败后不再领第 4、5 片,也不会去 complete
     expect(chunk).toHaveBeenCalledTimes(3)
     expect(chunkComplete).not.toHaveBeenCalled()
+  })
+
+  it('does_not_report_progress_after_a_failure', async () => {
+    const file = fileOfSize(FILE_PATH_CHUNK_THRESHOLD + 1)
+    initFor(file.size, 5)
+    // 前三片同时在飞,谁先落定由用例控制
+    const gates = Array.from({ length: 3 }, () => Promise.withResolvers<void>())
+    chunk.mockImplementation((_code, _id, index: number) => gates[index].promise)
+    const progress: number[] = []
+
+    const run = uploadToFilePath('Order.Attachment', file, { onProgress: p => progress.push(p) })
+    await vi.waitFor(() => expect(chunk).toHaveBeenCalledTimes(3))
+
+    gates[0].reject(new Error('first'))
+    await expect(run).rejects.toThrow('first')
+    const reported = progress.length
+
+    // 失败之后才完成的分片:不计数、不报进度(n-upload 收到进度会把已失败的文件改回「上传中」)
+    gates[1].resolve()
+    gates[2].resolve()
+    await new Promise(r => setTimeout(r, 10))
+    expect(progress.length).toBe(reported)
+    expect(chunk).toHaveBeenCalledTimes(3)
   })
 
   it('passes_sub_path', async () => {

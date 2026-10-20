@@ -40,9 +40,11 @@ function abortMsgKey(err: unknown): string | undefined {
  * args.reason 是后端的原因码(accessDenied 这类,文件服务器访问失败的原因),文案在 `error.reason.<码>`。
  * 先换成翻译再填占位符;语言包里没有的码原样保留,总比丢掉原因强。
  */
-function translatedArgs(args: Record<string, unknown> = {}): Record<string, unknown> {
-  const key = typeof args.reason === 'string' ? `error.reason.${args.reason}` : ''
-  return key && i18n.global.te(key) ? { ...args, reason: t(key) } : args
+function translatedArgs(args?: Record<string, unknown> | null): Record<string, unknown> {
+  // 后端无实参时信封里是 "args": null,默认参数只管 undefined,所以这里用 ?? 兜
+  const a = args ?? {}
+  const key = typeof a.reason === 'string' ? `error.reason.${a.reason}` : ''
+  return key && i18n.global.te(key) ? { ...a, reason: t(key) } : a
 }
 
 /**

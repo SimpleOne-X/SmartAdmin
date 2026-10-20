@@ -59,6 +59,8 @@ export async function uploadToFilePath(
         failed = true
         throw e
       }
+      // 别的分片已经失败:这片即使传完也不再计数、不报进度,否则 n-upload 会把已失败的文件改回「上传中」
+      if (failed) return
       uploaded++
       onProgress?.(Math.min(99, Math.round((uploaded / chunkCount) * 100)))
     }
