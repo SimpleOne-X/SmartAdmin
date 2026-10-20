@@ -48,6 +48,12 @@ public class FilePathUploadService(
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
+    // ERROR_UNABLE_TO_REMOVE_REPLACED / ERROR_UNABLE_TO_MOVE_REPLACEMENT / ERROR_UNABLE_TO_MOVE_REPLACEMENT_2 包成的 HRESULT:
+    // 几个替换抢同一目标时 File.Replace(ReplaceFile)报这几个
+    private const int UnableToRemoveReplaced = unchecked((int)0x80070497);
+    private const int UnableToMoveReplacement = unchecked((int)0x80070498);
+    private const int UnableToMoveReplacement2 = unchecked((int)0x80070499);
+
     /// <summary>会话目录里 <c>session.json</c> 的内容。字段就是这些,不加服务器或目标信息。</summary>
     private sealed record ChunkSession(
         long UserId, string Code, string FileName, long Size, string Sha256, string? SubPath, int ChunkSize, int ChunkCount);
@@ -476,9 +482,12 @@ public class FilePathUploadService(
     }
 
     /// <summary>
-    /// 用临时文件替换目标。Windows 上同一目标同时被几个替换抢着改(或被杀毒软件、仍开着的读取短暂占住)时,
-    /// <see cref="File.Move(string, string, bool)"/> 会瞬时失败(拒绝访问、共享冲突、锁冲突),稍等即可;所以只对这几种失败带抖动退避重试,
-    /// 最多 <see cref="MaxReplaceAttempts"/> 次,最坏累计等待约 1.4 秒,仍失败就把最后一次的异常抛出去。
+    /// 用临时文件替换目标。目标已存在时用 <see cref="File.Replace(string, string, string?, bool)"/>:
+    /// Windows 上 <see cref="File.Move(string, string, bool)"/> 的覆盖替换不了被别人打开着的文件(对方带了 <see cref="FileShare.Delete"/> 也是拒绝访问),
+    /// 而正在下载的文件必须能被覆盖上传替换;目标不存在时用 <see cref="File.Move(string, string, bool)"/>。每次尝试都重新判断目标在不在。
+    /// <para>Windows 上同一目标同时被几个替换抢着改(或被杀毒软件、仍开着的读取短暂占住)时会瞬时失败:拒绝访问、共享冲突、锁冲突、
+    /// <c>ReplaceFile</c> 的三个并发错误,稍等即可;目标在判断存在之后被别人删掉(<see cref="FileNotFoundException"/>)也是瞬时的,下一次会走 Move。
+    /// 所以只对这几种失败带抖动退避重试,最多 <see cref="MaxReplaceAttempts"/> 次,最坏累计等待约 1.4 秒,仍失败就把最后一次的异常抛出去。</para>
     /// </summary>
     private async Task ReplaceAsync(string temp, string full, CancellationToken ct)
     {
@@ -486,10 +495,11 @@ public class FilePathUploadService(
         {
             try
             {
-                File.Move(temp, full, overwrite: true);
+                if (File.Exists(full)) ReplaceExisting(temp, full);
+                else File.Move(temp, full, overwrite: true);
                 return;
             }
-            catch (Exception e) when (attempt < MaxReplaceAttempts && IsTransientReplaceFailure(e))
+            catch (Exception e) when (attempt < MaxReplaceAttempts && IsTransientReplaceFailure(e, temp))
             {
                 logger.LogDebug(e, "替换 {Path} 被占用,第 {Attempt} 次尝试失败,稍后重试", full, attempt);
                 await Task.Delay(Random.Shared.Next(5, 20 * attempt + 5), ct);
@@ -497,9 +507,36 @@ public class FilePathUploadService(
         }
     }
 
-    /// <summary>瞬时占用:拒绝访问(替换抢同一目标时 Windows 这样报),或 Win32 的共享冲突、锁冲突。其余 IO 错误是永久的,不重试。</summary>
-    private static bool IsTransientReplaceFailure(Exception e) =>
-        e is UnauthorizedAccessException || e is IOException { HResult: SharingViolation or LockViolation };
+    /// <summary>
+    /// <see cref="File.Replace(string, string, string?, bool)"/> 并指定备份名,不论成败都删掉备份。
+    /// 不指定时 ReplaceFile 自己拿 <c>{名}~RF{随机}.TMP</c> 暂存被替换的文件,几个替换抢同一目标又有读者开着文件时,
+    /// 这个暂存文件会漏删,在文件夹里留下孤儿;指定了名字,清理就在自己手里。失败时备份里放的也只是这次本来就要取代的旧版本。
+    /// 备份名固定长度并以点开头:不会撑破路径段的长度上限,万一删不掉,下载也当它不存在。
+    /// </summary>
+    private void ReplaceExisting(string temp, string full)
+    {
+        var backup = Path.Combine(Path.GetDirectoryName(full)!, $".replaced-{Guid.NewGuid():N}");
+        try
+        {
+            File.Replace(temp, full, backup, ignoreMetadataErrors: true);
+        }
+        finally
+        {
+            TryDelete(backup);
+        }
+    }
+
+    /// <summary>
+    /// 瞬时失败:拒绝访问(替换抢同一目标时 Windows 这样报),Win32 的共享冲突、锁冲突、<c>ReplaceFile</c> 的并发错误,
+    /// 以及目标在判断存在之后消失。临时文件自己不见了是永久的,不重试;其余 IO 错误同样不重试。
+    /// </summary>
+    private static bool IsTransientReplaceFailure(Exception e, string temp) => e switch
+    {
+        UnauthorizedAccessException => true,
+        FileNotFoundException => File.Exists(temp),
+        IOException { HResult: SharingViolation or LockViolation or UnableToRemoveReplaced or UnableToMoveReplacement or UnableToMoveReplacement2 } => true,
+        _ => false,
+    };
 
     private static FileStream OpenNew(string path) =>
         new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, useAsync: true);

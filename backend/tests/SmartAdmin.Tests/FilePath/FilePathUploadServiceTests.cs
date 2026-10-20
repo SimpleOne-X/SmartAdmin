@@ -281,6 +281,33 @@ public class FilePathUploadServiceTests
     }
 
     [Fact]
+    public async Task Concurrent_overwrites_over_open_readers_leave_only_the_final_file()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath, FilePathConflictMode.Overwrite);
+        await NewService(env).UploadAsync(code, Upload("a.pdf", "初始"));
+
+        // 几个读者一直开着(下载的共享模式),同时有几份覆盖在抢同一个目标
+        var readers = Enumerable.Range(0, 3)
+            .Select(_ => new FileStream(DiskPath(env, "a.pdf"), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+            .ToArray();
+        var contents = Enumerable.Range(0, 8).Select(i => $"第 {i} 份").ToArray();
+        var services = contents.Select(_ => NewService(env)).ToArray();
+        try
+        {
+            await Task.WhenAll(contents.Select((c, i) => Task.Run(() => services[i].UploadAsync(code, Upload("a.pdf", c)))));
+        }
+        finally
+        {
+            foreach (var reader in readers) await reader.DisposeAsync();
+        }
+
+        Assert.Contains(await File.ReadAllTextAsync(DiskPath(env, "a.pdf")), contents);
+        // 文件夹里只剩最终文件:没有临时文件,也没有 File.Replace 可能留下的备份
+        Assert.Equal(["a.pdf"], Directory.EnumerateFileSystemEntries(Path.Combine(env.Root, "Docs"), "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+
+    [Fact]
     public async Task Read_only_rejects_upload()
     {
         await using var env = FilePathTestEnv.Create();
