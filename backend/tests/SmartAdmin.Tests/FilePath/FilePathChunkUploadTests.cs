@@ -547,7 +547,7 @@ public class FilePathChunkUploadTests
     /// <summary><c>StoreAsync</c> 进来就停住,等测试放行:把「赢家正在合并」这一刻定格下来。</summary>
     private sealed class GatedService(FilePathTestEnv env)
         : FilePathUploadService(env.Service<IFilePathResolver>(), TimeProvider.System, NullLogger<FilePathUploadService>.Instance,
-            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>(), env.Service<IFilePathCircuit>())
     {
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -606,7 +606,7 @@ public class FilePathChunkUploadTests
     /// <summary><c>StoreAsync</c> 第一次调用抛指定异常,之后照常写:模拟合并时 NAS 抖了一下。</summary>
     private sealed class FlakyStoreService(FilePathTestEnv env, Exception failure)
         : FilePathUploadService(env.Service<IFilePathResolver>(), TimeProvider.System, NullLogger<FilePathUploadService>.Instance,
-            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>(), env.Service<IFilePathCircuit>())
     {
         private Exception? _failure = failure;
 
@@ -624,7 +624,12 @@ public class FilePathChunkUploadTests
     [MemberData(nameof(StorageFailures))]
     public async Task Storage_failure_during_complete_keeps_the_session_for_another_try(string kind)
     {
-        await using var env = NewEnv(new MutableUser(1));
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        await using var env = FilePathTestEnv.Create(overrides: s =>
+        {
+            s.Replace(ServiceDescriptor.Singleton<ICurrentUser>(new MutableUser(1)));
+            s.Replace(ServiceDescriptor.Singleton<IFilePathCircuit>(new FilePathCircuit(time, NullLogger<FilePathCircuit>.Instance)));
+        });
         var (_, code) = await AddPathAsync(env);
         Exception failure = kind == "stagingIo"
             ? new IOException("磁盘已满")
@@ -642,6 +647,14 @@ public class FilePathChunkUploadTests
         Assert.Contains("session.json", names);
         Assert.Contains("0.part", names);
         Assert.Contains("1.part", names);
+
+        // 超时属于网络类失败,这台服务器的熔断打开 30 秒;过了这段时间再合并
+        if (kind == "folderUnavailable")
+        {
+            var blocked = await Assert.ThrowsAsync<AdminException>(() => service.ChunkCompleteAsync(code, init.UploadId));
+            Assert.Equal(ErrorCode.FilePathFolderUnavailable, blocked.Code);
+            time.Advance(TimeSpan.FromSeconds(30));
+        }
 
         var output = await service.ChunkCompleteAsync(code, init.UploadId);
         await AssertSameBytes(Big, DiskPath(env, output.Path));

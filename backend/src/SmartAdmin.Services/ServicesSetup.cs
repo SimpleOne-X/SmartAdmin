@@ -222,6 +222,8 @@ public static class ServicesSetup
         services.TryAddSingleton<IFileServerConnector>(sp => OperatingSystem.IsWindows()
             ? ActivatorUtilities.CreateInstance<WindowsFileServerConnector>(sp)
             : ActivatorUtilities.CreateInstance<NoopFileServerConnector>(sp));
+        // 熔断状态要跨请求保留,所以是单例
+        services.TryAddSingleton<IFilePathCircuit, FilePathCircuit>();
         services.TryAddScoped<IFileServerService, FileServerService>();
         services.TryAddScoped<IFilePathConfigService, FilePathConfigService>();
         services.TryAddScoped<IFilePathResolver, FilePathResolver>();

@@ -308,4 +308,21 @@ public class FilePathConfigServiceTests
         Assert.Equal("2,8", row.UploadRoleIds);
         Assert.Null(row.DownloadRoleIds);
     }
+
+    [Fact]
+    public async Task Folder_status_check_closes_the_circuit()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var id = await env.Service<IFilePathConfigService>().AddAsync(new FilePathAddInput(
+            $"cfg-{Guid.NewGuid():N}", "订单附件", serverId, null, FilePathNamingRule.YearMonthOriginal, FilePathConflictMode.Reject,
+            true, null, null, null, null, true, null));
+        var circuit = env.Service<IFilePathCircuit>();
+        circuit.ReportFailure(serverId, new TimeoutException());
+
+        var status = Assert.Single(await env.Service<IFilePathConfigService>().StatusAsync([id]));
+
+        Assert.True(status.Online);
+        circuit.ThrowIfOpen(serverId);
+    }
 }

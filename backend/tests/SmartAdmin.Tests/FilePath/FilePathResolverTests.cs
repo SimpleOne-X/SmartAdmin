@@ -201,4 +201,37 @@ public class FilePathResolverTests
         Assert.Empty(commasRule.UploadRoleIds);
         Assert.Equal([3L, 5L], commasRule.DownloadRoleIds);
     }
+
+    [Fact]
+    public async Task Network_failure_stops_connecting_while_the_circuit_is_open()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var (_, code) = await AddPathAsync(env, serverId);
+        env.Connector.Fail = new FileServerConnectException(FileAccessFailure.NetworkPathNotFound, 53);
+        var resolver = env.Service<IFilePathResolver>();
+        await Rejected(resolver.ResolveAsync(code));
+
+        // 熔断打开:直接报上次的原因,不再去连
+        var blocked = await Rejected(resolver.ResolveAsync(code));
+
+        Assert.Equal((ErrorCode.FilePathFolderUnavailable, FileAccessFailure.NetworkPathNotFound), (blocked.Code, blocked.Args!["reason"]));
+        Assert.Single(env.Connector.Calls);
+    }
+
+    [Fact]
+    public async Task Credential_failure_does_not_open_the_circuit()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var (_, code) = await AddPathAsync(env, serverId);
+        env.Connector.Fail = new FileServerConnectException(FileAccessFailure.BadCredentials, 1326);
+        var resolver = env.Service<IFilePathResolver>();
+
+        await Rejected(resolver.ResolveAsync(code));
+        await Rejected(resolver.ResolveAsync(code));
+
+        // 错密码由连接器自己记着不重试,这里不额外挡
+        Assert.Equal(2, env.Connector.Calls.Count);
+    }
 }

@@ -2058,6 +2058,7 @@ export default {
       credentialConflict: 'Credential conflict',
       timeout: 'Timed out',
       folderMissing: 'Folder does not exist',
+      busy: 'File server busy',
       unknown: 'Unknown error',
     },
     recycle: {

@@ -17,13 +17,16 @@ public static class FileAccessFailure
         CredentialConflict = "credentialConflict",
         Timeout = "timeout",
         FolderMissing = "folderMissing",
+        Busy = "busy",
         Unknown = "unknown";
 
     /// <summary>Win32 错误码 → 原因码,没收录的是 <see cref="Unknown"/>。</summary>
     public static string FromWin32(int code) => code switch
     {
         5 => AccessDenied,                      // ERROR_ACCESS_DENIED
-        53 => NetworkPathNotFound,              // ERROR_BAD_NETPATH
+        53 or 51 or 59 or 64 => NetworkPathNotFound, // ERROR_BAD_NETPATH / ERROR_REM_NOT_LIST / ERROR_UNEXP_NET_ERR / ERROR_NETNAME_DELETED
+        1203 or 1222 or 1231 or 1232 => NetworkPathNotFound, // ERROR_NO_NET_OR_BAD_PATH / ERROR_NO_NETWORK / ERROR_NETWORK_UNREACHABLE / ERROR_HOST_UNREACHABLE
+        121 => Timeout,                         // ERROR_SEM_TIMEOUT
         67 => ShareNotFound,                    // ERROR_BAD_NET_NAME
         1326 or 86 or 1330 => BadCredentials,   // ERROR_LOGON_FAILURE / ERROR_INVALID_PASSWORD / ERROR_PASSWORD_EXPIRED
         1909 or 1331 => AccountLocked,          // ERROR_ACCOUNT_LOCKED_OUT / ERROR_ACCOUNT_DISABLED
@@ -31,9 +34,13 @@ public static class FileAccessFailure
         _ => Unknown,
     };
 
-    /// <summary>异常 → 原因码。<see cref="DirectoryNotFoundException"/> 是 <see cref="IOException"/> 的子类,必须先判。</summary>
+    /// <summary>
+    /// 异常 → 原因码。<see cref="DirectoryNotFoundException"/> 是 <see cref="IOException"/> 的子类,必须先判。
+    /// 已经是「文件夹无法访问」的业务异常(熔断、繁忙)沿用它带的原因。
+    /// </summary>
     public static string FromException(Exception e) => e switch
     {
+        AdminException { Code: ErrorCode.FilePathFolderUnavailable, Args: { } args } when args.GetValueOrDefault("reason") is string r => r,
         FileServerConnectException c => c.Reason,
         TimeoutException => Timeout,
         UnauthorizedAccessException => AccessDenied,

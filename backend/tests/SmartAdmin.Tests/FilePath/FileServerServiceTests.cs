@@ -421,8 +421,8 @@ public class FileServerServiceTests
     private sealed class FailingCascadeService(
         IRepository<SysFileServer> servers, IRepository<SysFilePath> paths, IDataProtectionKeyProvider keyProvider,
         ISecretProtector secretProtector, ICacheProvider cache, IFileServerConnector connector, AdminFilePathOptions options,
-        ILogger<FileServerService> logger)
-        : FileServerService(servers, paths, keyProvider, secretProtector, cache, connector, options, logger)
+        ILogger<FileServerService> logger, IFilePathCircuit circuit)
+        : FileServerService(servers, paths, keyProvider, secretProtector, cache, connector, options, logger, circuit)
     {
         protected override async Task CascadeHostCredentialAsync(SysFileServer saved, IReadOnlyList<SysFileServer> others)
         {
@@ -458,5 +458,37 @@ public class FileServerServiceTests
         await env.Service<IFileServerService>().TestAsync(new FileServerTestInput(files, "//nas01/files", "svc-new", "n3w"));
 
         Assert.Equal("svc-new", env.Connector.Calls[^1].Target.UserName);
+    }
+
+    // ── 熔断 ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Status_check_is_not_blocked_by_the_circuit_and_closes_it()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var id = await env.AddServerAsync();
+        var circuit = env.Service<IFilePathCircuit>();
+        circuit.ReportFailure(id, new TimeoutException());
+        Assert.Throws<AdminException>(() => circuit.ThrowIfOpen(id));
+
+        // 在线状态本来就是用来发现服务器恢复的:熔断打开也照样去查,查通了就关闭熔断
+        var status = Assert.Single(await env.Service<IFileServerService>().StatusAsync([id]));
+
+        Assert.True(status.Online);
+        circuit.ThrowIfOpen(id);
+    }
+
+    [Fact]
+    public async Task Failed_test_connection_does_not_open_the_circuit()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var id = await env.AddServerAsync();
+        env.Connector.Fail = new FileServerConnectException(FileAccessFailure.NetworkPathNotFound, 53);
+
+        // 测的是弹窗里当前填的内容,可能和已保存的不同,不拿它的失败去挡已保存的配置
+        var result = await env.Service<IFileServerService>().TestAsync(new FileServerTestInput(id, env.Root, null, null));
+
+        Assert.Equal(FileAccessFailure.NetworkPathNotFound, result.Reason);
+        env.Service<IFilePathCircuit>().ThrowIfOpen(id);
     }
 }

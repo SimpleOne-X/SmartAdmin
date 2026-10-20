@@ -16,18 +16,22 @@ namespace SmartAdmin.Services;
 /// 合并成 <c>merged</c> 并核对哈希后,和单文件上传走同一个 <see cref="StoreAsync"/> 落到文件夹。
 /// 会话目录里只有这些,不放服务器或目标信息(<see cref="FilePathTarget"/> 带着账号密码信封)。
 /// 合并先在会话目录里独占创建 <c>merging</c> 标记来认领会话,之后到达的分片和合并都按无效会话处理。</para>
+/// <para>写进文件夹和删除在 <see cref="IFilePathCircuit.RunAsync{T}"/> 里做:受在途上限约束,网络类失败打开这台服务器的熔断。
+/// 分片只写暂存目录,不经过它。</para>
 /// </summary>
 /// <param name="resolver">定位文件夹。</param>
 /// <param name="time">命名用的时钟。</param>
 /// <param name="logger">日志。</param>
 /// <param name="options">分片上传的暂存目录(<see cref="AdminFilePathOptions.StagingPath"/>)来自它。</param>
 /// <param name="currentUser">分片会话绑定的用户;未登录(<see cref="ICurrentUser.UserId"/> 为空)绑定 0。</param>
+/// <param name="circuit">文件服务器熔断与在途上限。</param>
 public class FilePathUploadService(
     IFilePathResolver resolver,
     TimeProvider time,
     ILogger<FilePathUploadService> logger,
     AdminFilePathOptions options,
-    ICurrentUser currentUser) : IFilePathUploadService
+    ICurrentUser currentUser,
+    IFilePathCircuit circuit) : IFilePathUploadService
 {
     private const int BufferSize = 81920;
 
@@ -64,7 +68,8 @@ public class FilePathUploadService(
         var target = await resolver.ResolveAsync(code, ct);
         ValidateUpload(target.Rule, input.FileName, input.Size);
 
-        return await StoreAsync(target, input.FileName, input.Size, input.SubPath, input.Content, ct);
+        return await circuit.RunAsync(target.Rule.Server.Id,
+            () => StoreAsync(target, input.FileName, input.Size, input.SubPath, input.Content, ct));
     }
 
     /// <summary>
@@ -209,7 +214,7 @@ public class FilePathUploadService(
         AdminException.ThrowIf(sha256 != session.Sha256, ErrorCode.FilePathChunkHashMismatch);
 
         await using var content = new FileStream(merged, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
-        return await StoreAsync(target, session.FileName, length, session.SubPath, content, ct);
+        return await circuit.RunAsync(target.Rule.Server.Id, () => StoreAsync(target, session.FileName, length, session.SubPath, content, ct));
     }
 
     /// <summary>
@@ -379,21 +384,26 @@ public class FilePathUploadService(
         AdminException.ThrowIf(FilePathRules.HasHiddenSegment(relative), ErrorCode.FilePathFileNotFound);
 
         var full = resolver.Combine(target, relative);
-        try
+        await circuit.RunAsync(target.Rule.Server.Id, () =>
         {
-            // 不用 File.Exists:它把共享断开、拒绝访问、超时都报成 false,调用方会当成「已经删了」而丢掉自己的记录,文件却还在
-            AdminException.ThrowIf(GetAttributes(full).HasFlag(FileAttributes.Directory), ErrorCode.FilePathFileNotFound);
-            File.Delete(full);
-        }
-        catch (Exception e) when (FileAccessFailure.IsMissingFile(e))
-        {
-            throw new AdminException(ErrorCode.FilePathFileNotFound);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            logger.LogError(e, "删除文件路径 {Code} 下的 {Path} 失败(HResult {HResult:X8})", code, relative, e.HResult);
-            throw FileAccessFailure.ToError(e);
-        }
+            try
+            {
+                // 不用 File.Exists:它把共享断开、拒绝访问、超时都报成 false,调用方会当成「已经删了」而丢掉自己的记录,文件却还在
+                AdminException.ThrowIf(GetAttributes(full).HasFlag(FileAttributes.Directory), ErrorCode.FilePathFileNotFound);
+                File.Delete(full);
+            }
+            catch (Exception e) when (FileAccessFailure.IsMissingFile(e))
+            {
+                throw new AdminException(ErrorCode.FilePathFileNotFound);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                logger.LogError(e, "删除文件路径 {Code} 下的 {Path} 失败(HResult {HResult:X8})", code, relative, e.HResult);
+                throw FileAccessFailure.ToError(e);
+            }
+
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>

@@ -458,4 +458,19 @@ public class WindowsFileServerConnectorTests
 
         Assert.Equal([@"add \\nas02\files svc-other x", $"add {Share} svc-files p@ss"], connector.Calls);
     }
+
+    [Fact]
+    public async Task Slow_disconnect_is_reported_as_a_timeout()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+        connector.Timeout = TimeSpan.FromMilliseconds(100);
+        connector.CancelDelay = TimeSpan.FromSeconds(1);
+
+        // 账号清空后断开一直超时:按网络类失败报出去,由熔断挡住之后的请求,不再每个请求都等满时限
+        var e = await Fails(connector, Target(userName: null));
+
+        Assert.Equal(FileAccessFailure.Timeout, e.Reason);
+        await connector.CancelStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    }
 }

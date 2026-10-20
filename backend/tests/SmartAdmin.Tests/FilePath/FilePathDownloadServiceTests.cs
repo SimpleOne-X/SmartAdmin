@@ -49,10 +49,15 @@ public class FilePathDownloadServiceTests
 
     /// <summary>在「读属性」和「打开文件」两步各自按需抛指定异常:模拟共享断开、权限丢失、系统拒绝文件名。</summary>
     private sealed class FaultyService(FilePathTestEnv env, Exception? attributes = null, Exception? open = null)
-        : FilePathDownloadService(env.Service<IFilePathResolver>(), NullLogger<FilePathDownloadService>.Instance)
+        : FilePathDownloadService(env.Service<IFilePathResolver>(), NullLogger<FilePathDownloadService>.Instance, env.Service<IFilePathCircuit>())
     {
-        protected override FileAttributes GetAttributes(string fullPath) =>
-            attributes is null ? base.GetAttributes(fullPath) : throw attributes;
+        public int AttributeCalls { get; private set; }
+
+        protected override FileAttributes GetAttributes(string fullPath)
+        {
+            AttributeCalls++;
+            return attributes is null ? base.GetAttributes(fullPath) : throw attributes;
+        }
 
         protected override FileStream OpenRead(string fullPath) =>
             open is null ? base.OpenRead(fullPath) : throw open;
@@ -167,16 +172,17 @@ public class FilePathDownloadServiceTests
         var code = await AddPathAsync(env);
         await PutAsync(env, "a.pdf", "还在");
 
-        // 共享断开 / 权限丢失不能报成「文件不存在」:调用方会据此当作文件已经没了
-        var offline = await Rejected(new FaultyService(env, attributes: new IOException("共享已断开", unchecked((int)0x80070035)))
-            .OpenReadAsync(code, "a.pdf"));
-        Assert.Equal(ErrorCode.FilePathFolderUnavailable, offline.Code);
-        Assert.Equal(FileAccessFailure.NetworkPathNotFound, offline.Args!["reason"]);
-
+        // 共享断开 / 权限丢失不能报成「文件不存在」:调用方会据此当作文件已经没了。
+        // 拒绝访问先测:共享断开会打开这台服务器的熔断,之后的请求在读文件之前就被挡下
         var denied = await Rejected(new FaultyService(env, open: new UnauthorizedAccessException())
             .OpenReadAsync(code, "a.pdf"));
         Assert.Equal(ErrorCode.FilePathFolderUnavailable, denied.Code);
         Assert.Equal(FileAccessFailure.AccessDenied, denied.Args!["reason"]);
+
+        var offline = await Rejected(new FaultyService(env, attributes: new IOException("共享已断开", unchecked((int)0x80070035)))
+            .OpenReadAsync(code, "a.pdf"));
+        Assert.Equal(ErrorCode.FilePathFolderUnavailable, offline.Code);
+        Assert.Equal(FileAccessFailure.NetworkPathNotFound, offline.Args!["reason"]);
     }
 
     [Fact]
@@ -241,5 +247,23 @@ public class FilePathDownloadServiceTests
         }
 
         Assert.Equal("新", await ReadAllAsync(await downloader.OpenReadAsync(code, "a.pdf")));
+    }
+
+    [Fact]
+    public async Task Network_failure_while_reading_stops_further_reads()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+        await PutAsync(env, "a.pdf", "还在");
+        // ERROR_NETNAME_DELETED:连接还记着,NAS 已经掉线,读文件时才发现
+        var service = new FaultyService(env, attributes: new IOException("网络名不再可用", unchecked((int)0x80070040)));
+        Assert.Equal(FileAccessFailure.NetworkPathNotFound, (await Rejected(service.OpenReadAsync(code, "a.pdf"))).Args!["reason"]);
+
+        var blocked = await Rejected(service.OpenReadAsync(code, "a.pdf"));
+
+        // 熔断打开期间不再碰文件系统,也不再去连
+        Assert.Equal((ErrorCode.FilePathFolderUnavailable, FileAccessFailure.NetworkPathNotFound), (blocked.Code, blocked.Args!["reason"]));
+        Assert.Equal(1, service.AttributeCalls);
+        Assert.Single(env.Connector.Calls);
     }
 }

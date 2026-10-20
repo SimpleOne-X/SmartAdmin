@@ -14,7 +14,7 @@ namespace SmartAdmin.Services;
 ///   <item>Windows 对一台主机只接受一套凭据,所以状态按主机记:本进程用账号连着这台主机的哪些共享、各用的哪套凭据
 ///         (账号和解开后的密码的哈希;账号不区分大小写;信封每次加密都带随机数,不能拿来比)。
 ///         某个共享要换凭据时,先断开本进程用别的凭据连着这台主机的所有共享再连;遇到 1219 也是断开这台主机的全部共享后重连一次。
-///         账号清空了就断开这个共享。断开不强制,还有文件开着时继续用旧连接,下次访问再换。</item>
+///         账号清空了就断开这个共享。断开不强制,还有文件开着时继续用旧连接,下次访问再换;断开超时按连接超时报错。</item>
 ///   <item>同一台主机的连接操作串行(每台主机一把锁,断开别的共享也在这把锁里,不会互相等锁)。调用方的取消令牌只用来等锁;
 ///         拿到锁之后 native 调用只受 <see cref="ConnectTimeout"/> 限制,结果一定记进状态。</item>
 ///   <item>账号或密码错误不自动重试:这套凭据记为失败,直到配置改了或有人点测试连接;否则每个请求都拿错密码去试,很快就把域账号锁住。
@@ -64,7 +64,9 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
 
     /// <summary>
     /// 账号清空之后断开这个共享先前用账号建的连接:不断开的话进程里访问这个共享仍带着旧凭据,测试连接也会误报正常。
-    /// 断开成功(或本来就不在了)才忘掉旧连接;还有文件开着、超时等情况继续用旧连接,下次访问再断。
+    /// 断开成功(或本来就不在了)才忘掉旧连接;还有文件开着等情况继续用旧连接,下次访问再断。
+    /// 断开超时抛 <see cref="FileServerConnectException"/>(原因是超时):主机多半不通,按网络类失败报出去,
+    /// 由熔断挡住之后的请求,不让每个请求都等满时限。
     /// </summary>
     protected virtual async Task DisconnectAsync(string host, string share, CancellationToken ct)
     {
@@ -83,6 +85,7 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
         catch (TimeoutException)
         {
             logger.LogWarning("断开文件服务器共享 {Share} 先前的连接超时,暂时继续用旧连接,下次访问再断", share);
+            throw new FileServerConnectException(FileAccessFailure.Timeout, 0);
         }
         finally
         {

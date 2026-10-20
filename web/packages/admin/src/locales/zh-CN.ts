@@ -2006,6 +2006,7 @@ export default {
       credentialConflict: '凭据冲突',
       timeout: '超时',
       folderMissing: '文件夹不存在',
+      busy: '文件服务器繁忙',
       unknown: '未知错误',
     },
     recycle: {

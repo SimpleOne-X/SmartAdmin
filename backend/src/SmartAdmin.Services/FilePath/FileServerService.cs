@@ -11,6 +11,7 @@ namespace SmartAdmin.Services;
 /// (重启后信封就解不开了)。清空账号时密码一并清空;修改时换了主机或账号而密码留空,拒绝保存(旧密码不能沿用)。</para>
 /// <para>Windows 对一台主机只接受一套凭据,所以同一主机的各行账号和密码必须一致:新增或把根路径换到另一台主机时,
 /// 账号与那台主机已有的行不一致就拒绝;在同一台主机上修改账号或密码时,同主机的其他行在同一个事务里一起改成这一行的账号和密码。</para>
+/// <para>测试连接和在线状态经 <see cref="IFilePathCircuit"/> 探测:不受熔断阻挡、失败不打开熔断,成功时关闭熔断,仍受在途上限约束。</para>
 /// </summary>
 public class FileServerService(
     IRepository<SysFileServer> servers,
@@ -20,7 +21,8 @@ public class FileServerService(
     ICacheProvider cache,
     IFileServerConnector connector,
     AdminFilePathOptions options,
-    ILogger<FileServerService> logger) : IFileServerService
+    ILogger<FileServerService> logger,
+    IFilePathCircuit circuit) : IFileServerService
 {
     /// <inheritdoc />
     public virtual async Task<PagedList<FileServerView>> PageAsync(FileServerPageInput input)
@@ -100,7 +102,8 @@ public class FileServerService(
     public virtual async Task<FileAccessTestResult> TestAsync(FileServerTestInput input, CancellationToken ct = default)
     {
         var target = await ToTestTargetAsync(input);
-        return await FileAccessProbe.TestAsync(t => ProbeAsync(target, retryFailed: true, readEntries: true, t), ct);
+        return await FileAccessProbe.TestAsync(
+            t => circuit.RunAsync(target.Id, () => ProbeAsync(target, retryFailed: true, readEntries: true, t), probe: true), ct);
     }
 
     /// <inheritdoc />
@@ -114,7 +117,8 @@ public class FileServerService(
         {
             var s = rows[id];
             var target = new FileServerTarget(s.Id, s.RootPath, s.UserName, s.PasswordProtected);
-            return FileAccessProbe.StatusAsync(id, t => ProbeAsync(target, retryFailed: false, readEntries: false, t), ct);
+            return FileAccessProbe.StatusAsync(id,
+                t => circuit.RunAsync(id, () => ProbeAsync(target, retryFailed: false, readEntries: false, t), probe: true), ct);
         }));
     }
 

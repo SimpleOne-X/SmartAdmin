@@ -163,6 +163,14 @@ public class FilePathRulesTests
     [Theory]
     [InlineData(5, FileAccessFailure.AccessDenied)]
     [InlineData(53, FileAccessFailure.NetworkPathNotFound)]
+    [InlineData(51, FileAccessFailure.NetworkPathNotFound)]     // ERROR_REM_NOT_LIST
+    [InlineData(59, FileAccessFailure.NetworkPathNotFound)]     // ERROR_UNEXP_NET_ERR
+    [InlineData(64, FileAccessFailure.NetworkPathNotFound)]     // ERROR_NETNAME_DELETED:已经建立的会话断了
+    [InlineData(1203, FileAccessFailure.NetworkPathNotFound)]   // ERROR_NO_NET_OR_BAD_PATH
+    [InlineData(1222, FileAccessFailure.NetworkPathNotFound)]   // ERROR_NO_NETWORK
+    [InlineData(1231, FileAccessFailure.NetworkPathNotFound)]   // ERROR_NETWORK_UNREACHABLE
+    [InlineData(1232, FileAccessFailure.NetworkPathNotFound)]   // ERROR_HOST_UNREACHABLE
+    [InlineData(121, FileAccessFailure.Timeout)]                // ERROR_SEM_TIMEOUT
     [InlineData(67, FileAccessFailure.ShareNotFound)]
     [InlineData(1326, FileAccessFailure.BadCredentials)]
     [InlineData(86, FileAccessFailure.BadCredentials)]
@@ -186,6 +194,9 @@ public class FilePathRulesTests
             FileAccessFailure.FromException(new FileServerConnectException(FileAccessFailure.BadCredentials, 1326)));
         Assert.Equal(FileAccessFailure.Unknown, FileAccessFailure.FromException(new IOException("x")));
         Assert.Equal(FileAccessFailure.Unknown, FileAccessFailure.FromException(new InvalidOperationException()));
+        // 熔断、繁忙抛的「文件夹无法访问」带着原因,探针要原样报出来,不能变成「未知」
+        Assert.Equal(FileAccessFailure.Busy, FileAccessFailure.FromException(
+            new AdminException(ErrorCode.FilePathFolderUnavailable, new Dictionary<string, object?> { ["reason"] = FileAccessFailure.Busy })));
     }
 
     [Fact]

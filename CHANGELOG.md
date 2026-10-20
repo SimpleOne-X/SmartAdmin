@@ -25,6 +25,7 @@
     - 下载：`GET /api/v1/sys/file-path/download/{code}`；匿名可读的签名直链是 `GET /api/v1/sys/file-path/download/{code}/view`。
   - 新组件 `FilePathUpload`（`smart-admin-web`），自动分片；一并导出 `uploadToFilePath`、`filePathFileApi`。
   - 后端新增 `IFilePathUploadService`、`IFilePathDownloadService`、`IFilePathLinkSigner`，供业务在后端写文件、取文件、签直链。
+  - 文件服务器出现网络类失败后，30 秒内对它的上传、下载、删除直接报 `44114`，不再卡到系统的网络超时；每台服务器同时最多 16 个文件操作，超出报「繁忙」。可经 `IFilePathCircuit` 替换。
   - 新配置节 `SmartAdmin:FilePath`：`AllowedRoots`（根目录白名单，默认空，空则功能不可用）、`StagingPath`、`StagingTtlHours`、`LinkTtlMinutes`。
   - 新错误码段 `44100`–`44199`（`44101`–`44117` 文件路径与上传下载，`44150`–`44157` 文件服务器）。
   - 新菜单「文件管理 → 文件路径」，菜单 Id `620`–`629`，随种子进老库，但不会自动授给任何角色；超管直接可见，普通管理员要在角色授权页勾选。

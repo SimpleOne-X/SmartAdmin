@@ -12,13 +12,15 @@ namespace SmartAdmin.Services;
 ///   <item>同名处理只对「业务指定路径」有意义,其余命名规则一律存「拒绝」;</item>
 ///   <item>角色 Id:升序去重的逗号串,空集合存 null。</item>
 /// </list>
+/// 测试连接和在线状态经 <see cref="IFilePathCircuit"/> 探测:不受熔断阻挡、失败不打开熔断,成功时关闭熔断,仍受在途上限约束。
 /// </summary>
 public class FilePathConfigService(
     IRepository<SysFilePath> paths,
     IRepository<SysFileServer> servers,
     ICacheProvider cache,
     IFileServerConnector connector,
-    AdminFilePathOptions options) : IFilePathConfigService
+    AdminFilePathOptions options,
+    IFilePathCircuit circuit) : IFilePathConfigService
 {
     private const int MaxCodeLength = 64;
 
@@ -100,7 +102,8 @@ public class FilePathConfigService(
         AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
 
         var target = new FileServerTarget(server.Id, server.RootPath, server.UserName, server.PasswordProtected);
-        return await FileAccessProbe.TestAsync(t => ProbeAsync(target, folder, write: !input.ReadOnly, retryFailed: true, t), ct);
+        return await FileAccessProbe.TestAsync(
+            t => circuit.RunAsync(target.Id, () => ProbeAsync(target, folder, write: !input.ReadOnly, retryFailed: true, t), probe: true), ct);
     }
 
     /// <inheritdoc />
@@ -123,7 +126,7 @@ public class FilePathConfigService(
                 : null;
             return FileAccessProbe.StatusAsync(id, t => target is null
                 ? throw new DirectoryNotFoundException()
-                : ProbeAsync(target, path.Folder, write: false, retryFailed: false, t), ct);
+                : circuit.RunAsync(target.Id, () => ProbeAsync(target, path.Folder, write: false, retryFailed: false, t), probe: true), ct);
         }));
     }
 

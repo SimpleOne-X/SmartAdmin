@@ -296,11 +296,14 @@ When reaching the file server fails, the UI shows a reason. Test connection and 
 | Credential conflict | Windows error 1219, see below |
 | Timed out | No result within 5 seconds for test connection, or 3 seconds for the online status |
 | Folder does not exist | A read-only file path whose folder hasn't been created |
+| File server busy | More than 16 file operations are running on this server at once; try again shortly |
 | Unknown error | None of the above; look in the backend log for the full exception and the system error code |
 
 When the whitelist was shrunk later and the root path now falls outside it, uploads and downloads return `44152` directly and never reach the reasons above. Test connection and the online status don't touch that path, and their reason shows as "Access denied".
 
 On a wrong account or password the kernel doesn't retry on every request, so a domain account isn't locked within minutes. It tries again only after you correct the configuration or click "Test connection". Network failures are retried after 30 seconds.
+
+After a network failure such as network path not found or a timeout, uploads, downloads and deletes on that server return `44114` straight away for 30 seconds, with the reason of that failure, and don't touch the file server. That way requests don't each hang until the system's network timeout and tie up the backend's threads, and sign-in and the other endpoints keep responding. After 30 seconds one request is let through as a trial: success restores access, failure holds requests back for another 30 seconds. Test connection and the online status are not held back, and a success restores access at once. Each server runs at most 16 file operations at a time, and requests beyond that get "File server busy" right away. This state lives in each replica's own memory.
 
 ### Credential conflict
 

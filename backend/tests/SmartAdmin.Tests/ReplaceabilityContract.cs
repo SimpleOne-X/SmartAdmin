@@ -128,6 +128,7 @@ public static class ReplaceabilityContract
         (typeof(IFilePathLinkSigner), ServiceLifetime.Singleton),
         (typeof(IFilePathAccessChecker), ServiceLifetime.Scoped),
         (typeof(IFileServerConnector), ServiceLifetime.Singleton),
+        (typeof(IFilePathCircuit), ServiceLifetime.Singleton),
     ];
 
     /// <summary>用 <see cref="DispatchProxy"/> 现造一个接口的假实现:不必为 60 个接口各写一个 Fake 类。</summary>

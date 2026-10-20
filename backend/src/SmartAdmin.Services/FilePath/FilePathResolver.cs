@@ -15,7 +15,8 @@ public class FilePathResolver(
     AdminCacheOptions cacheOptions,
     IFileServerConnector connector,
     AdminFilePathOptions options,
-    ILogger<FilePathResolver> logger) : IFilePathResolver
+    ILogger<FilePathResolver> logger,
+    IFilePathCircuit circuit) : IFilePathResolver
 {
     /// <inheritdoc />
     public virtual async Task<FilePathRule> GetRuleAsync(string code, CancellationToken ct = default)
@@ -37,12 +38,15 @@ public class FilePathResolver(
         // 白名单可能在保存之后改小,所以读取时再判一次;不能依赖保存时的结果
         AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rule.Server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
 
+        // 服务器刚出过网络类失败就直接报,不再去连:连一次要卡到 SMB 超时
+        circuit.ThrowIfOpen(rule.Server.Id);
         try
         {
             await connector.EnsureConnectedAsync(rule.Server, retryFailed: false, ct);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or TimeoutException)
         {
+            circuit.ReportFailure(rule.Server.Id, e);
             throw FileAccessFailure.ToError(e);
         }
 
