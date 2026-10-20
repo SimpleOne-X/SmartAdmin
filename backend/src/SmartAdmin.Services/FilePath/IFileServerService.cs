@@ -29,4 +29,17 @@ public interface IFileServerService
 
     /// <summary>全部文件服务器(含停用的)的下拉选项。</summary>
     Task<IReadOnlyList<FileServerOption>> OptionsAsync();
+
+    /// <summary>
+    /// 测试连接,测的是弹窗里当前填的内容,不要求先保存、也不落库:连接(填了账号时,忽略此前记下的失败)→ 根路径存在 → 能取到第一个条目。
+    /// 校验和保存相同(白名单、共享路径、同主机账号一致,名称除外),不通过抛 <see cref="AdminException"/>;
+    /// 其余失败(含 5 秒超时)放进结果的原因码,不抛异常。
+    /// </summary>
+    Task<FileAccessTestResult> TestAsync(FileServerTestInput input, CancellationToken ct = default);
+
+    /// <summary>
+    /// 批量在线状态:并行对每行确保已连上(不重试已记下的失败)并检查根路径存在,单行 3 秒超时,不写文件、不落库。
+    /// 不存在的 Id 不出现在结果里。多副本部署时反映的是处理这次请求的副本能不能访问。
+    /// </summary>
+    Task<IReadOnlyList<FileAccessStatus>> StatusAsync(IReadOnlyList<long> ids, CancellationToken ct = default);
 }

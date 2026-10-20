@@ -28,4 +28,17 @@ public interface IFilePathConfigService
 
     /// <summary>白名单根目录与当前平台是否支持账号连接。</summary>
     FilePathEnvironment GetEnvironment();
+
+    /// <summary>
+    /// 测试连接,测的是弹窗里当前填的内容,不要求先保存、也不落库。连接器忽略此前记下的失败重新连一次;
+    /// 可写的行在文件夹里写入、读回、删除一个 <c>.smartadmin-probe-{GUID}</c> 文件(文件夹不存在时先创建),只读的行只检查文件夹存在。
+    /// 子文件夹不合法、文件服务器不存在或根路径不在白名单内抛 <see cref="AdminException"/>;其余失败(含 5 秒超时)放进结果的原因码,不抛异常。
+    /// </summary>
+    Task<FileAccessTestResult> TestAsync(FilePathTestInput input, CancellationToken ct = default);
+
+    /// <summary>
+    /// 批量在线状态:并行对每行确保服务器已连上(不重试已记下的失败)并检查文件夹存在,单行 3 秒超时,不写文件、不落库。
+    /// 不存在的 Id 不出现在结果里。多副本部署时反映的是处理这次请求的副本能不能访问。
+    /// </summary>
+    Task<IReadOnlyList<FileAccessStatus>> StatusAsync(IReadOnlyList<long> ids, CancellationToken ct = default);
 }

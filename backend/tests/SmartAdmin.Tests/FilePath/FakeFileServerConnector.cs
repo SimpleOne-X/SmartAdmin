@@ -23,9 +23,16 @@ public sealed class FakeFileServerConnector : IFileServerConnector
         get { lock (_calls) return [.. _calls]; }
     }
 
+    /// <summary>最近一次调用收到的取消令牌(看调用方到时限后有没有取消它)。</summary>
+    public CancellationToken LastToken { get; private set; }
+
     public async Task EnsureConnectedAsync(FileServerTarget target, bool retryFailed, CancellationToken ct = default)
     {
-        lock (_calls) _calls.Add((target, retryFailed));
+        lock (_calls)
+        {
+            _calls.Add((target, retryFailed));
+            LastToken = ct;
+        }
         if (Fail is not null) throw Fail;
         if (Hang) await new TaskCompletionSource().Task;
     }

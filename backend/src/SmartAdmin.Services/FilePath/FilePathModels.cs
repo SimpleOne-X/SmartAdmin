@@ -33,6 +33,15 @@ public sealed record FilePathPageInput : PageInputBase
     public bool? Enabled { get; init; }
 }
 
+/// <summary>文件路径测试连接入参:弹窗里当前填的服务器、子文件夹和读写方式,不要求先保存。</summary>
+public sealed record FilePathTestInput(long ServerId, string? Folder, bool ReadOnly);
+
+/// <summary>测试连接的结果。<see cref="Reason"/> 是 <see cref="FileAccessFailure"/> 的原因码(前端语言包 <c>error.reason.*</c>),成功时为 null。</summary>
+public sealed record FileAccessTestResult(bool Ok, string? Reason, int LatencyMs);
+
+/// <summary>一行文件服务器或文件路径的在线状态。<see cref="Reason"/> 同 <see cref="FileAccessTestResult.Reason"/>。</summary>
+public sealed record FileAccessStatus(long Id, bool Online, string? Reason);
+
 /// <summary>配置页拿来给提示和候选的环境信息:白名单根目录,以及当前平台能不能用账号连接共享。</summary>
 public sealed record FilePathEnvironment(IReadOnlyList<string> AllowedRoots, bool SupportsCredentials);
 

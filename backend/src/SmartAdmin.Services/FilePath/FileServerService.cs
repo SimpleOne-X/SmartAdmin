@@ -79,6 +79,28 @@ public class FileServerService(
         (await servers.AsQueryable().OrderBy(s => s.Name).ToListAsync())
         .Select(s => new FileServerOption(s.Id, s.Name, s.RootPath, s.Enabled)).ToList();
 
+    /// <inheritdoc />
+    public virtual async Task<FileAccessTestResult> TestAsync(FileServerTestInput input, CancellationToken ct = default)
+    {
+        var target = await ToTestTargetAsync(input);
+        return await FileAccessProbe.TestAsync(t => ProbeAsync(target, retryFailed: true, readEntries: true, t), ct);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<IReadOnlyList<FileAccessStatus>> StatusAsync(IReadOnlyList<long> ids, CancellationToken ct = default)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0) return [];
+
+        var rows = (await servers.AsQueryable().Where(s => idList.Contains(s.Id)).ToListAsync(ct)).ToDictionary(s => s.Id);
+        return await Task.WhenAll(idList.Where(rows.ContainsKey).Select(id =>
+        {
+            var s = rows[id];
+            var target = new FileServerTarget(s.Id, s.RootPath, s.UserName, s.PasswordProtected);
+            return FileAccessProbe.StatusAsync(id, t => ProbeAsync(target, retryFailed: false, readEntries: false, t), ct);
+        }));
+    }
+
     // ── 内部辅助 ─────────────────────────────────────────────────────
 
     private static FileServerView ToView(SysFileServer s) =>
@@ -100,14 +122,19 @@ public class FileServerService(
         ApplyCredential(entity, input.UserName, input.Password);
     }
 
-    /// <summary>
-    /// 保存前的整体校验,顺序即检查顺序:根路径非空 → 填了账号时须是共享路径(仅连接器支持账号时)→
-    /// 同主机账号一致 → 在白名单内 → 名称唯一。
-    /// </summary>
+    /// <summary>保存前的整体校验:先 <see cref="ValidateLocationAsync"/>,再查名称唯一。</summary>
     protected virtual async Task ValidateAsync(FileServerSaveInput input, long? excludingId)
     {
-        var rootPath = CleanRootPath(input.RootPath);
-        var userName = CleanUserName(input.UserName);
+        await ValidateLocationAsync(CleanRootPath(input.RootPath), CleanUserName(input.UserName), excludingId);
+        await EnsureNameAvailableAsync(input.Name, excludingId);
+    }
+
+    /// <summary>
+    /// 根路径与账号的校验,保存和测试连接共用(测试连接的入参没有名称,所以名称唯一不在这里)。
+    /// 顺序即检查顺序:根路径非空 → 填了账号时须是共享路径(仅连接器支持账号时)→ 同主机账号一致 → 在白名单内。
+    /// </summary>
+    protected virtual async Task ValidateLocationAsync(string rootPath, string? userName, long? excludingId)
+    {
         AdminException.ThrowIf(rootPath.Length == 0, ErrorCode.FileServerRootNotAllowed);
 
         AdminException.ThrowIf(
@@ -117,8 +144,36 @@ public class FileServerService(
         await EnsureHostAccountConsistentAsync(rootPath, userName, excludingId);
 
         AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+    }
 
-        await EnsureNameAvailableAsync(input.Name, excludingId);
+    /// <summary>
+    /// 测试连接的目标:先走和保存相同的 <see cref="ValidateLocationAsync"/>(不通过抛 <see cref="AdminException"/>)。
+    /// 填了密码就现场加密成信封交给连接器,只在内存里,不落库;留空且是编辑已有的行时用库里已保存的信封。
+    /// </summary>
+    protected virtual async Task<FileServerTarget> ToTestTargetAsync(FileServerTestInput input)
+    {
+        var saved = input.Id is { } id ? await servers.GetRequiredAsync(id, ErrorCode.FileServerNotFound) : null;
+        var rootPath = CleanRootPath(input.RootPath);
+        var userName = CleanUserName(input.UserName);
+        await ValidateLocationAsync(rootPath, userName, input.Id);
+
+        var envelope = userName is null ? null
+            : !string.IsNullOrEmpty(input.Password) ? secretProtector.Protect(input.Password)
+            : saved?.PasswordProtected;
+        return new FileServerTarget(input.Id ?? 0, rootPath, userName, envelope);
+    }
+
+    /// <summary>
+    /// 探测一台服务器:确保已连上,再确认根路径存在;<paramref name="readEntries"/> 时还要取到第一个条目(可读),不列完整个目录。
+    /// 根路径不在白名单内(白名单可能在保存之后改小)按拒绝访问处理,不去碰这个路径。
+    /// </summary>
+    protected virtual async Task ProbeAsync(FileServerTarget target, bool retryFailed, bool readEntries, CancellationToken ct)
+    {
+        if (!FilePathRules.IsAllowedRoot(target.RootPath, options.AllowedRoots)) throw new UnauthorizedAccessException();
+
+        await connector.EnsureConnectedAsync(target, retryFailed, ct);
+        FileAccessProbe.RequireFolder(target.RootPath);
+        if (readEntries) _ = Directory.EnumerateFileSystemEntries(target.RootPath).Any();
     }
 
     /// <summary>

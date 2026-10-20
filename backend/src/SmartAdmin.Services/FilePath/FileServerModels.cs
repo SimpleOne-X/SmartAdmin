@@ -16,6 +16,12 @@ public sealed record FileServerView(
 public sealed record FileServerSaveInput(
     string Name, string RootPath, string? UserName, string? Password, bool Enabled, string? Remark);
 
+/// <summary>
+/// 文件服务器测试连接入参:弹窗里当前填的内容,不要求先保存。<see cref="Id"/> 有值(编辑已有的行)且 <see cref="Password"/> 为空时,
+/// 用库里已保存的密码。含明文密码,不要写日志。
+/// </summary>
+public sealed record FileServerTestInput(long? Id, string RootPath, string? UserName, string? Password);
+
 /// <summary>文件服务器下拉选项(配置文件路径时选服务器用)。</summary>
 public sealed record FileServerOption(long Id, string Name, string RootPath, bool Enabled);
 

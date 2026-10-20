@@ -92,6 +92,41 @@ public class FilePathConfigService(
     /// <inheritdoc />
     public virtual FilePathEnvironment GetEnvironment() => new(options.AllowedRoots, connector.SupportsCredentials);
 
+    /// <inheritdoc />
+    public virtual async Task<FileAccessTestResult> TestAsync(FilePathTestInput input, CancellationToken ct = default)
+    {
+        var folder = NormalizeFolder(input.Folder);
+        var server = await servers.GetRequiredAsync(input.ServerId, ErrorCode.FileServerNotFound);
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+
+        var target = new FileServerTarget(server.Id, server.RootPath, server.UserName, server.PasswordProtected);
+        return await FileAccessProbe.TestAsync(t => ProbeAsync(target, folder, write: !input.ReadOnly, retryFailed: true, t), ct);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<IReadOnlyList<FileAccessStatus>> StatusAsync(IReadOnlyList<long> ids, CancellationToken ct = default)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0) return [];
+
+        var rows = (await paths.AsQueryable().Where(p => idList.Contains(p.Id)).ToListAsync(ct)).ToDictionary(p => p.Id);
+        var serverIds = rows.Values.Select(p => p.ServerId).Distinct().ToList();
+        var serverRows = serverIds.Count == 0
+            ? []
+            : (await servers.AsQueryable().Where(s => serverIds.Contains(s.Id)).ToListAsync(ct)).ToDictionary(s => s.Id);
+
+        return await Task.WhenAll(idList.Where(rows.ContainsKey).Select(id =>
+        {
+            var path = rows[id];
+            var target = serverRows.TryGetValue(path.ServerId, out var s)
+                ? new FileServerTarget(s.Id, s.RootPath, s.UserName, s.PasswordProtected)
+                : null;
+            return FileAccessProbe.StatusAsync(id, t => target is null
+                ? throw new DirectoryNotFoundException()
+                : ProbeAsync(target, path.Folder, write: false, retryFailed: false, t), ct);
+        }));
+    }
+
     // ── 内部辅助 ─────────────────────────────────────────────────────
 
     private static FilePathView ToView(SysFilePath p, string? serverName) =>
@@ -122,12 +157,9 @@ public class FilePathConfigService(
     /// </summary>
     protected virtual FilePathAddInput Normalize(FilePathAddInput input)
     {
-        var folder = FilePathRules.NormalizeRelative(input.Folder?.Trim(), allowEmpty: true);
-        // 下载一律把点开头的段当不存在,文件夹落在这样的目录里,存进去的文件就取不出来
-        if (FilePathRules.HasHiddenSegment(folder)) throw new AdminException(ErrorCode.FilePathInvalidPath);
         var normalized = input with
         {
-            Folder = folder.Length == 0 ? null : folder,
+            Folder = NormalizeFolder(input.Folder),
             OnConflict = input.NamingRule == FilePathNamingRule.BusinessPath ? input.OnConflict : FilePathConflictMode.Reject,
         };
         if (input.ReadOnly) return normalized with { AllowedExtensions = null, MaxSizeMb = null };
@@ -135,6 +167,46 @@ public class FilePathConfigService(
         var extensions = FilePathRules.ParseExtensions(input.AllowedExtensions).Distinct().ToList();
         AdminException.ThrowIf(extensions.Count == 0 || input.MaxSizeMb is not > 0, ErrorCode.FilePathRuleIncomplete);
         return normalized with { AllowedExtensions = string.Join(',', extensions) };
+    }
+
+    /// <summary>子文件夹规范化(保存和测试连接共用):<c>\</c> 换成 <c>/</c>,空为 null,不能有点开头的段。</summary>
+    protected virtual string? NormalizeFolder(string? folder)
+    {
+        var normalized = FilePathRules.NormalizeRelative(folder?.Trim(), allowEmpty: true);
+        // 下载一律把点开头的段当不存在,文件夹落在这样的目录里,存进去的文件就取不出来
+        if (FilePathRules.HasHiddenSegment(normalized)) throw new AdminException(ErrorCode.FilePathInvalidPath);
+        return normalized.Length == 0 ? null : normalized;
+    }
+
+    /// <summary>
+    /// 探测一个文件夹:确保服务器已连上;可写时先建文件夹,再写入、读回、删除一个 <c>.smartadmin-probe-{GUID}</c> 文件;只读时只确认文件夹存在。
+    /// 根路径不在白名单内(白名单可能在保存之后改小)按拒绝访问处理,不去碰这个路径。
+    /// </summary>
+    protected virtual async Task ProbeAsync(FileServerTarget server, string? folder, bool write, bool retryFailed, CancellationToken ct)
+    {
+        if (!FilePathRules.IsAllowedRoot(server.RootPath, options.AllowedRoots)) throw new UnauthorizedAccessException();
+
+        await connector.EnsureConnectedAsync(server, retryFailed, ct);
+        var fullPath = folder is null ? Path.GetFullPath(server.RootPath) : FilePathRules.Combine(server.RootPath, folder);
+        if (!write)
+        {
+            FileAccessProbe.RequireFolder(fullPath);
+            return;
+        }
+
+        Directory.CreateDirectory(fullPath);
+        var probe = Path.Combine(fullPath, $".smartadmin-probe-{Guid.NewGuid():N}");
+        var content = Guid.NewGuid().ToByteArray();
+        try
+        {
+            await File.WriteAllBytesAsync(probe, content, ct);
+            if (!(await File.ReadAllBytesAsync(probe, ct)).AsSpan().SequenceEqual(content))
+                throw new IOException("探测文件读回的内容与写入的不一致");
+        }
+        finally
+        {
+            File.Delete(probe);
+        }
     }
 
     /// <summary>

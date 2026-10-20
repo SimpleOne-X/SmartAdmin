@@ -218,8 +218,10 @@ public static class ServicesSetup
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, OpenAiCompatibleAdapter>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAiProtocolAdapter, AnthropicAdapter>());
 
-        // 文件路径:默认连接器不支持账号连接(什么都不做),平台专用的连接器前置注册即整体替换
-        services.TryAddSingleton<IFileServerConnector, NoopFileServerConnector>();
+        // 文件路径:Windows 上用 mpr.dll 按账号连接共享;其他平台由宿主机挂载,默认连接器什么都不做。前置注册即整体替换
+        services.TryAddSingleton<IFileServerConnector>(sp => OperatingSystem.IsWindows()
+            ? ActivatorUtilities.CreateInstance<WindowsFileServerConnector>(sp)
+            : ActivatorUtilities.CreateInstance<NoopFileServerConnector>(sp));
         services.TryAddScoped<IFileServerService, FileServerService>();
         services.TryAddScoped<IFilePathConfigService, FilePathConfigService>();
         services.TryAddScoped<IFilePathResolver, FilePathResolver>();
