@@ -164,4 +164,41 @@ public class FilePathResolverTests
         foreach (var bad in new[] { "../x.pdf", "", "a.pdf." })
             Assert.Equal(ErrorCode.FilePathInvalidPath, Assert.Throws<AdminException>(() => resolver.Combine(target, bad)).Code);
     }
+
+    [Theory]
+    [InlineData("admin", null)]
+    [InlineData("3;5", null)]
+    [InlineData("3,admin", null)]
+    [InlineData(null, "admin")]
+    [InlineData(null, "3;5")]
+    public async Task Corrupt_role_string_makes_the_row_unusable(string? uploadRoleIds, string? downloadRoleIds)
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var (_, code) = await env.AddRawPathAsync(serverId, uploadRoleIds, downloadRoleIds);
+        var resolver = env.Service<IFilePathResolver>();
+
+        // 角色串坏掉不能退化成「空 = 所有登录用户」;连接器也不该被碰
+        Assert.Equal(ErrorCode.FilePathRuleIncomplete, (await Rejected(resolver.GetRuleAsync(code))).Code);
+        Assert.Equal(ErrorCode.FilePathRuleIncomplete, (await Rejected(resolver.ResolveAsync(code))).Code);
+        Assert.Empty(env.Connector.Calls);
+    }
+
+    [Fact]
+    public async Task Blank_role_string_still_means_no_restriction()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var (_, blank) = await env.AddRawPathAsync(serverId, " ", "");
+        var (_, commas) = await env.AddRawPathAsync(serverId, " , ,", ",3,,5, ");
+        var resolver = env.Service<IFilePathResolver>();
+
+        var blankRule = await resolver.GetRuleAsync(blank);
+        Assert.Empty(blankRule.UploadRoleIds);
+        Assert.Empty(blankRule.DownloadRoleIds);
+
+        var commasRule = await resolver.GetRuleAsync(commas);
+        Assert.Empty(commasRule.UploadRoleIds);
+        Assert.Equal([3L, 5L], commasRule.DownloadRoleIds);
+    }
 }

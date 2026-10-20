@@ -88,11 +88,33 @@ public static class FilePathRules
         return ids.Count == 0 ? null : string.Join(',', ids);
     }
 
-    /// <summary>库里的逗号串 → 角色 Id 列表,与 <see cref="FormatRoleIds"/> 互逆;空串、null 和解析不了的项都当没有。</summary>
-    public static IReadOnlyList<long> ParseRoleIds(string? csv) =>
-        (csv ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => long.TryParse(s, out var id) ? id : (long?)null)
-            .OfType<long>().ToList();
+    /// <summary>
+    /// 库里的逗号串 → 角色 Id 列表,与 <see cref="FormatRoleIds"/> 互逆。空白串、逗号之间的空项都当没有;
+    /// 有任何一项是非空白却解析不出 Id(<c>admin</c>、<c>3;5</c>)就返回 <c>false</c>,<paramref name="roleIds"/> 里是解析得出的那些项。
+    /// 「空 = 所有登录用户」,所以鉴权用的调用方必须在 <c>false</c> 时拒绝这一行——整串坏掉不能退化成不限角色。
+    /// </summary>
+    public static bool TryParseRoleIds(string? csv, out IReadOnlyList<long> roleIds)
+    {
+        var ids = new List<long>();
+        var allParsed = true;
+        foreach (var token in (csv ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(token, out var id)) ids.Add(id);
+            else allParsed = false;
+        }
+
+        roleIds = ids;
+        return allParsed;
+    }
+
+    /// <summary>
+    /// <see cref="TryParseRoleIds"/> 的宽松版:解析不出的项直接丢掉。只给展示用(配置页要能打开损坏的行、重存修复),不能用来鉴权。
+    /// </summary>
+    public static IReadOnlyList<long> ParseRoleIds(string? csv)
+    {
+        TryParseRoleIds(csv, out var roleIds);
+        return roleIds;
+    }
 
     /// <summary>相对路径中是否有以点开头的段(探针文件、覆盖用的临时文件、系统隐藏文件都是这种,下载一律当不存在)。</summary>
     public static bool HasHiddenSegment(string relative) =>

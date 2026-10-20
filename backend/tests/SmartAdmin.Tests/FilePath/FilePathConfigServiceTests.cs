@@ -286,4 +286,26 @@ public class FilePathConfigServiceTests
         await service.DeleteAsync(id);
         await AssertEvicted("删除");
     }
+
+    [Fact]
+    public async Task Corrupt_role_string_row_still_opens_and_can_be_resaved()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var service = env.Service<IFilePathConfigService>();
+        var serverId = await env.AddServerAsync();
+        var (id, _) = await env.AddRawPathAsync(serverId, "admin", "3;5");
+
+        // 配置页宽松展示:坏项丢掉,行本身仍能打开、列出
+        var view = await service.GetAsync(id);
+        Assert.Empty(view.UploadRoleIds);
+        Assert.Empty(view.DownloadRoleIds);
+        var page = await service.PageAsync(new FilePathPageInput { ServerId = serverId });
+        Assert.Contains(page.Items, v => v.Id == id);
+
+        // 重存即改写成规范形式
+        await service.UpdateAsync(id, ToUpdate(Input(serverId, upload: [8, 2], download: [])));
+        var row = (await env.Service<IRepository<SysFilePath>>().GetByIdAsync(id))!;
+        Assert.Equal("2,8", row.UploadRoleIds);
+        Assert.Null(row.DownloadRoleIds);
+    }
 }

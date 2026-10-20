@@ -221,4 +221,26 @@ public class FilePathRulesTests
         Assert.False(FilePathRules.IsAllowedRoot(root, []));
         Assert.False(FilePathRules.IsAllowedRoot(Path.Combine("files", "sub"), [Path.GetFullPath("files")]));
     }
+
+    [Theory]
+    [InlineData(null)] [InlineData("")] [InlineData("  ")] [InlineData(" , ,")]
+    public void TryParseRoleIds_blank_means_no_restriction(string? csv)
+    {
+        Assert.True(FilePathRules.TryParseRoleIds(csv, out var ids));
+        Assert.Empty(ids);
+    }
+
+    [Theory]
+    [InlineData("3,5", true, new[] { 3L, 5L })]
+    [InlineData(",3,,5, ", true, new[] { 3L, 5L })]
+    [InlineData("admin", false, new long[0])]
+    [InlineData("3;5", false, new long[0])]
+    [InlineData(" 3 , x,,5 ", false, new[] { 3L, 5L })]
+    public void TryParseRoleIds_flags_unparseable_tokens(string csv, bool expectedOk, long[] expectedIds)
+    {
+        Assert.Equal(expectedOk, FilePathRules.TryParseRoleIds(csv, out var ids));
+        Assert.Equal(expectedIds, ids);
+        // 宽松版只是丢掉坏项,不改变能解析出的部分
+        Assert.Equal(expectedIds, FilePathRules.ParseRoleIds(csv));
+    }
 }

@@ -11,6 +11,8 @@ public interface IFilePathResolver
     /// <summary>
     /// 取编码对应的规则,只读缓存、不做 IO、不连文件服务器。
     /// 编码不存在或已停用抛 <see cref="ErrorCode.FilePathNotFound"/>,所属文件服务器不存在或已停用抛 <see cref="ErrorCode.FileServerNotFound"/>。
+    /// 库里的后缀或角色串被改坏(保存入口写不出这种值)时这一行不可用,不会退化成「不限角色」:
+    /// 角色串抛 <see cref="ErrorCode.FilePathRuleIncomplete"/>,后缀抛 <see cref="ErrorCode.FilePathExtensionsInvalid"/>。
     /// </summary>
     Task<FilePathRule> GetRuleAsync(string code, CancellationToken ct = default);
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SmartAdmin.Core;
 using SmartAdmin.SqlSugar;
 
@@ -13,7 +14,8 @@ public class FilePathResolver(
     ICacheProvider cache,
     AdminCacheOptions cacheOptions,
     IFileServerConnector connector,
-    AdminFilePathOptions options) : IFilePathResolver
+    AdminFilePathOptions options,
+    ILogger<FilePathResolver> logger) : IFilePathResolver
 {
     /// <inheritdoc />
     public virtual async Task<FilePathRule> GetRuleAsync(string code, CancellationToken ct = default)
@@ -58,7 +60,20 @@ public class FilePathResolver(
         new(path.Id, path.Code, new FileServerTarget(server.Id, server.RootPath, server.UserName, server.PasswordProtected),
             path.Folder, path.NamingRule, path.OnConflict, path.ReadOnly,
             FilePathRules.ParseExtensions(path.AllowedExtensions), path.MaxSizeMb,
-            FilePathRules.ParseRoleIds(path.UploadRoleIds), FilePathRules.ParseRoleIds(path.DownloadRoleIds));
+            ParseRoleIds(path, nameof(SysFilePath.UploadRoleIds), path.UploadRoleIds),
+            ParseRoleIds(path, nameof(SysFilePath.DownloadRoleIds), path.DownloadRoleIds));
+
+    /// <summary>
+    /// 严格解析角色串:有解析不出的项就拒绝这一行。空 = 所有登录用户,所以坏掉的串若按宽松方式丢弃坏项,
+    /// 会悄悄变成不限角色(种子数据、手工改库都可能写出这种值)。日志只记编码和列名,不带行里其它数据。
+    /// </summary>
+    private IReadOnlyList<long> ParseRoleIds(SysFilePath path, string column, string? csv)
+    {
+        if (FilePathRules.TryParseRoleIds(csv, out var roleIds)) return roleIds;
+
+        logger.LogWarning("文件路径 {Code} 的 {Column} 列不是合法的角色 Id 列表,该行已拒绝使用", path.Code, column);
+        throw new AdminException(ErrorCode.FilePathRuleIncomplete);
+    }
 
     /// <summary>文件路径整表读穿透缓存;变更即失效(由 <see cref="FilePathConfigService"/> 负责失效)。</summary>
     protected virtual async Task<IReadOnlyList<SysFilePath>> LoadPathsAsync(CancellationToken ct)

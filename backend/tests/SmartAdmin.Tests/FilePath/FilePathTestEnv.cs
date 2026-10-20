@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartAdmin.Services;
+using SmartAdmin.SqlSugar;
 
 namespace SmartAdmin.Tests;
 
@@ -65,6 +66,21 @@ public sealed class FilePathTestEnv : IAsyncDisposable
     public Task<long> AddServerAsync(string? name = null) =>
         Service<IFileServerService>().AddAsync(new FileServerSaveInput(
             name ?? $"srv-{Guid.NewGuid():N}", Root, null, null, true, null));
+
+    /// <summary>
+    /// 绕过配置服务直接插一行可写的文件路径(文件夹 <c>Docs</c>、后缀 <c>.pdf</c>、10 MB),角色串原样写入——
+    /// 用来造「种子数据、手工改库」才会出现的非规范值。不失效缓存,所以要在第一次解析之前插完。
+    /// </summary>
+    public async Task<(long Id, string Code)> AddRawPathAsync(long serverId, string? uploadRoleIds, string? downloadRoleIds)
+    {
+        var row = new SysFilePath
+        {
+            Code = $"raw-{Guid.NewGuid():N}", Name = "手工插入", ServerId = serverId, Folder = "Docs",
+            AllowedExtensions = ".pdf", MaxSizeMb = 10, UploadRoleIds = uploadRoleIds, DownloadRoleIds = downloadRoleIds, Enabled = true,
+        };
+        await Service<IRepository<SysFilePath>>().InsertAsync(row);
+        return (row.Id, row.Code);
+    }
 
     public ValueTask DisposeAsync()
     {
