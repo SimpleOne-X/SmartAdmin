@@ -2006,6 +2006,49 @@ export default {
       structuredOutputUnsupported:
         'This provider does not support structured output (json_schema) constraints',
     },
+    filePath: {
+      notFound: 'File path not found or disabled',
+      codeExists: 'File path code already exists',
+      codeInvalid:
+        'Code may only contain letters, digits, dots, underscores and hyphens, up to 64 characters',
+      ruleIncomplete: 'A writable file path needs allowed extensions and a size limit',
+      extensionsInvalid:
+        'Invalid extensions: each must start with a dot and have up to 15 letters or digits, separated by commas',
+      readOnly: 'This file path is read-only and does not accept uploads',
+      uploadDenied: 'You are not allowed to upload to this file path',
+      downloadDenied: 'You are not allowed to download from this file path',
+      extNotAllowed: 'File type {ext} is not allowed',
+      tooLarge: 'File too large (limit {maxSizeMb} MB)',
+      fileExists: 'A file with the same name already exists',
+      invalidPath: 'Invalid path',
+      fileNotFound: 'File not found',
+      folderUnavailable: 'The folder is not accessible: {reason}',
+      chunkMissing: 'Missing chunk {index}, please retry upload',
+      chunkHashMismatch: 'File integrity check failed, please re-upload',
+      uploadSessionInvalid: 'The upload session is invalid or has expired, please upload again',
+    },
+    fileServer: {
+      notFound: 'File server not found or disabled',
+      nameExists: 'File server name already exists',
+      rootNotAllowed:
+        'The root path is not allowed; ask your administrator to add it to SmartAdmin:FilePath:AllowedRoots',
+      shareRequired: 'With an account set, the root path must be a share path like \\\\host\\share',
+      accountConflict:
+        'Host {host} already uses another account; one host can only use one account',
+      inUse: 'This file server is still used by file paths and cannot be deleted',
+      dataProtectionKeyMissing: 'The data protection key is unavailable, cannot save the password',
+    },
+    reason: {
+      accessDenied: 'Access denied',
+      networkPathNotFound: 'Network path not found',
+      shareNotFound: 'Share does not exist',
+      badCredentials: 'Wrong account or password',
+      accountLocked: 'Account is locked or disabled',
+      credentialConflict: 'Credential conflict',
+      timeout: 'Timed out',
+      folderMissing: 'Folder does not exist',
+      unknown: 'Unknown error',
+    },
     recycle: {
       notFound: 'Deleted record not found',
       uniqueConflict: 'Restore failed: code/account already taken by another record',

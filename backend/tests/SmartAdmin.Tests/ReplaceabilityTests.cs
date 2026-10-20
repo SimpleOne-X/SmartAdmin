@@ -147,7 +147,7 @@ public class ReplaceabilityTests
         typeof(SmartAdminOptions), typeof(AdminDatabaseOptions), typeof(AdminCacheOptions), typeof(AdminSeedOptions),
         typeof(AdminJwtOptions), typeof(AdminSecurityOptions), typeof(AdminUploadOptions), typeof(AdminApiOptions),
         typeof(AdminEmailOptions), typeof(AdminExternalAuthOptions), typeof(AdminRealtimeOptions),
-        typeof(AdminExcelOptions), typeof(AdminJobsOptions), typeof(AdminLoggingOptions),
+        typeof(AdminExcelOptions), typeof(AdminJobsOptions), typeof(AdminLoggingOptions), typeof(AdminFilePathOptions),
     ];
 
     /// <summary>

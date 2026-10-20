@@ -14,7 +14,7 @@ namespace SmartAdmin.Core;
 ///   <item><term>41000–41999</term><description>权限与数据范围</description></item>
 ///   <item><term>42000–42999</term><description>用户 / 组织 / 角色 / 菜单</description></item>
 ///   <item><term>43000–43999</term><description>字典 / 配置</description></item>
-///   <item><term>44000–44999</term><description>文件上传</description></item>
+///   <item><term>44000–44999</term><description>文件上传(44100–44199 为文件路径)</description></item>
 ///   <item><term>45000–45999</term><description>消息通知</description></item>
 ///   <item><term>46000–46999</term><description>导入 / 导出</description></item>
 ///   <item><term>47000–47999</term><description>定时任务</description></item>
@@ -396,6 +396,104 @@ public enum ErrorCode
     /// <summary>分片合并后内容哈希与客户端声明不一致(传输损坏/漏片)</summary>
     [MsgKey("error.file.chunkHashMismatch")]
     ChunkHashMismatch = 44006,
+
+    // ── 441xx 文件路径 ───────────────────────────────────────────────
+
+    /// <summary>文件路径(编码)不存在或已停用</summary>
+    [MsgKey("error.filePath.notFound")]
+    FilePathNotFound = 44101,
+
+    /// <summary>文件路径编码已存在(编码唯一)</summary>
+    [MsgKey("error.filePath.codeExists")]
+    FilePathCodeExists = 44102,
+
+    /// <summary>文件路径编码格式不合法(只允许字母、数字、<c>.</c>、<c>_</c>、<c>-</c>,最多 64 个字符)</summary>
+    [MsgKey("error.filePath.codeInvalid")]
+    FilePathCodeInvalid = 44103,
+
+    /// <summary>可写的文件路径缺少后缀白名单或大小上限(只读的行不需要)</summary>
+    [MsgKey("error.filePath.ruleIncomplete")]
+    FilePathRuleIncomplete = 44104,
+
+    /// <summary>后缀白名单格式不合法(须是以点开头、最多 15 位字母数字的后缀,逗号分隔)</summary>
+    [MsgKey("error.filePath.extensionsInvalid")]
+    FilePathExtensionsInvalid = 44105,
+
+    /// <summary>该文件路径是只读的,不允许上传</summary>
+    [MsgKey("error.filePath.readOnly")]
+    FilePathReadOnly = 44106,
+
+    /// <summary>当前用户没有这条文件路径的上传权限</summary>
+    [MsgKey("error.filePath.uploadDenied")]
+    FilePathUploadDenied = 44107,
+
+    /// <summary>当前用户没有这条文件路径的下载权限</summary>
+    [MsgKey("error.filePath.downloadDenied")]
+    FilePathDownloadDenied = 44108,
+
+    /// <summary>文件后缀不在这条文件路径的白名单内;args 携带 ext</summary>
+    [MsgKey("error.filePath.extNotAllowed")]
+    FilePathExtNotAllowed = 44109,
+
+    /// <summary>文件超过这条文件路径的大小上限;args 携带 maxSizeMb</summary>
+    [MsgKey("error.filePath.tooLarge")]
+    FilePathTooLarge = 44110,
+
+    /// <summary>同名文件已存在(同名策略为拒绝时)</summary>
+    [MsgKey("error.filePath.fileExists")]
+    FilePathFileExists = 44111,
+
+    /// <summary>相对路径不合法(绝对路径、盘符、<c>..</c>、<c>:</c>、控制字符,或越出了文件夹)</summary>
+    [MsgKey("error.filePath.invalidPath")]
+    FilePathInvalidPath = 44112,
+
+    /// <summary>文件不存在(含以点开头的隐藏段,一律按不存在处理)</summary>
+    [MsgKey("error.filePath.fileNotFound")]
+    FilePathFileNotFound = 44113,
+
+    /// <summary>文件夹不可访问(连不上、没权限、共享不存在……);args 携带 reason,值见前端 <c>error.reason</c></summary>
+    [MsgKey("error.filePath.folderUnavailable")]
+    FilePathFolderUnavailable = 44114,
+
+    /// <summary>分片上传缺少分片(合并时发现空缺);args 携带 index</summary>
+    [MsgKey("error.filePath.chunkMissing")]
+    FilePathChunkMissing = 44115,
+
+    /// <summary>分片合并后内容哈希与客户端声明不一致(传输损坏/漏片)</summary>
+    [MsgKey("error.filePath.chunkHashMismatch")]
+    FilePathChunkHashMismatch = 44116,
+
+    /// <summary>分片上传会话无效(Id 不存在、已过期或不属于当前用户)</summary>
+    [MsgKey("error.filePath.uploadSessionInvalid")]
+    FilePathUploadSessionInvalid = 44117,
+
+    /// <summary>文件服务器不存在或已停用</summary>
+    [MsgKey("error.fileServer.notFound")]
+    FileServerNotFound = 44150,
+
+    /// <summary>文件服务器名称已存在(名称唯一)</summary>
+    [MsgKey("error.fileServer.nameExists")]
+    FileServerNameExists = 44151,
+
+    /// <summary>根路径不在 <c>SmartAdmin:FilePath:AllowedRoots</c> 白名单内</summary>
+    [MsgKey("error.fileServer.rootNotAllowed")]
+    FileServerRootNotAllowed = 44152,
+
+    /// <summary>填了账号,但根路径不是共享路径(<c>\\host\share</c> 形式)</summary>
+    [MsgKey("error.fileServer.shareRequired")]
+    FileServerShareRequired = 44153,
+
+    /// <summary>同一台主机上已配置了另一个账号;Windows 对同一主机只允许一套凭据;args 携带 host</summary>
+    [MsgKey("error.fileServer.accountConflict")]
+    FileServerAccountConflict = 44154,
+
+    /// <summary>文件服务器仍被文件路径引用,不能删除</summary>
+    [MsgKey("error.fileServer.inUse")]
+    FileServerInUse = 44155,
+
+    /// <summary>数据保护密钥是临时密钥,存下的密码重启后无法解密,故拒绝保存密码</summary>
+    [MsgKey("error.fileServer.dataProtectionKeyMissing")]
+    FileServerKeyMissing = 44156,
 
     // ── 45xxx 消息通知 ───────────────────────────────────────────────
 
