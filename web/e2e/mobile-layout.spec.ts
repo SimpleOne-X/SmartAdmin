@@ -38,6 +38,7 @@ const PAGES = [
   '/system/session',
   '/system/recycle',
   '/system/file',
+  '/system/file-path',
   '/system/job',
   '/system/job-log',
   '/system/job-monitor',

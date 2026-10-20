@@ -2071,6 +2071,98 @@ export default {
     system: { internal: 'Internal server error' },
   },
 
+  // File path settings page (File paths and File servers tabs)
+  filePath: {
+    rootsEmpty:
+      'Configure root directories in SmartAdmin:FilePath:AllowedRoots in appsettings first',
+    tabs: { path: 'File paths', server: 'File servers' },
+    saved: 'Saved',
+    deleted: 'Deleted',
+    remark: 'Remark',
+    status: {
+      column: 'Online',
+      checking: 'Checking…',
+      online: 'Online',
+      offline: 'Offline',
+      unknown: 'Unknown',
+    },
+    test: {
+      action: 'Test connection',
+      ok: 'Connected in {ms} ms',
+      failed: 'Connection failed: {reason}',
+    },
+    namingRule: {
+      yearMonthOriginal: 'Year/Month/Name_ShortId',
+      businessPath: 'Business-specified path',
+      dateGuid: 'Date/GUID',
+    },
+    onConflict: { reject: 'Reject', overwrite: 'Overwrite' },
+    path: {
+      keyword: 'Code / Name',
+      code: 'Code',
+      name: 'Name',
+      server: 'File server',
+      folder: 'Subfolder',
+      namingRule: 'Naming rule',
+      extensions: 'Extensions',
+      maxSize: 'Max size',
+      uploadRoles: 'Upload roles',
+      downloadRoles: 'Download roles',
+      readOnly: 'Read-only',
+      onConflict: 'On name clash',
+      allLoggedIn: 'All signed-in users',
+      unknownRule: 'Unknown rule',
+      addTitle: 'Add file path',
+      editTitle: 'Edit file path',
+      deleteConfirm: 'Delete file path "{name}"?',
+      moveTip:
+        'Changing the file server or subfolder does not move files already uploaded. They can no longer be found at the new location, so move them yourself first.',
+      codePlaceholder: 'Referenced by business code, e.g. Order.Attachment',
+      codeImmutableHint: 'The code cannot be changed after creation',
+      codeInvalid:
+        'Code may only contain letters, digits, dots, underscores and hyphens, up to 64 characters',
+      nameRequired: 'Enter a name',
+      serverRequired: 'Select a file server',
+      serverPlaceholder: 'Select a file server',
+      folderPlaceholder: 'Optional, e.g. Order/Attachment',
+      fullFolder: 'Full folder:',
+      example: 'Example file (relative to the folder):',
+      overwriteRisk:
+        'Overwrite is on and no upload role is set: any signed-in user can overwrite files in this path. Limit the upload roles.',
+      readOnlyHint:
+        'A read-only path can only be downloaded from. It has no upload, extension list or size limit.',
+      extensionsPlaceholder: '.pdf,.png',
+      extensionsHint:
+        'Separate with commas, each starting with a dot. Only listed types can be uploaded.',
+      extensionsInvalid:
+        'Invalid extension: each must start with a dot, up to 15 letters or digits, separated by commas',
+      extensionsRequired: 'A writable file path needs allowed extensions',
+      maxSizeRequired: 'A writable file path needs a size limit',
+      rolesPlaceholder: 'Empty means all signed-in users',
+    },
+    server: {
+      keyword: 'Name / Root path',
+      name: 'Name',
+      rootPath: 'Root path',
+      userName: 'Account',
+      password: 'Password',
+      passwordSet: 'Set',
+      addTitle: 'Add file server',
+      editTitle: 'Edit file server',
+      deleteConfirm: 'Delete file server "{name}"?',
+      nameRequired: 'Enter a name',
+      rootPathRequired: 'Enter a root path',
+      rootPathPlaceholder: '\\\\nas01\\files or /mnt/nas01',
+      userNamePlaceholder: 'Optional, e.g. svc-files',
+      passwordPlaceholder: 'Password',
+      passwordHint:
+        'Leave empty to keep it. Changing the host or account with an empty password clears the old one',
+      passwordReentry: 'The host or account changed, enter the password again',
+      credentialsUnsupported:
+        'This system does not connect to shares with an account. The host provides the credentials when it mounts the share.',
+    },
+  },
+
   // Recycle bin
   recycle: {
     title: 'Recycle Bin',
