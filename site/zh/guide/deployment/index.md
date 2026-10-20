@@ -54,7 +54,7 @@ SmartAdmin__Upload__RootPath='/data/upload'
 | 配置项 | 默认 | 说明 |
 |---|---|---|
 | `AllowedRoots` | 空 | 根目录白名单。空表示功能不可用，必须由运维显式放行 |
-| `StagingPath` | `./data/file-path-staging` | 分片上传的暂存目录，相对路径按 ContentRoot 解析 |
+| `StagingPath` | `./data/file-path-staging` | 分片上传的暂存目录，相对路径按 ContentRoot 解析，不能放在 `AllowedRoots` 列出的目录之下，否则启动失败 |
 | `StagingTtlHours` | `24` | 分片会话闲置多久后清掉暂存 |
 | `LinkTtlMinutes` | `60` | 签名直链的默认有效分钟数 |
 

@@ -54,7 +54,7 @@ Read this section only if business attachments need to land on a NAS or a shared
 | Setting | Default | Notes |
 |---|---|---|
 | `AllowedRoots` | empty | Root directory whitelist. Empty means the feature is unusable; an operator must allow roots explicitly |
-| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads; a relative path resolves against the ContentRoot |
+| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads; a relative path resolves against the ContentRoot. It must not sit under a directory listed in `AllowedRoots`, or startup fails |
 | `StagingTtlHours` | `24` | How long an idle chunk session lasts before its staging is cleared |
 | `LinkTtlMinutes` | `60` | Default validity of a signed link, in minutes |
 
