@@ -191,8 +191,8 @@ public static class FilePathRules
     }
 
     /// <summary>
-    /// 下载时给用户看的文件名。没指定就用实际文件名;指定了就取清洗后的主干,后缀始终沿用实际文件的——
-    /// 调用方不能借 <paramref name="requested"/> 把 <c>.pdf</c> 改成 <c>.exe</c> 再交给浏览器。
+    /// 下载时给用户看的文件名。没指定就用请求路径的最后一段(<paramref name="actualFileName"/>);指定了就取清洗后的主干,
+    /// 后缀始终沿用 <paramref name="actualFileName"/> 的——调用方不能借 <paramref name="requested"/> 把 <c>.pdf</c> 改成 <c>.exe</c> 再交给浏览器。
     /// </summary>
     public static string DownloadName(string? requested, string actualFileName)
     {

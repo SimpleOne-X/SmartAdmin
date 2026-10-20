@@ -36,6 +36,7 @@ const SEED_ICONS = [
   'ph:files-duotone',
   'ph:folder-duotone',
   'ph:gauge-duotone',
+  'ph:hard-drives-duotone',
   'ph:identification-badge-duotone',
   'ph:list-checks-duotone',
   'ph:list-dashes-duotone',

@@ -63,6 +63,14 @@ public static class HighSensitivityPermissions
         "POST:/api/v1/sys/ai/provider/add",
         "PUT:/api/v1/sys/ai/provider/{id}",
 
+        // 文件服务器存着账号密码，文件路径决定文件写到哪、谁能下载
+        "POST:/api/v1/sys/file-server/add",
+        "PUT:/api/v1/sys/file-server/{id}",
+        "DELETE:/api/v1/sys/file-server/{id}",
+        "POST:/api/v1/sys/file-path/add",
+        "PUT:/api/v1/sys/file-path/{id}",
+        "DELETE:/api/v1/sys/file-path/{id}",
+
         // 第三方登录方式的连接配置:能改这里就能决定谁能登录系统,保存与清除都要求再认证
         "PUT:/api/v1/sys/external-auth/providers/{code}",
         "DELETE:/api/v1/sys/external-auth/providers/{code}",

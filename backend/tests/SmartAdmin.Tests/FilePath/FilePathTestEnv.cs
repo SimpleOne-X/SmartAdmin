@@ -33,12 +33,16 @@ public sealed class FilePathTestEnv : IAsyncDisposable
 
     /// <param name="supportsCredentials">替身连接器是否声明支持账号连接(决定「填了账号必须是共享路径」是否生效)。</param>
     /// <param name="overrides">在换连接器之后追加的服务覆盖。</param>
+    /// <param name="disabledModules">
+    /// 在测试工厂默认禁用的 <c>Dict</c> 之外再禁用的模块(<c>Api:DisabledModules</c>);Dict 始终保持禁用。
+    /// </param>
     /// <param name="extraRoots">
     /// 追加进白名单的根路径。共享路径写成 <c>//nas01/files</c>:Windows 和 Linux 都认它是绝对路径;
     /// 用到它的用例要让替身连接器失败,免得真去访问这台主机。
     /// </param>
     public static FilePathTestEnv Create(
-        bool supportsCredentials = false, Action<IServiceCollection>? overrides = null, params string[] extraRoots)
+        bool supportsCredentials = false, Action<IServiceCollection>? overrides = null,
+        string[]? disabledModules = null, params string[] extraRoots)
     {
         var root = Directory.CreateTempSubdirectory("smart-fp-root-").FullName;
         var staging = Directory.CreateTempSubdirectory("smart-fp-staging-").FullName;
@@ -51,6 +55,7 @@ public sealed class FilePathTestEnv : IAsyncDisposable
         for (var i = 0; i < extraRoots.Length; i++) settings[$"SmartAdmin:FilePath:AllowedRoots:{i + 1}"] = extraRoots[i];
         var factory = new AdminAppFactory
         {
+            DisabledModules = ["Dict", .. disabledModules ?? []],   // Dict 由测试工厂默认禁用,初始化器会整体覆盖它,这里补回
             Settings = settings,
             Overrides = s =>
             {
