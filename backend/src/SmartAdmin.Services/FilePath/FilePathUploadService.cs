@@ -127,7 +127,7 @@ public class FilePathUploadService(
         // 非末片正好是 ChunkSize,末片是剩下的
         var expected = index < session.ChunkCount - 1 ? session.ChunkSize : session.Size - (long)(session.ChunkCount - 1) * session.ChunkSize;
         var part = Path.Combine(dir, $"{index}.part");
-        // 先写临时名再 Move 覆盖:重传失败时上一次的分片原样保留,长度不对的分片也不会以 .part 的名字留下
+        // 先写临时名再替换:重传失败时上一次的分片原样保留,长度不对的分片也不会以 .part 的名字留下
         var temp = Path.Combine(dir, $"{index}.{NewShortId()}.tmp");
         var moved = false;
         try
@@ -154,7 +154,7 @@ public class FilePathUploadService(
         }
         finally
         {
-            if (!moved) TryDelete(temp);
+            if (!moved) TryDelete(temp, "未写完的分片");
         }
     }
 
@@ -457,12 +457,12 @@ public class FilePathUploadService(
         }
         finally
         {
-            if (!complete) TryDelete(full);
+            if (!complete) TryDelete(full, "未写完的文件");
         }
     }
 
     /// <summary>
-    /// 先写同文件夹里的 <c>.{名}.uploading-{随机}</c>,写完再 <see cref="File.Move(string, string, bool)"/> 覆盖目标。
+    /// 先写同文件夹里的 <c>.{名}.uploading-{随机}</c>,写完再替换目标(见 <see cref="ReplaceAsync"/>)。
     /// 不能先截断旧文件再写;临时文件在任何结局下都会删掉(成功时已被移走,删除是空操作)。
     /// </summary>
     private async Task WriteReplacingAsync(string full, Stream content, CancellationToken ct)
@@ -477,14 +477,15 @@ public class FilePathUploadService(
         }
         finally
         {
-            TryDelete(temp);
+            TryDelete(temp, "临时文件");
         }
     }
 
     /// <summary>
-    /// 用临时文件替换目标。目标已存在时用 <see cref="File.Replace(string, string, string?, bool)"/>:
-    /// Windows 上 <see cref="File.Move(string, string, bool)"/> 的覆盖替换不了被别人打开着的文件(对方带了 <see cref="FileShare.Delete"/> 也是拒绝访问),
-    /// 而正在下载的文件必须能被覆盖上传替换;目标不存在时用 <see cref="File.Move(string, string, bool)"/>。每次尝试都重新判断目标在不在。
+    /// 用临时文件替换目标。Windows 上目标已存在时用 <see cref="File.Replace(string, string, string?, bool)"/>:
+    /// <see cref="File.Move(string, string, bool)"/> 的覆盖替换不了被别人打开着的文件(对方带了 <see cref="FileShare.Delete"/> 也是拒绝访问),
+    /// 而正在下载的文件必须能被覆盖上传替换;目标不存在时,以及其它平台(<c>rename</c> 本来就能替换打开着的文件,
+    /// 而 .NET 的 <see cref="File.Replace(string, string, string?, bool)"/> 在 Unix 上要先给备份建硬链接或复制)用 <see cref="File.Move(string, string, bool)"/>。每次尝试都重新判断目标在不在。
     /// <para>Windows 上同一目标同时被几个替换抢着改(或被杀毒软件、仍开着的读取短暂占住)时会瞬时失败:拒绝访问、共享冲突、锁冲突、
     /// <c>ReplaceFile</c> 的三个并发错误,稍等即可;目标在判断存在之后被别人删掉(<see cref="FileNotFoundException"/>)也是瞬时的,下一次会走 Move。
     /// 所以只对这几种失败带抖动退避重试,最多 <see cref="MaxReplaceAttempts"/> 次,最坏累计等待约 1.4 秒,仍失败就把最后一次的异常抛出去。</para>
@@ -495,7 +496,7 @@ public class FilePathUploadService(
         {
             try
             {
-                if (File.Exists(full)) ReplaceExisting(temp, full);
+                if (UseFileReplace && File.Exists(full)) ReplaceExisting(temp, full);
                 else File.Move(temp, full, overwrite: true);
                 return;
             }
@@ -508,23 +509,56 @@ public class FilePathUploadService(
     }
 
     /// <summary>
-    /// <see cref="File.Replace(string, string, string?, bool)"/> 并指定备份名,不论成败都删掉备份。
+    /// <see cref="File.Replace(string, string, string?, bool)"/> 并指定备份名,不论成败都不在文件夹里留备份。
     /// 不指定时 ReplaceFile 自己拿 <c>{名}~RF{随机}.TMP</c> 暂存被替换的文件,几个替换抢同一目标又有读者开着文件时,
-    /// 这个暂存文件会漏删,在文件夹里留下孤儿;指定了名字,清理就在自己手里。失败时备份里放的也只是这次本来就要取代的旧版本。
+    /// 这个暂存文件会漏删,在文件夹里留下孤儿;指定了名字,清理就在自己手里。
     /// 备份名固定长度并以点开头:不会撑破路径段的长度上限,万一删不掉,下载也当它不存在。
+    /// <para>成功时备份是被取代的旧版本,直接删。失败时可能已经走到「旧文件改名成备份、新文件还没就位」(ERROR_UNABLE_TO_MOVE_REPLACEMENT_2),
+    /// 这时目标名下是空的:后面的重试可能被取消、也可能已是最后一次,所以先把备份改回目标名再删备份;
+    /// 目标名已被别的上传占用就不动它。改回去失败时备份是旧版本仅剩的副本,留在原地并记日志。</para>
     /// </summary>
     private void ReplaceExisting(string temp, string full)
     {
         var backup = Path.Combine(Path.GetDirectoryName(full)!, $".replaced-{Guid.NewGuid():N}");
+        var replaced = false;
         try
         {
-            File.Replace(temp, full, backup, ignoreMetadataErrors: true);
+            ReplaceFile(temp, full, backup);
+            replaced = true;
         }
         finally
         {
-            TryDelete(backup);
+            if (replaced || TryRestore(backup, full)) TryDelete(backup, "替换留下的备份");
         }
     }
+
+    /// <summary>
+    /// 失败的替换把旧文件留在备份名下、目标名空着时,把它改回目标名(不覆盖)。
+    /// 返回 true 表示备份已没有保留价值(没有备份、目标名已被别人占用、或已改回去),可以删;改回去失败返回 false,备份要留着。
+    /// </summary>
+    private bool TryRestore(string backup, string full)
+    {
+        try
+        {
+            if (!File.Exists(backup) || File.Exists(full)) return true;
+            File.Move(backup, full);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // 改回去的瞬间目标名被别的上传占了:新旧版本都有人兜着,备份可以删
+            if (File.Exists(full)) return true;
+            logger.LogWarning(e, "替换 {Path} 失败后还原旧文件失败,备份 {Backup} 保留", full, backup);
+            return false;
+        }
+    }
+
+    /// <summary>目标已存在时是否用 <see cref="File.Replace(string, string, string?, bool)"/> 替换:只在 Windows 上需要。</summary>
+    protected virtual bool UseFileReplace => OperatingSystem.IsWindows();
+
+    /// <summary>用 <see cref="File.Replace(string, string, string?, bool)"/> 把 <paramref name="temp"/> 换成 <paramref name="full"/>,旧文件改名为 <paramref name="backup"/>。</summary>
+    protected virtual void ReplaceFile(string temp, string full, string backup) =>
+        File.Replace(temp, full, backup, ignoreMetadataErrors: true);
 
     /// <summary>
     /// 瞬时失败:拒绝访问(替换抢同一目标时 Windows 这样报),Win32 的共享冲突、锁冲突、<c>ReplaceFile</c> 的并发错误,
@@ -546,7 +580,7 @@ public class FilePathUploadService(
         await using (file) await content.CopyToAsync(file, ct);
     }
 
-    private void TryDelete(string path)
+    private void TryDelete(string path, string what)
     {
         try
         {
@@ -554,7 +588,7 @@ public class FilePathUploadService(
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            logger.LogWarning(e, "清理未写完的文件 {Path} 失败", path);
+            logger.LogWarning(e, "清理{What} {Path} 失败", what, path);
         }
     }
 }

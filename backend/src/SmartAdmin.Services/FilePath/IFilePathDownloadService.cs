@@ -3,8 +3,9 @@ using SmartAdmin.Core;
 namespace SmartAdmin.Services;
 
 /// <summary>
-/// 下载出参。<see cref="Content"/> 已打开且位置在开头,<b>由调用方负责释放</b>;<see cref="FileName"/> 是磁盘上的实际文件名,
-/// <see cref="Extension"/> 是它的后缀(小写、含点,没有后缀是 <c>""</c>),<see cref="Length"/> 是字节数。
+/// 下载出参。<see cref="Content"/> 已打开且位置在开头,<b>由调用方负责释放</b>;<see cref="FileName"/> 是请求路径的最后一段
+/// (大小写不区分的文件系统上,可能与磁盘上的写法不同),<see cref="Extension"/> 是它的后缀(小写、含点,没有后缀是 <c>""</c>),
+/// <see cref="Length"/> 是字节数。
 /// </summary>
 public sealed record FilePathDownload(Stream Content, string FileName, string Extension, long Length);
 

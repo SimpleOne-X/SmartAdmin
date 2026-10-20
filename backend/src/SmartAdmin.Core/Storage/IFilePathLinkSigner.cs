@@ -10,7 +10,7 @@ public interface IFilePathLinkSigner
 {
     /// <summary>
     /// 签出可直接塞进 <c>&lt;img src&gt;</c> 的相对 URL(含 <c>path</c>、<c>exp</c>、<c>sig</c>)。
-    /// <paramref name="ttl"/> 缺省取配置的 <c>SmartAdmin:FilePath:LinkTtlMinutes</c>。
+    /// <paramref name="ttl"/> 缺省取配置的 <c>SmartAdmin:FilePath:LinkTtlMinutes</c>,必须大于零(否则抛 <see cref="ArgumentOutOfRangeException"/>),按秒取整。
     /// 路径不合法抛 <see cref="ErrorCode.FilePathInvalidPath"/>:签出去的链接必然读不到文件,不如当场报错。
     /// </summary>
     string BuildUrl(string code, string path, TimeSpan? ttl = null);

@@ -7,7 +7,8 @@ namespace SmartAdmin.Services;
 /// <see cref="IFilePathDownloadService"/> 默认实现。下载一律经 <see cref="IFilePathResolver.ResolveAsync"/> 定位文件夹——
 /// 它会复检服务器根路径的白名单并确保已连上,<see cref="IFilePathResolver.GetRuleAsync"/> 不做这两件事,不能用在这里。
 /// <para>路径处理的顺序和删除一致:先规范化(不合法抛 <c>FilePathInvalidPath</c>),再看隐藏段(一律「文件不存在」),最后拼到文件夹下。
-/// 读取带 <see cref="FileShare.Delete"/>:Windows 上否则读着的文件无法被覆盖上传替换。
+/// 读取带 <see cref="FileShare.Delete"/>:Windows 上覆盖上传用 <see cref="File.Replace(string, string, string?, bool)"/> 替换目标,
+/// 读者不带它就替换不了读着的文件。
 /// 读属性、打开拆成 <c>protected virtual</c> 步骤,消费者可以子类化覆写其中一步。</para>
 /// </summary>
 /// <param name="resolver">定位文件夹。</param>
@@ -72,7 +73,8 @@ public class FilePathDownloadService(IFilePathResolver resolver, ILogger<FilePat
     protected virtual FileAttributes GetAttributes(string fullPath) => File.GetAttributes(fullPath);
 
     /// <summary>
-    /// 以只读、异步方式打开,共享模式带 <see cref="FileShare.Delete"/>:读着的时候同名覆盖上传(先写临时文件再 <see cref="File.Move(string, string, bool)"/> 替换)仍能成功。
+    /// 以只读、异步方式打开,共享模式带 <see cref="FileShare.Delete"/>:读着的时候同名覆盖上传(先写临时文件再替换目标)仍能成功。
+    /// Windows 上替换靠 <see cref="File.Replace(string, string, string?, bool)"/>,它要求读者带这个共享标志;<see cref="File.Move(string, string, bool)"/> 的覆盖不论共享标志都替换不了打开着的文件。
     /// </summary>
     protected virtual FileStream OpenRead(string fullPath) =>
         new(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, BufferSize, useAsync: true);

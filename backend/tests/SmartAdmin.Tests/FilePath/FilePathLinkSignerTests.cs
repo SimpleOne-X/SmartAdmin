@@ -54,6 +54,26 @@ public class FilePathLinkSignerTests
         Assert.Equal(now + 90, Parse(signer.BuildUrl("c", "a.pdf", TimeSpan.FromSeconds(90))).Exp);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Non_positive_lifetime_is_rejected(int seconds)
+    {
+        var signer = NewSigner(new FakeTimeProvider(Start));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => signer.BuildUrl("c", "a.pdf", TimeSpan.FromSeconds(seconds)));
+    }
+
+    [Fact]
+    public void Huge_lifetime_does_not_overflow()
+    {
+        var signer = NewSigner(new FakeTimeProvider(Start));
+
+        var (exp, sig) = Parse(signer.BuildUrl("c", "a.pdf", TimeSpan.MaxValue));
+
+        Assert.True(signer.Verify("c", "a.pdf", exp, sig));
+    }
+
     [Fact]
     public void Tampering_any_part_fails()
     {

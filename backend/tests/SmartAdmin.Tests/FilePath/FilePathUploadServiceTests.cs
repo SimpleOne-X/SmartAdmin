@@ -64,6 +64,27 @@ public class FilePathUploadServiceTests
         protected override FileAttributes GetAttributes(string fullPath) => throw failure;
     }
 
+    /// <summary>
+    /// 所有平台都走 File.Replace 的替换流程,每次替换交给 <paramref name="step"/> 编排(参数是第几次调用);
+    /// 返回 false 时才真的调用 File.Replace。用来重现 ReplaceFile 报错时旧文件已改名成备份的半截状态。
+    /// </summary>
+    private sealed class ScriptedReplaceService(FilePathTestEnv env, Func<int, string, string, bool> step)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
+    {
+        private int _calls;
+
+        protected override bool UseFileReplace => true;
+
+        protected override void ReplaceFile(string temp, string full, string backup)
+        {
+            if (!step(++_calls, full, backup)) base.ReplaceFile(temp, full, backup);
+        }
+    }
+
+    /// <summary>ReplaceFileW 的 ERROR_UNABLE_TO_MOVE_REPLACEMENT_2:旧文件已改名成备份,新文件没能就位。</summary>
+    private static IOException UnableToMoveReplacement2() => new("无法把替换文件移到目标", unchecked((int)0x80070499));
+
     /// <summary>先吐出一段内容,再抛 <see cref="IOException"/>:模拟传输中途断开。</summary>
     private sealed class BrokenStream : Stream
     {
@@ -305,6 +326,99 @@ public class FilePathUploadServiceTests
         Assert.Contains(await File.ReadAllTextAsync(DiskPath(env, "a.pdf")), contents);
         // 文件夹里只剩最终文件:没有临时文件,也没有 File.Replace 可能留下的备份
         Assert.Equal(["a.pdf"], Directory.EnumerateFileSystemEntries(Path.Combine(env.Root, "Docs"), "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Overwrite_whose_last_attempt_fails_after_the_backup_rename_restores_the_old_file()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath, FilePathConflictMode.Overwrite);
+        await NewService(env).UploadAsync(code, Upload("a.pdf", "旧"));
+        var service = new ScriptedReplaceService(env, (call, full, backup) =>
+        {
+            // 前 11 次被占住(旧文件原地不动),最后一次旧文件已改名成备份才失败,没有下一次尝试了
+            if (call < 12) throw new IOException("无法删除被替换的文件", unchecked((int)0x80070497));
+            File.Move(full, backup);
+            throw UnableToMoveReplacement2();
+        });
+
+        var ex = await Rejected(service.UploadAsync(code, Upload("a.pdf", "新")));
+
+        Assert.Equal(ErrorCode.FilePathFolderUnavailable, ex.Code);
+        Assert.Equal("旧", await File.ReadAllTextAsync(DiskPath(env, "a.pdf")));
+        Assert.Equal(["a.pdf"], Directory.EnumerateFileSystemEntries(Path.Combine(env.Root, "Docs"), "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Overwrite_cancelled_after_the_backup_rename_restores_the_old_file()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath, FilePathConflictMode.Overwrite);
+        await NewService(env).UploadAsync(code, Upload("a.pdf", "旧"));
+        using var cts = new CancellationTokenSource();
+        var service = new ScriptedReplaceService(env, (_, full, backup) =>
+        {
+            File.Move(full, backup);
+            // 重试退避期间被取消
+            cts.Cancel();
+            throw UnableToMoveReplacement2();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.UploadAsync(code, Upload("a.pdf", "新"), cts.Token));
+
+        Assert.Equal("旧", await File.ReadAllTextAsync(DiskPath(env, "a.pdf")));
+        Assert.Equal(["a.pdf"], Directory.EnumerateFileSystemEntries(Path.Combine(env.Root, "Docs"), "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Overwrite_retries_replace_failures_and_then_succeeds_without_leftovers()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath, FilePathConflictMode.Overwrite);
+        await NewService(env).UploadAsync(code, Upload("a.pdf", "旧"));
+        var service = new ScriptedReplaceService(env, (call, full, backup) =>
+        {
+            switch (call)
+            {
+                // ERROR_UNABLE_TO_REMOVE_REPLACED / ERROR_UNABLE_TO_MOVE_REPLACEMENT:旧文件还在原处
+                case 1: throw new IOException("无法删除被替换的文件", unchecked((int)0x80070497));
+                case 2: throw new IOException("无法把替换文件移到目标", unchecked((int)0x80070498));
+                // ERROR_UNABLE_TO_MOVE_REPLACEMENT_2:旧文件已在备份里
+                case 3:
+                    File.Move(full, backup);
+                    throw UnableToMoveReplacement2();
+                default: return false;
+            }
+        });
+
+        await service.UploadAsync(code, Upload("a.pdf", "新"));
+
+        Assert.Equal("新", await File.ReadAllTextAsync(DiskPath(env, "a.pdf")));
+        Assert.Equal(["a.pdf"], Directory.EnumerateFileSystemEntries(Path.Combine(env.Root, "Docs"), "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Overwrite_keeps_the_backup_when_the_old_file_cannot_be_put_back()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath, FilePathConflictMode.Overwrite);
+        await NewService(env).UploadAsync(code, Upload("a.pdf", "旧"));
+        using var cts = new CancellationTokenSource();
+        var service = new ScriptedReplaceService(env, (_, full, backup) =>
+        {
+            File.Move(full, backup);
+            // 目标名被一个目录占住,备份移不回去
+            Directory.CreateDirectory(full);
+            cts.Cancel();
+            throw UnableToMoveReplacement2();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.UploadAsync(code, Upload("a.pdf", "新"), cts.Token));
+
+        // 备份是旧版本仅剩的副本,不能删
+        var backups = Directory.GetFiles(Path.Combine(env.Root, "Docs"), ".replaced-*");
+        Assert.Equal("旧", await File.ReadAllTextAsync(Assert.Single(backups)));
+        Assert.Empty(TempFiles(env));
     }
 
     [Fact]

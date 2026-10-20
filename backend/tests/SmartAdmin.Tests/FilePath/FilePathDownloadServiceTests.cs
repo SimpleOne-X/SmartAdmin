@@ -229,7 +229,7 @@ public class FilePathDownloadServiceTests
         var downloader = env.Service<IFilePathDownloadService>();
         await uploader.UploadAsync(code, Upload("a.pdf", "旧"));
 
-        // 旧流还开着:读取不带 FileShare.Delete 时,Windows 上 File.Move(overwrite: true) 会一直失败
+        // 旧流还开着:读取不带 FileShare.Delete 时,Windows 上覆盖上传的 File.Replace 会一直失败
         var reading = await downloader.OpenReadAsync(code, "a.pdf");
         try
         {

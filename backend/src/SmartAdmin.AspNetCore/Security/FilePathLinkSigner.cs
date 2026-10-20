@@ -29,7 +29,10 @@ public class FilePathLinkSigner(SymmetricSecurityKey jwtKey, AdminFilePathOption
     /// <inheritdoc />
     public virtual string BuildUrl(string code, string path, TimeSpan? ttl = null)
     {
-        var exp = Clock.GetUtcNow().Add(ttl ?? TimeSpan.FromMinutes(options.LinkTtlMinutes)).ToUnixTimeSeconds();
+        var lifetime = ttl ?? TimeSpan.FromMinutes(options.LinkTtlMinutes);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lifetime, TimeSpan.Zero);
+        // 按秒累加而不是 DateTimeOffset.Add:TimeSpan.MaxValue 这样的超长有效期会让后者溢出抛异常
+        var exp = Clock.GetUtcNow().ToUnixTimeSeconds() + (long)lifetime.TotalSeconds;
         var sig = Base64Url.EncodeToString(Sign(code, path, exp));
         return $"/api/v1/sys/file-path/download/{Uri.EscapeDataString(code)}/view?path={Uri.EscapeDataString(path)}&exp={exp}&sig={sig}";
     }
