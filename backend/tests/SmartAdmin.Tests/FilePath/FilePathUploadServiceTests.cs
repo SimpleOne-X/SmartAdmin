@@ -18,7 +18,8 @@ public class FilePathUploadServiceTests
     private static async Task<AdminException> Rejected(Task task) => await Assert.ThrowsAsync<AdminException>(() => task);
 
     private static FilePathUploadService NewService(FilePathTestEnv env) =>
-        new(env.Service<IFilePathResolver>(), new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance);
+        new(env.Service<IFilePathResolver>(), new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>());
 
     private static async Task<string> AddPathAsync(
         FilePathTestEnv env, FilePathNamingRule naming = FilePathNamingRule.YearMonthOriginal,
@@ -46,8 +47,9 @@ public class FilePathUploadServiceTests
             : [];
 
     /// <summary>可预测的短 ID,用来制造撞名。</summary>
-    private sealed class FixedIdService(IFilePathResolver resolver, params string[] ids)
-        : FilePathUploadService(resolver, new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance)
+    private sealed class FixedIdService(FilePathTestEnv env, params string[] ids)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
     {
         private int _next;
 
@@ -55,8 +57,9 @@ public class FilePathUploadServiceTests
     }
 
     /// <summary>读文件属性时抛指定异常:模拟共享断开、权限丢失(File.Exists 会把这些都报成「不存在」)。</summary>
-    private sealed class UnreachableService(IFilePathResolver resolver, Exception failure)
-        : FilePathUploadService(resolver, new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance)
+    private sealed class UnreachableService(FilePathTestEnv env, Exception failure)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
     {
         protected override FileAttributes GetAttributes(string fullPath) => throw failure;
     }
@@ -106,7 +109,7 @@ public class FilePathUploadServiceTests
     {
         await using var env = FilePathTestEnv.Create();
         var code = await AddPathAsync(env);
-        var service = new FixedIdService(env.Service<IFilePathResolver>(), "aaaaaaaa", "aaaaaaaa", "bbbbbbbb");
+        var service = new FixedIdService(env, "aaaaaaaa", "aaaaaaaa", "bbbbbbbb");
 
         var first = await service.UploadAsync(code, Upload("a.pdf", "一"));
         var second = await service.UploadAsync(code, Upload("a.pdf", "二"));
@@ -122,7 +125,7 @@ public class FilePathUploadServiceTests
     {
         await using var env = FilePathTestEnv.Create();
         var code = await AddPathAsync(env);
-        var service = new FixedIdService(env.Service<IFilePathResolver>(), "aaaaaaaa", "aaaaaaaa", "aaaaaaaa");
+        var service = new FixedIdService(env, "aaaaaaaa", "aaaaaaaa", "aaaaaaaa");
         await service.UploadAsync(code, Upload("a.pdf"));
 
         // 只重试一次;第二次还撞就如实报告,不无限循环
@@ -399,15 +402,14 @@ public class FilePathUploadServiceTests
         var file = DiskPath(env, "a.pdf");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         await File.WriteAllTextAsync(file, "还在");
-        var resolver = env.Service<IFilePathResolver>();
 
         // 共享断开 / 权限丢失不能报成「文件不存在」:业务会据此以为已经删了,NAS 上留下孤儿文件
-        var offline = await Rejected(new UnreachableService(resolver, new IOException("共享已断开", unchecked((int)0x80070035)))
+        var offline = await Rejected(new UnreachableService(env, new IOException("共享已断开", unchecked((int)0x80070035)))
             .DeleteAsync(code, "a.pdf"));
         Assert.Equal(ErrorCode.FilePathFolderUnavailable, offline.Code);
         Assert.Equal(FileAccessFailure.NetworkPathNotFound, offline.Args!["reason"]);
 
-        var denied = await Rejected(new UnreachableService(resolver, new UnauthorizedAccessException())
+        var denied = await Rejected(new UnreachableService(env, new UnauthorizedAccessException())
             .DeleteAsync(code, "a.pdf"));
         Assert.Equal(ErrorCode.FilePathFolderUnavailable, denied.Code);
         Assert.Equal(FileAccessFailure.AccessDenied, denied.Args!["reason"]);

@@ -14,24 +14,20 @@ namespace SmartAdmin.Services;
 /// 写到一半失败时旧文件原样保留。命名、校验、写入拆成 <c>protected virtual</c> 步骤,消费者可以子类化覆写其中一步。</para>
 /// <para>分片上传把每个会话放在 <c>StagingPath/{uploadId}/</c>:<c>session.json</c> 记用户、编码和文件的声明值,<c>{index}.part</c> 是分片,
 /// 合并成 <c>merged</c> 并核对哈希后,和单文件上传走同一个 <see cref="StoreAsync"/> 落到文件夹。
-/// 会话目录里只有这些,不放服务器或目标信息(<see cref="FilePathTarget"/> 带着账号密码信封)。</para>
+/// 会话目录里只有这些,不放服务器或目标信息(<see cref="FilePathTarget"/> 带着账号密码信封)。
+/// 合并先在会话目录里独占创建 <c>merging</c> 标记来认领会话,之后到达的分片和合并都按无效会话处理。</para>
 /// </summary>
 /// <param name="resolver">定位文件夹。</param>
 /// <param name="time">命名用的时钟。</param>
 /// <param name="logger">日志。</param>
-/// <param name="options">
-/// 分片上传的暂存目录来自它。可选参数:本类是 public 可继承,加必需参数即源码破坏性变更;
-/// 经 DI 解析时一定会注入,手工构造又要用分片上传时必须传入,否则分片方法抛 <see cref="InvalidOperationException"/>。
-/// </param>
-/// <param name="currentUser">
-/// 分片会话绑定的用户。可选原因同上;没有当前用户(<see langword="null"/> 或未登录)时绑定 0。
-/// </param>
+/// <param name="options">分片上传的暂存目录(<see cref="AdminFilePathOptions.StagingPath"/>)来自它。</param>
+/// <param name="currentUser">分片会话绑定的用户;未登录(<see cref="ICurrentUser.UserId"/> 为空)绑定 0。</param>
 public class FilePathUploadService(
     IFilePathResolver resolver,
     TimeProvider time,
     ILogger<FilePathUploadService> logger,
-    AdminFilePathOptions? options = null,
-    ICurrentUser? currentUser = null) : IFilePathUploadService
+    AdminFilePathOptions options,
+    ICurrentUser currentUser) : IFilePathUploadService
 {
     private const int BufferSize = 81920;
 
@@ -39,6 +35,7 @@ public class FilePathUploadService(
     public const int ChunkSize = 5 * 1024 * 1024;
 
     private const string SessionFile = "session.json";
+    private const string ClaimedFile = "merging";
     private const string MergedFile = "merged";
 
     /// <summary>NAS 上单个路径段的字节上限(UTF-8)。</summary>
@@ -145,7 +142,8 @@ public class FilePathUploadService(
                 if (total != expected) throw InvalidSession();
             }
 
-            File.Move(temp, part, overwrite: true);
+            // 重传时目标分片可能正被读(合并、杀毒),Windows 上的瞬时占用和覆盖单文件走同一套有限次退避重试
+            await ReplaceAsync(temp, part, ct);
             moved = true;
         }
         finally
@@ -164,6 +162,13 @@ public class FilePathUploadService(
         for (var i = 0; i < session.ChunkCount; i++)
             AdminException.ThrowIf(!File.Exists(Path.Combine(dir, $"{i}.part")), ErrorCode.FilePathChunkMissing,
                 new Dictionary<string, object?> { ["index"] = i });
+
+        // 认领会话:独占创建标记文件是原子的,同一会话同时只有一个合并能成功。
+        // 输的一方(重复点击、客户端超时后重试)得到「会话无效」,不会走到下面的 finally 去删赢家正在合并的目录;
+        // 标记在,合并期间到达的分片和合并也都是无效会话,所以 merged 从合并到写入文件夹之间没人动得了。
+        // 不用 File.Move 改名认领:Windows 上两个并发的改名可以同时成功;也不靠文件锁:
+        // 关掉文件锁(DOTNET_SYSTEM_IO_DISABLEFILELOCKING)或暂存卷由多个副本共用时,锁都不可靠
+        ClaimSession(dir);
 
         try
         {
@@ -184,15 +189,32 @@ public class FilePathUploadService(
     }
 
     /// <summary>暂存根目录。<see cref="AdminFilePathOptions.StagingPath"/> 已在启动时规范成完全限定路径。</summary>
-    protected virtual string StagingRoot =>
-        options?.StagingPath ?? throw new InvalidOperationException($"分片上传需要 {nameof(AdminFilePathOptions)}:经 DI 解析本服务时会自动注入,手工构造时请传入。");
+    protected virtual string StagingRoot => options.StagingPath;
 
     /// <summary>分片会话的 Id:32 位小写十六进制,会被拼进暂存路径,所以格式不能变(见 <see cref="FilePathRules.IsUploadId"/>)。</summary>
     protected virtual string NewUploadId() => Guid.NewGuid().ToString("N");
 
-    private long CurrentUserId => currentUser?.UserId ?? 0;
+    /// <summary>会话绑定的用户 Id;未登录是 0(HTTP 入口先过角色判断,未登录到不了这里)。</summary>
+    private long CurrentUserId => currentUser.UserId ?? 0;
 
     private static AdminException InvalidSession() => new(ErrorCode.FilePathUploadSessionInvalid);
+
+    /// <summary>
+    /// 独占创建 <c>merging</c> 标记,创建成功的那一个调用拥有这次合并。标记已被别人建了(或目录已被合并方删掉)抛 <see cref="ErrorCode.FilePathUploadSessionInvalid"/>;
+    /// 其余 IO 失败(磁盘满等)原样抛出,标记没建成,会话保留可重试。
+    /// </summary>
+    private static void ClaimSession(string dir)
+    {
+        var claim = Path.Combine(dir, ClaimedFile);
+        try
+        {
+            File.Open(claim, FileMode.CreateNew, FileAccess.Write, FileShare.None).Dispose();
+        }
+        catch (Exception e) when (e is DirectoryNotFoundException or UnauthorizedAccessException || (e is IOException && File.Exists(claim)))
+        {
+            throw InvalidSession();
+        }
+    }
 
     /// <summary>SHA-256 声明值:去首尾空白、转小写,必须是 64 位十六进制,否则 null。</summary>
     private static string? NormalizeSha256(string? value)
@@ -212,12 +234,16 @@ public class FilePathUploadService(
         var dir = Path.Combine(StagingRoot, uploadId);
         if (!FilePathRules.IsUnder(dir, StagingRoot)) throw InvalidSession();
 
+        // 合并已被认领:此后到达的分片和合并都是无效会话
+        if (File.Exists(Path.Combine(dir, ClaimedFile))) throw InvalidSession();
+
         ChunkSession? session;
         try
         {
             session = JsonSerializer.Deserialize<ChunkSession>(await File.ReadAllBytesAsync(Path.Combine(dir, SessionFile), ct));
         }
-        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or JsonException)
+        // UnauthorizedAccessException:Windows 上 session.json 正处于待删除状态(合并结束删目录时)读它会得到拒绝访问
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or JsonException)
         {
             throw InvalidSession();
         }

@@ -21,6 +21,9 @@ public class FilePathChunkUploadTests
 
     private const int TwoMb = 2 * 1024 * 1024;
 
+    /// <summary>等并发/定时器事件的上限;正常情况下立刻就绪,只在出错时才会等满。</summary>
+    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
+
     /// <summary>7 MB,正好切成 5 MB + 2 MB 两片。</summary>
     private static readonly byte[] Big = MakeBytes(7 * 1024 * 1024);
 
@@ -541,6 +544,81 @@ public class FilePathChunkUploadTests
         Assert.Empty(Directory.GetFileSystemEntries(env.Staging));
     }
 
+    /// <summary><c>StoreAsync</c> 进来就停住,等测试放行:把「赢家正在合并」这一刻定格下来。</summary>
+    private sealed class GatedService(FilePathTestEnv env)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), TimeProvider.System, NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<FilePathUploadOutput> StoreAsync(
+            FilePathTarget target, string fileName, long size, string? subPath, Stream content, CancellationToken ct)
+        {
+            Entered.TrySetResult();
+            await Release.Task.WaitAsync(ct);
+            return await base.StoreAsync(target, fileName, size, subPath, content, ct);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_complete_lets_exactly_one_merge_win()
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var (_, code) = await AddPathAsync(env);
+        var service = new GatedService(env);
+        var init = await service.ChunkInitAsync(code, InitInput(Big));
+        for (var i = 0; i < init.ChunkCount; i++) await UploadChunk(service, code, init.UploadId, i, Big);
+
+        try
+        {
+            var first = Task.Run(() => service.ChunkCompleteAsync(code, init.UploadId));
+            var second = Task.Run(() => service.ChunkCompleteAsync(code, init.UploadId));
+
+            // 赢家停在 StoreAsync 里,所以最先结束的一定是输家;输家不能碰赢家正在用的目录
+            Task loser = await Task.WhenAny(first, second).WaitAsync(Wait);
+            await AssertInvalid(loser);
+            var winner = ReferenceEquals(loser, first) ? second : first;
+            await service.Entered.Task.WaitAsync(Wait);
+            Assert.False(winner.IsCompleted);
+            Assert.True(Directory.Exists(SessionDir(env, init.UploadId)));
+
+            // 合并期间到达的分片也是无效会话,不会改动赢家正在合并的内容
+            await AssertInvalid(UploadChunk(service, code, init.UploadId, 0, Big));
+
+            service.Release.SetResult();
+            var output = await winner.WaitAsync(Wait);
+
+            Assert.Equal(Big.Length, output.Size);
+            var written = Assert.Single(Directory.GetFiles(env.Root, "*", SearchOption.AllDirectories));
+            Assert.Equal(Path.GetFullPath(DiskPath(env, output.Path)), Path.GetFullPath(written));
+            await AssertSameBytes(Big, written);
+            Assert.Equal(Sha(Big), Sha(await File.ReadAllBytesAsync(written)));
+            Assert.Empty(Directory.GetFileSystemEntries(env.Staging));
+        }
+        finally
+        {
+            service.Release.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task Unreadable_session_file_is_an_invalid_session()
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var service = env.Service<IFilePathUploadService>();
+        var (_, code) = await AddPathAsync(env);
+        var init = await service.ChunkInitAsync(code, InitInput(Small));
+        // session.json 的位置换成同名目录:打开它得到 UnauthorizedAccessException(Windows 上待删除的文件也是这个异常)
+        var session = Path.Combine(SessionDir(env, init.UploadId), "session.json");
+        File.Delete(session);
+        Directory.CreateDirectory(session);
+
+        await AssertInvalid(UploadChunk(service, code, init.UploadId, 0, Small));
+        await AssertInvalid(service.ChunkCompleteAsync(code, init.UploadId));
+    }
+
     // ---- 清扫器 ----
 
     private static string NewSession(string staging, DateTime? lastWriteUtc = null, string? name = null)
@@ -561,49 +639,78 @@ public class FilePathChunkUploadTests
 
     private static DateTime HoursAgo(int hours) => DateTime.UtcNow.AddHours(-hours);
 
-    [Fact]
-    public async Task Sweeper_removes_expired_sessions_only()
+    /// <summary>清扫器只认暂存目录,不需要宿主和数据库:一个临时目录就够(SqlServer 上每建一个宿主要约 20 秒)。</summary>
+    private sealed class TempDir : IDisposable
     {
-        await using var env = NewEnv(new MutableUser(1));
-        var expired = NewSession(env.Staging, HoursAgo(25));
-        var fresh = NewSession(env.Staging, HoursAgo(23));
+        public string Root { get; } = Directory.CreateTempSubdirectory("smart-fp-sweep-").FullName;
 
-        Assert.Equal(1, NewSweeper(env.Staging).SweepOnce());
-
-        Assert.False(Directory.Exists(expired));
-        Assert.True(Directory.Exists(fresh));
-        Assert.Equal(0, NewSweeper(env.Staging).SweepOnce());
+        public void Dispose() => Directory.Delete(Root, recursive: true);
     }
 
     [Fact]
-    public async Task Sweeper_uses_the_configured_ttl()
+    public void Sweeper_removes_expired_sessions_only()
     {
-        await using var env = NewEnv(new MutableUser(1));
-        var session = NewSession(env.Staging, HoursAgo(25));
+        using var staging = new TempDir();
+        var expired = NewSession(staging.Root, HoursAgo(25));
+        var fresh = NewSession(staging.Root, HoursAgo(23));
 
-        Assert.Equal(0, NewSweeper(env.Staging, ttlHours: 48).SweepOnce());
+        Assert.Equal(1, NewSweeper(staging.Root).SweepOnce());
+
+        Assert.False(Directory.Exists(expired));
+        Assert.True(Directory.Exists(fresh));
+        Assert.Equal(0, NewSweeper(staging.Root).SweepOnce());
+    }
+
+    [Fact]
+    public void Sweeper_uses_the_configured_ttl()
+    {
+        using var staging = new TempDir();
+        var session = NewSession(staging.Root, HoursAgo(25));
+
+        Assert.Equal(0, NewSweeper(staging.Root, ttlHours: 48).SweepOnce());
         Assert.True(Directory.Exists(session));
 
-        Assert.Equal(1, NewSweeper(env.Staging, ttlHours: 24).SweepOnce());
+        Assert.Equal(1, NewSweeper(staging.Root, ttlHours: 24).SweepOnce());
         Assert.False(Directory.Exists(session));
     }
 
     [Fact]
     public async Task Sweeper_ignores_names_that_are_not_session_ids()
     {
-        await using var env = NewEnv(new MutableUser(1));
+        using var staging = new TempDir();
         var id = Guid.NewGuid().ToString("N");
         var kept = new[] { "keep-me", id.ToUpperInvariant(), id[..31], id + "0", "x" + id[1..] }
-            .Select(name => NewSession(env.Staging, HoursAgo(100), name)).ToList();
+            .Select(name => NewSession(staging.Root, HoursAgo(100), name)).ToList();
         // 名字合规但是文件不是目录:不碰
-        var file = Path.Combine(env.Staging, Guid.NewGuid().ToString("N"));
+        var file = Path.Combine(staging.Root, Guid.NewGuid().ToString("N"));
         await File.WriteAllTextAsync(file, "x");
         File.SetLastWriteTimeUtc(file, HoursAgo(100));
 
-        Assert.Equal(0, NewSweeper(env.Staging).SweepOnce());
+        Assert.Equal(0, NewSweeper(staging.Root).SweepOnce());
 
         Assert.All(kept, dir => Assert.True(Directory.Exists(dir)));
         Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Sweeper_keeps_a_session_that_is_still_receiving_chunks()
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var service = env.Service<IFilePathUploadService>();
+        var (_, code) = await AddPathAsync(env);
+        var init = await service.ChunkInitAsync(code, InitInput(Big));
+        var dir = SessionDir(env, init.UploadId);
+        // 对照组:同样放了 25 小时、没有新分片的会话会被清掉
+        var abandoned = NewSession(env.Staging, HoursAgo(25));
+        // 活跃的会话:建好之后停了 25 小时,收到新分片的那一刻目录的最后写入时间被刷新
+        Directory.SetLastWriteTimeUtc(dir, HoursAgo(25));
+        await UploadChunk(service, code, init.UploadId, 0, Big);
+
+        Assert.Equal(1, NewSweeper(env.Staging).SweepOnce());
+
+        Assert.False(Directory.Exists(abandoned));
+        Assert.True(Directory.Exists(dir));
+        Assert.Equal(["0.part", "session.json"], FileNames(dir));
     }
 
     [Fact]
@@ -627,13 +734,13 @@ public class FilePathChunkUploadTests
     }
 
     [Fact]
-    public async Task Sweeper_goes_on_after_a_failed_or_vanished_delete()
+    public void Sweeper_goes_on_after_a_failed_or_vanished_delete()
     {
-        await using var env = NewEnv(new MutableUser(1));
-        var locked = NewSession(env.Staging, HoursAgo(30));
-        var vanished = NewSession(env.Staging, HoursAgo(30));
-        var removable = NewSession(env.Staging, HoursAgo(30));
-        var sweeper = new FlakySweeper(Options(env.Staging), new()
+        using var staging = new TempDir();
+        var locked = NewSession(staging.Root, HoursAgo(30));
+        var vanished = NewSession(staging.Root, HoursAgo(30));
+        var removable = NewSession(staging.Root, HoursAgo(30));
+        var sweeper = new FlakySweeper(Options(staging.Root), new()
         {
             [Path.GetFileName(locked)] = new IOException("占用中"),
             // 多副本共用暂存卷:别的副本先删掉了
@@ -645,6 +752,102 @@ public class FilePathChunkUploadTests
 
         Assert.False(Directory.Exists(removable));
         Assert.True(Directory.Exists(locked));
+    }
+
+    /// <summary>
+    /// 手动拨动的时钟:<see cref="CreateTimer"/> 只记下回调,<see cref="Advance"/> 把时间往前推并触发它。
+    /// 测试项目里共用的 <see cref="FakeTimeProvider"/> 只管 <c>GetUtcNow</c>,它的定时器仍是真的。
+    /// </summary>
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private readonly Lock _gate = new();
+        private DateTimeOffset _utc = DateTimeOffset.UtcNow;
+        private TimerCallback? _callback;
+        private object? _state;
+
+        /// <summary>定时器被创建的那一刻:<c>ExecuteAsync</c> 里的 <c>PeriodicTimer</c> 何时建出来由宿主决定,测试要等它。</summary>
+        public TaskCompletionSource TimerCreated { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            lock (_gate) return _utc;
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (_gate)
+            {
+                _callback = callback;
+                _state = state;
+            }
+
+            TimerCreated.TrySetResult();
+            return new RecordedTimer();
+        }
+
+        public void Advance(TimeSpan delta)
+        {
+            TimerCallback callback;
+            object? state;
+            lock (_gate)
+            {
+                _utc += delta;
+                callback = _callback ?? throw new InvalidOperationException("还没有人创建定时器");
+                state = _state;
+            }
+
+            callback(state);
+        }
+
+        private sealed class RecordedTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose() { }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
+
+    /// <summary>每次 <c>SweepOnce</c> 被调用就记一次;第一次抛 <see cref="IOException"/>,模拟暂存卷暂时不可达。</summary>
+    private sealed class TickingSweeper(AdminFilePathOptions options, TimeProvider time)
+        : FilePathStagingSweeper(options, time, NullLogger<FilePathStagingSweeper>.Instance)
+    {
+        private int _calls;
+
+        public SemaphoreSlim Attempts { get; } = new(0);
+
+        public override int SweepOnce()
+        {
+            var first = Interlocked.Increment(ref _calls) == 1;
+            Attempts.Release();
+            return first ? throw new IOException("暂存卷暂时不可达") : 0;
+        }
+    }
+
+    [Fact]
+    public async Task Sweeper_sweeps_every_hour_and_survives_a_failed_sweep()
+    {
+        var time = new ManualTimeProvider();
+        var sweeper = new TickingSweeper(Options("unused"), time);
+        await sweeper.StartAsync(CancellationToken.None);
+        try
+        {
+            await time.TimerCreated.Task.WaitAsync(Wait);
+            // 启动时不扫,先等满一个周期
+            Assert.False(await sweeper.Attempts.WaitAsync(TimeSpan.Zero));
+
+            // 第一轮失败:循环不能因此退出
+            time.Advance(TimeSpan.FromHours(1));
+            Assert.True(await sweeper.Attempts.WaitAsync(Wait));
+
+            time.Advance(TimeSpan.FromHours(1));
+            Assert.True(await sweeper.Attempts.WaitAsync(Wait));
+        }
+        finally
+        {
+            await sweeper.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
