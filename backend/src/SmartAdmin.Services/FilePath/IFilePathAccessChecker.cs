@@ -5,7 +5,8 @@ namespace SmartAdmin.Services;
 /// <summary>
 /// 文件路径的角色判断,只在 HTTP 接口上调用(后端代码直接调上传、下载服务时不判)。
 /// 编码不存在或已停用抛 <see cref="ErrorCode.FilePathNotFound"/>,所属文件服务器不存在或已停用抛 <see cref="ErrorCode.FileServerNotFound"/>,
-/// 库里的角色串被改坏抛 <see cref="ErrorCode.FilePathRuleIncomplete"/>(不退化成「所有登录用户」)。
+/// 库里的角色串被改坏抛 <see cref="ErrorCode.FilePathRuleIncomplete"/>(不退化成「所有登录用户」),
+/// 库里的后缀白名单被改坏抛 <see cref="ErrorCode.FilePathExtensionsInvalid"/>(规则整条读出来才判断,上传和下载都会遇到)。
 /// </summary>
 public interface IFilePathAccessChecker
 {

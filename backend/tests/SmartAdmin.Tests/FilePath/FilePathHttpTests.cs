@@ -72,6 +72,41 @@ public class FilePathHttpTests
     }
 
     [Fact]
+    public async Task Chunk_steps_denied_without_upload_role()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var (roleA, roleB) = (await NewRoleAsync(env), await NewRoleAsync(env));
+        var code = await AddPathAsync(env, upload: [roleA]);
+        var bytes = Encoding.UTF8.GetBytes("x");
+        var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+        // 有上传角色的人建好会话:后面两步拿的是真实存在的 uploadId,拦下它们的只能是角色判断
+        var owner = await UserWithRolesAsync(env, roleA);
+        var created = await (await owner.PostJson($"/api/v1/sys/file-path/upload/{code}/chunk/init",
+            new { fileName = "a.pdf", size = bytes.Length, sha256 })).ReadEnvelope();
+        Assert.Equal(0, Code(created));
+        var uploadId = created.GetProperty("data").GetProperty("uploadId").GetString()!;
+
+        var client = await UserWithRolesAsync(env, roleB);
+        var init = await (await client.PostJson($"/api/v1/sys/file-path/upload/{code}/chunk/init",
+            new { fileName = "a.pdf", size = bytes.Length, sha256 })).ReadEnvelope();
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(uploadId), "uploadId" },
+            { new StringContent("0"), "index" },
+            { new ByteArrayContent(bytes), "chunk", "chunk0" },
+        };
+        var chunk = await (await client.PostAsync($"/api/v1/sys/file-path/upload/{code}/chunk", form)).ReadEnvelope();
+        var complete = await (await client.PostJson($"/api/v1/sys/file-path/upload/{code}/chunk/complete", new { uploadId })).ReadEnvelope();
+
+        Assert.Equal((int)ErrorCode.FilePathUploadDenied, Code(init));
+        Assert.Equal((int)ErrorCode.FilePathUploadDenied, Code(chunk));
+        Assert.Equal((int)ErrorCode.FilePathUploadDenied, Code(complete));
+        // 被拒的分片没写进会话
+        Assert.Equal(new[] { "session.json" }, Directory.GetFiles(Path.Combine(env.Staging, uploadId)).Select(f => Path.GetFileName(f)));
+    }
+
+    [Fact]
     public async Task Upload_with_role_returns_path_and_null_view_url_without_download_role()
     {
         await using var env = FilePathTestEnv.Create();
@@ -177,12 +212,51 @@ public class FilePathHttpTests
         Assert.Equal(HttpStatusCode.OK, png.StatusCode);
         Assert.Equal("image/png", png.Content.Headers.ContentType?.MediaType);
         Assert.NotEqual("attachment", png.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal("nosniff", Assert.Single(png.Headers.GetValues("X-Content-Type-Options")));
 
         using var txt = await anonymous.GetAsync(signer.BuildUrl(code, "a.txt"));
         Assert.Equal(HttpStatusCode.OK, txt.StatusCode);
         Assert.Equal("application/octet-stream", txt.Content.Headers.ContentType?.MediaType);
         Assert.Equal("attachment", txt.Content.Headers.ContentDisposition?.DispositionType);
         Assert.Equal("nosniff", Assert.Single(txt.Headers.GetValues("X-Content-Type-Options")));
+    }
+
+    [Theory]
+    [InlineData("a.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>")]
+    [InlineData("a.html", "<script>alert(1)</script>")]
+    [InlineData("a.SVG", "<svg/>")]
+    public async Task View_link_serves_script_capable_files_as_attachment(string fileName, string content)
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+        PutFile(env, fileName, content);
+        var anonymous = env.Factory.CreateClient();
+
+        // 能带脚本的类型不按文件自己的类型内联:强制另存、禁嗅探,浏览器不会把它当页面执行
+        using var response = await anonymous.GetAsync(env.Service<IFilePathLinkSigner>().BuildUrl(code, fileName));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/octet-stream", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
+    }
+
+    [Fact]
+    public async Task View_link_pdf_is_inline_and_sandboxed()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+        PutFile(env, "a.pdf", "%PDF-1.4");
+        var anonymous = env.Factory.CreateClient();
+
+        using var pdf = await anonymous.GetAsync(env.Service<IFilePathLinkSigner>().BuildUrl(code, "a.pdf"));
+
+        Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
+        Assert.Equal("application/pdf", pdf.Content.Headers.ContentType?.MediaType);
+        Assert.NotEqual("attachment", pdf.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal("nosniff", Assert.Single(pdf.Headers.GetValues("X-Content-Type-Options")));
+        // PDF 可以带脚本和表单:内联时再套一层沙箱,里面的脚本拿不到本站的源
+        Assert.Equal("sandbox", Assert.Single(pdf.Headers.GetValues("Content-Security-Policy")));
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // 文件路径配置页:「文件路径」「文件服务器」两个页签,各一张列表加一个编辑抽屉。
+// 页签按各自列表的查询权限显示,默认打开第一个看得见的。
 // 环境信息(白名单根目录、平台能不能用账号)挂载时取一次,白名单为空时顶部提示,服务器页签用它给根路径候选。
 import { computed, onMounted, ref } from 'vue'
 import { NAlert, NTabPane, NTabs, useMessage } from 'naive-ui'
@@ -15,8 +16,9 @@ const { t } = useI18n()
 const message = useMessage()
 const authStore = useAuthStore()
 
-const activeTab = ref<'path' | 'server'>('path')
+const canPath = computed(() => authStore.hasPerm('GET:/api/v1/sys/file-path/page'))
 const canServer = computed(() => authStore.hasPerm('GET:/api/v1/sys/file-server/page'))
+const activeTab = ref<'path' | 'server'>(canPath.value || !canServer.value ? 'path' : 'server')
 // 窄屏页签放大到触控尺寸
 const narrow = useMediaQuery('(max-width: 604px)')
 
@@ -47,7 +49,7 @@ onMounted(async () => {
       :size="narrow ? 'large' : 'medium'"
       :pane-style="{ padding: 0 }"
     >
-      <n-tab-pane name="path" :tab="t('filePath.tabs.path')">
+      <n-tab-pane v-if="canPath" name="path" :tab="t('filePath.tabs.path')">
         <PathTab />
       </n-tab-pane>
       <n-tab-pane v-if="canServer" name="server" :tab="t('filePath.tabs.server')">

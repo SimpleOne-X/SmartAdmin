@@ -74,12 +74,27 @@ public class FilePathRulesTests
     [InlineData(".env", "_env")]
     [InlineData("CON.txt", "_CON.txt")]
     [InlineData("com1", "_com1")]
+    [InlineData("COM¹.txt", "_COM¹.txt")]   // Windows 把上标 ¹²³ 也当数字,COM¹ 与 COM1 同为设备名
+    [InlineData("lpt³", "_lpt³")]
+    [InlineData("LPT² .log", "_LPT² .log")]
     [InlineData("报价单. ", "报价单")]
     [InlineData("", "file")]
     [InlineData("...", "file")]
     [InlineData(@"C:\fakepath\a.pdf", "a.pdf")]
     public void SanitizeFileName_cases(string input, string expected) =>
         Assert.Equal(expected, FilePathRules.SanitizeFileName(input));
+
+    [Theory]
+    [InlineData("CON", true)]
+    [InlineData("aux.txt", true)]
+    [InlineData("NUL .tar.gz", true)]
+    [InlineData("COM²", true)]
+    [InlineData("LPT¹.pdf", true)]
+    [InlineData("CONSOLE", false)]
+    [InlineData("COM10", false)]
+    [InlineData("_CON.txt", false)]
+    public void IsReservedDeviceName_cases(string segment, bool expected) =>
+        Assert.Equal(expected, FilePathRules.IsReservedDeviceName(segment));
 
     [Fact]
     public void SanitizeFileName_truncates_stem_within_255_bytes()

@@ -162,6 +162,23 @@ public class FileServerServiceTests
     }
 
     [Fact]
+    public async Task Root_with_control_characters_is_rejected()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var service = env.Service<IFileServerService>();
+
+        // NUL 会让路径 API 直接抛 ArgumentException,其余控制字符会原样进到连接和文件操作里;都按根路径不可用拒绝
+        foreach (var root in new[] { env.Root + "\0", Path.Combine(env.Root, "a\tb"), Path.Combine(env.Root, "x\u0001y") })
+        {
+            var add = await Rejected(service.AddAsync(Input(NewName(), root)));
+            Assert.Equal(ErrorCode.FileServerRootNotAllowed, add.Code);
+
+            var test = await Rejected(service.TestAsync(new FileServerTestInput(null, root, null, null)));
+            Assert.Equal(ErrorCode.FileServerRootNotAllowed, test.Code);
+        }
+    }
+
+    [Fact]
     public async Task User_name_requires_share_root_when_connector_supports_credentials()
     {
         await using (var strict = FilePathTestEnv.Create(supportsCredentials: true))
@@ -225,6 +242,40 @@ public class FileServerServiceTests
 
         await service.DeleteAsync(id);
         Assert.NotEqual(id, await service.AddAsync(Input(name, env.Root)));
+    }
+
+    [Fact]
+    public async Task Renaming_to_an_existing_name_is_rejected()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var service = env.Service<IFileServerService>();
+        var (taken, mine) = (NewName(), NewName());
+        await service.AddAsync(Input(taken, env.Root));
+        var id = await service.AddAsync(Input(mine, env.Root));
+
+        var ex = await Rejected(service.UpdateAsync(id, Input(taken, env.Root)));
+        Assert.Equal(ErrorCode.FileServerNameExists, ex.Code);
+        Assert.Equal(mine, (await service.GetAsync(id)).Name);
+
+        // 保留自己原来的名字不算撞名
+        await service.UpdateAsync(id, Input(mine, Path.Combine(env.Root, "sub")));
+        Assert.Equal(Path.Combine(env.Root, "sub"), (await service.GetAsync(id)).RootPath);
+    }
+
+    [Fact]
+    public async Task Same_host_same_account_is_accepted()
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas01/scan"]);
+        var service = env.Service<IFileServerService>();
+        var files = await service.AddAsync(Input(NewName(), "//nas01/files", "svc-files", "p@ss"));
+
+        // 同一台主机、同一个账号(只差大小写)的第二个共享照常保存,不算冲突
+        var scan = await service.AddAsync(Input(NewName(), "//nas01/scan", "SVC-FILES", "p@ss"));
+
+        var row = await RowAsync(env, scan);
+        Assert.Equal(("//nas01/scan", "SVC-FILES"), (row.RootPath, row.UserName));
+        Assert.Equal("p@ss", env.Service<ISecretProtector>().Unprotect(row.PasswordProtected!));
+        Assert.Equal("svc-files", (await RowAsync(env, files)).UserName);
     }
 
     [Fact]

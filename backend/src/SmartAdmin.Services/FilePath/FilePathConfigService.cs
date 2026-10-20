@@ -172,12 +172,14 @@ public class FilePathConfigService(
         return normalized with { AllowedExtensions = string.Join(',', extensions) };
     }
 
-    /// <summary>子文件夹规范化(保存和测试连接共用):<c>\</c> 换成 <c>/</c>,空为 null,不能有点开头的段。</summary>
+    /// <summary>子文件夹规范化(保存和测试连接共用):<c>\</c> 换成 <c>/</c>,空为 null,不能有点开头的段,也不能有 Windows 保留设备名的段。</summary>
     protected virtual string? NormalizeFolder(string? folder)
     {
         var normalized = FilePathRules.NormalizeRelative(folder?.Trim(), allowEmpty: true);
-        // 下载一律把点开头的段当不存在,文件夹落在这样的目录里,存进去的文件就取不出来
-        if (FilePathRules.HasHiddenSegment(normalized)) throw new AdminException(ErrorCode.FilePathInvalidPath);
+        // 下载一律把点开头的段当不存在,文件夹落在这样的目录里,存进去的文件就取不出来;
+        // 设备名的段(CON、NUL.txt)在 Windows 上建不出目录,这一行保存了也永远用不了
+        if (FilePathRules.HasHiddenSegment(normalized) || normalized.Split('/').Any(FilePathRules.IsReservedDeviceName))
+            throw new AdminException(ErrorCode.FilePathInvalidPath);
         return normalized.Length == 0 ? null : normalized;
     }
 

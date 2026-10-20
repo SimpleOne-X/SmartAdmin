@@ -144,6 +144,29 @@ public class FilePathConfigServiceTests
     }
 
     [Fact]
+    public async Task Folder_rejects_windows_device_names()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var service = env.Service<IFilePathConfigService>();
+        var serverId = await env.AddServerAsync();
+
+        // 任何一段是设备名(带后缀、段尾空格、上标数字也算),这一行在 Windows 上就永远用不了
+        foreach (var bad in new[] { "CON", "Order/aux.txt", "nul/x", "Docs/COM¹", "lpt3 .log/x" })
+        {
+            var ex = await Rejected(service.AddAsync(Input(serverId, folder: bad)));
+            Assert.True(ex.Code == ErrorCode.FilePathInvalidPath, $"文件夹 '{bad}' 应被拒绝,实际 {ex.Code}");
+        }
+
+        // 测试连接走同一个规范化
+        var test = await Rejected(service.TestAsync(new FilePathTestInput(serverId, "PRN", ReadOnly: true)));
+        Assert.Equal(ErrorCode.FilePathInvalidPath, test.Code);
+
+        // 只是以设备名开头的普通名字照常放行
+        var id = await service.AddAsync(Input(serverId, folder: "Console/COM10"));
+        Assert.Equal("Console/COM10", (await service.GetAsync(id)).Folder);
+    }
+
+    [Fact]
     public async Task Conflict_mode_only_applies_to_business_path()
     {
         await using var env = FilePathTestEnv.Create();

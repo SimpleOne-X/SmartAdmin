@@ -28,7 +28,7 @@ public interface IFilePathUploadService
     Task<FilePathChunkInitOutput> ChunkInitAsync(string code, FilePathChunkInitInput input, CancellationToken ct = default);
 
     /// <summary>
-    /// 上传一个分片,重传同一片是覆盖。<paramref name="uploadId"/> 不是本服务发的格式、会话不存在或已过期、
+    /// 上传一个分片,重传同一片是覆盖。<paramref name="uploadId"/> 不是本服务发的格式、会话不存在或已过期(包括写这一片期间会话被删掉)、
     /// 不属于当前用户和编码、<paramref name="index"/> 越界、分片长度与应有长度不符,一律抛 <see cref="ErrorCode.FilePathUploadSessionInvalid"/>。
     /// 长度不符时不留下这一片;重传失败时上一次的分片原样保留。
     /// </summary>

@@ -16,11 +16,12 @@ public static class FilePathRules
 
     private const int MaxExtensionDigits = 15;
 
+    // Windows 把 ISO 8859-1 的上标数字 ¹²³ 也当数字,COM¹、LPT³ 和 COM1、LPT3 一样在任何目录里都是设备名
     private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³",
     };
 
     private static AdminException Invalid() => new(ErrorCode.FilePathInvalidPath);
@@ -147,10 +148,16 @@ public static class FilePathRules
         // 无后缀时截断可能让主干以点或空格收尾
         var result = (stem + ext).TrimEnd('.', ' ');
 
-        // Windows 把 "CON .txt" 也当设备名,取第一个点之前的部分去掉尾随空格再比
-        if (ReservedDeviceNames.Contains(result.Split('.')[0].TrimEnd(' '))) result = "_" + result;
+        if (IsReservedDeviceName(result)) result = "_" + result;
         return result.Length == 0 ? "file" : result;
     }
+
+    /// <summary>
+    /// 路径段是否是 Windows 保留设备名(<c>CON</c>、<c>NUL</c>、<c>COM1</c>…):带后缀的也算(<c>NUL.txt</c> 等同 <c>NUL</c>),
+    /// Windows 还把 <c>CON .txt</c> 当设备名,所以取第一个点之前的部分、去掉尾随空格再比,不区分大小写。
+    /// </summary>
+    public static bool IsReservedDeviceName(string segment) =>
+        ReservedDeviceNames.Contains(segment.Split('.')[0].TrimEnd(' '));
 
     /// <summary>取清洗后文件名的后缀(小写、含点);没有后缀返回 <c>""</c>。校验的后缀和落盘的后缀因此是同一个。</summary>
     public static string GetExtension(string fileName) =>

@@ -165,11 +165,12 @@ public class FileServerService(
 
     /// <summary>
     /// 根路径与账号的校验,保存和测试连接共用(测试连接的入参没有名称,所以名称唯一不在这里)。
-    /// 顺序即检查顺序:根路径非空 → 填了账号时须是共享路径(仅连接器支持账号时)→ 同主机账号一致(<paramref name="checkHostAccount"/> 为真时)→ 在白名单内。
+    /// 顺序即检查顺序:根路径非空且不含控制字符 → 填了账号时须是共享路径(仅连接器支持账号时)→ 同主机账号一致(<paramref name="checkHostAccount"/> 为真时)→ 在白名单内。
     /// </summary>
     protected virtual async Task ValidateLocationAsync(string rootPath, string? userName, long? excludingId, bool checkHostAccount)
     {
-        AdminException.ThrowIf(rootPath.Length == 0, ErrorCode.FileServerRootNotAllowed);
+        // NUL 会让后面的路径函数直接抛 ArgumentException(变成 500),其余控制字符会原样带进连接和文件操作
+        AdminException.ThrowIf(rootPath.Length == 0 || rootPath.Any(char.IsControl), ErrorCode.FileServerRootNotAllowed);
 
         AdminException.ThrowIf(
             connector.SupportsCredentials && userName is not null && !FilePathRules.TryGetShare(rootPath, out _, out _),

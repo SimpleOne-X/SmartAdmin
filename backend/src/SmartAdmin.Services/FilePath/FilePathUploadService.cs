@@ -157,6 +157,11 @@ public class FilePathUploadService(
             await ReplaceAsync(temp, part, ct);
             moved = true;
         }
+        catch (Exception e) when (e is DirectoryNotFoundException or FileNotFoundException)
+        {
+            // 过了会话检查之后会话目录被删了(合并收尾、清扫器):和会话不存在是一回事,不是服务器出错
+            throw InvalidSession();
+        }
         finally
         {
             if (!moved) TryDelete(temp, "未写完的分片");
@@ -176,7 +181,8 @@ public class FilePathUploadService(
 
         // 认领会话:独占创建标记文件是原子的,同一会话同时只有一个合并能成功。
         // 输的一方(重复点击、客户端超时后重试)得到「会话无效」,不会走到下面的收尾去删赢家正在合并的目录;
-        // 标记在,合并期间到达的分片和合并也都是无效会话,所以 merged 从合并到写入文件夹之间没人动得了。
+        // 标记在,此后到达的分片和合并也都是无效会话。认领前已经通过检查、正在写的分片挡不住,它会在合并读分片时替换掉某一片,
+        // 这种情况由下面的哈希核对兜底:内容变了哈希就对不上,会话随之结束。
         // 不用 File.Move 改名认领:Windows 上两个并发的改名可以同时成功;也不靠文件锁:
         // 关掉文件锁(DOTNET_SYSTEM_IO_DISABLEFILELOCKING)或暂存卷由多个副本共用时,锁都不可靠
         ClaimSession(dir);

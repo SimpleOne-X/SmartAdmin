@@ -27,7 +27,7 @@ The `SmartAdmin:FilePath` section has four items:
 | Setting | Default | Purpose |
 |---|---|---|
 | `AllowedRoots` | empty array | Root directory whitelist, absolute paths. Empty means the feature is unusable |
-| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads. A relative path resolves against ContentRoot |
+| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads. A relative path resolves against ContentRoot. It must not sit under a directory listed in `AllowedRoots`, where chunks could be downloaded by path, so startup fails if it does |
 | `StagingTtlHours` | `24` | A chunk session with no new chunk for this long is treated as abandoned and its staging is cleared. Must be greater than 0 |
 | `LinkTtlMinutes` | `60` | Default validity of a signed link in minutes; the caller can pass another when signing. Must be greater than 0 |
 
@@ -35,7 +35,7 @@ A deployment that doesn't need the feature can add `"FilePath"` to `SmartAdmin:A
 
 ## Register file servers
 
-Open the "File Paths" page in the "Files" menu group and switch to the "File servers" tab. Register one row per share on a NAS. This page belongs to the system menus, so only the super admin and the built-in roles that were granted it can see it. Add, edit and delete require a recent identity check (`[RequireReauth]`, see [Auth & Security](/backend/auth-security)). Test connection writes nothing to the database and doesn't require it.
+Open the "File Paths" page in the "Files" menu group and switch to the "File servers" tab. Register one row per share on a NAS. This page belongs to the system menus, so only the super admin and the built-in roles that were granted it can see it, and each of its two tabs shows only with the query permission for its own list. Add, edit and delete require a recent identity check (`[RequireReauth]`, see [Auth & Security](/backend/auth-security)). Test connection writes nothing to the database and doesn't require it.
 
 | Field | Notes |
 |---|---|
@@ -70,7 +70,7 @@ On the "File paths" tab, one row is one kind of business file.
 | Code | The key business code refers to. Letters, digits, `.`, `_` and `-` only, up to 64 characters, immutable once saved |
 | Name | Up to 64 characters |
 | File server | Pick from the registered servers |
-| Subfolder | Relative to the server's root path, separated by `/`, such as `Order/Attachment`. Blank means the root itself. A missing folder is created on the first upload. These forms are rejected on save with `44112`: an absolute path, a `:`, an empty segment (such as `a//b`), a segment that starts with a dot (`..` included), and a segment that ends with a dot or a space. Downloads treat a dot-leading segment as nonexistent, so files stored there could never be fetched, which is why it is refused outright |
+| Subfolder | Relative to the server's root path, separated by `/`, such as `Order/Attachment`. Blank means the root itself. A missing folder is created on the first upload. These forms are rejected on save with `44112`: an absolute path, a `:`, an empty segment (such as `a//b`), a segment that starts with a dot (`..` included), a segment that ends with a dot or a space, and Windows reserved device names such as `CON`, `aux.txt` and `COM1`. Downloads treat a dot-leading segment as nonexistent, so files stored there could never be fetched, and on Windows a reserved device name points to a device rather than a folder, which is why both are refused outright |
 | Naming rule | See the table below |
 | On name clash | Reject or overwrite; only meaningful for "business-specified path" |
 | Read-only | Download only, no uploads, and no extensions or size limit to set |
@@ -187,7 +187,7 @@ Underneath it is `GET /api/v1/sys/file-path/download/{code}?path=&name=`, which 
 
 - `name` is optional and only decides the file name the browser saves under. After sanitizing, its extension is forced to the real extension of the file on disk, so a caller can't use it to turn `.pdf` into `.exe`. Without it, the name on disk is used.
 - Download ignores the extension whitelist, because a read-only row may hold old files of any extension.
-- A path where any segment starts with `.` is treated as a missing file (`44113`). Probe files from test connection, temporary files from overwrites and hidden system files all look like that.
+- A path where any segment starts with `.` is treated as a missing file (`44113`). Probe files from test connection, temporary files from overwrites and hidden system files all look like that. The rule only looks at names: when a Windows share generates 8.3 short names, a file such as `.secret` also has a short name like `SECRET~1` on disk, and a request by that short name gets past it. The row's download roles still apply after that, but turning off 8.3 short name creation on the file server is recommended, see [Deployment](#deployment).
 
 ### Call the services from the backend
 
@@ -203,7 +203,7 @@ Delete has no HTTP endpoint, only a backend service method that your business co
 ```csharp
 public class OrderAttachmentService(IFilePathLinkSigner signer, IFilePathUploadService uploads)
 {
-    // The business table holds only the path; the preview link is signed on demand
+    // path comes from the record in the business table; the preview link is signed on demand
     public string PreviewUrl(string path) => signer.BuildUrl("Order.Attachment", path);
 
     // When a document is deleted or its attachment replaced, the business deletes the file itself
@@ -213,6 +213,8 @@ public class OrderAttachmentService(IFilePathLinkSigner signer, IFilePathUploadS
 ```
 
 Backend code that calls these services directly gets **no role check**; the business code that calls them is responsible. The rule checks (read-only, extension, size, path) still apply.
+
+When you sign a direct link, `path` must come from a record in your own business table, never straight from a request parameter. The signature is the authorization, so signing a request parameter lets the caller change it and get an anonymous link to any file in the folder.
 
 All of these built-in services are registered with `TryAdd`; to replace one, follow [Replace built-in services](/guide/replace-service).
 
@@ -225,7 +227,7 @@ A link comes from two places: the `viewUrl` the upload endpoints return, and bac
 - **Who gets one**: `viewUrl` is returned only when the uploader also meets the row's download roles; otherwise it is `null`. Being able to upload doesn't mean being able to download, and on a row that overwrites by name, what is read within the link's validity may already be content someone else overwrote it with. Calling `BuildUrl` directly from the backend makes no such check, so who receives the link is up to your business code.
 - **Validity**: always set, and no permanent link can be issued. The default is `LinkTtlMinutes` (60 minutes), and a different value can be passed when signing.
 - **Tamper-proof**: the signature covers the code, the relative path and the expiry time, so changing any of them fails verification. Missing parameters, a wrong signature or an expired link all return `403`, and give no way to probe whether a file exists.
-- **How it is shown**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp` and `.pdf` display inline; everything else is downloaded as an attachment, `.svg` and HTML included. The decision is made on the extension, never on the type the client reported at upload.
+- **How it is shown**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp` and `.pdf` display inline; everything else is downloaded as an attachment, `.svg` and HTML included. The decision is made on the extension, never on the type the client reported at upload. Inline responses carry `Content-Security-Policy: sandbox`, so scripts inside a PDF can't reach this site's cookies or storage.
 - **Revoking**: there is no per-link revocation. Wait for it to expire, or rotate `Jwt:SecretKey`, which invalidates every signature and also every login token.
 
 Store the relative path in the business table, not the link.
@@ -238,7 +240,7 @@ Store the relative path in the business table, not the link.
 
 **Leave the account blank and use the backend's run identity.** Run the backend under a dedicated account (the IIS application pool identity, or the logon identity of a Windows service) and leave both the account and password of the file server blank. When the server and the NAS are in the same domain, use a domain account and write the host name rather than an IP in the root path, so Kerberos can be used. Nothing is stored in the database this way.
 
-On the file server side: keep the access account out of the administrators group and give it only the share permissions it needs, set the minimum SMB protocol to SMB2, and turn SMB1 off.
+On the file server side: keep the access account out of the administrators group and give it only the share permissions it needs, set the minimum SMB protocol to SMB2, turn SMB1 off, and turn off 8.3 short name creation on the volume that holds the share (`fsutil 8dot3name set D: 1`; `fsutil 8dot3name strip` removes the short names existing files already have). The reason is under [Download](#download).
 
 ### Linux and Docker: host mounts
 
@@ -331,15 +333,15 @@ File paths take `44100`–`44199`, following the segments in [Error codes](/back
 | `44109` | The extension isn't in the whitelist, files with no extension included |
 | `44110` | Over the size limit |
 | `44111` | A file with the same name already exists |
-| `44112` | Invalid path. For the `path` of a download or delete and for a configured subfolder: an absolute path, a drive letter, `:`, control characters, an empty segment, `.` or `..`, a segment ending in a dot or space, or an escape from the folder; in a subfolder, a segment starting with a dot counts too. The `subPath` of a business-specified path is sanitized segment by segment first, and only an absolute path, an empty segment, `.`, `..`, or a segment over 255 bytes after sanitizing returns this code |
+| `44112` | Invalid path. For the `path` of a download or delete and for a configured subfolder: an absolute path, a drive letter, `:`, control characters, an empty segment, `.` or `..`, a segment ending in a dot or space, or an escape from the folder; in a subfolder, a segment starting with a dot and a Windows reserved device name count too. The `subPath` of a business-specified path is sanitized segment by segment first, and only an absolute path, an empty segment, `.`, `..`, or a segment over 255 bytes after sanitizing returns this code |
 | `44113` | The file doesn't exist, including any path with a segment that starts with a dot |
 | `44114` | The folder cannot be reached, with a reason attached |
 | `44115` | A chunk is missing; upload it and merge again |
 | `44116` | The SHA-256 after merging doesn't match the declared one |
-| `44117` | Invalid upload session: malformed or unknown id, expired, not owned by the current user or code, or already claimed by another merge. At init, a `sha256` that isn't 64 hex digits or a negative `size`, a chunk index out of range, and a chunk whose length doesn't match the expected length also return this code |
+| `44117` | Invalid upload session: malformed or unknown id, expired, not owned by the current user or code, or already claimed by another merge. At init, a `sha256` that isn't 64 hex digits or a negative `size`, a chunk index out of range, a chunk whose length doesn't match the expected length, and a session deleted while a chunk is being written also return this code |
 | `44150` | The file server doesn't exist or is disabled |
 | `44151` | The file server name already exists |
-| `44152` | The root path isn't in the whitelist, checked on save and on every upload and download |
+| `44152` | The root path isn't in the whitelist, checked on save and on every upload and download. A root path with control characters also returns this code on save or test |
 | `44153` | An account is set but the root path isn't in the `\\host\share` form |
 | `44154` | The host already has another account configured |
 | `44155` | The file server is still referenced by file paths and cannot be deleted |

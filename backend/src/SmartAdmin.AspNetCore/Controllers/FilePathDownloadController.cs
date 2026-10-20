@@ -39,7 +39,7 @@ public class FilePathDownloadController(
     /// <para>验签先于读文件:参数不全、签名不对、过期都是 403,不让人拿它探测"这个文件存不存在"。验过之后服务抛的业务错误走正常信封。</para>
     /// <para><b>不信文件夹里文件的类型</b>:匿名 + inline 若按文件自带的类型回吐,<c>text/html</c> / <c>image/svg+xml</c> 会被浏览器当脚本渲染,
     /// 与前端同源 → 存储型 XSS。因此按<b>后缀</b>在白名单里取服务端权威类型:是"可安全内联"的图片/PDF 才 inline,
-    /// 其余一律 <c>application/octet-stream</c> + 强制另存,再叠一层 <c>nosniff</c> 禁嗅探。</para>
+    /// 其余一律 <c>application/octet-stream</c> + 强制另存,再叠一层 <c>nosniff</c> 禁嗅探;内联的再加 <c>Content-Security-Policy: sandbox</c>。</para>
     /// </summary>
     [HttpGet("{code}/view")]
     [AllowAnonymous]
@@ -54,6 +54,9 @@ public class FilePathDownloadController(
             return Attachment(download, name);   // 含 svg/html/office/zip 及一切未知后缀:浏览器不会把它当页面执行
 
         Response.Headers.XContentTypeOptions = "nosniff";
+        // 纵深防御:PDF 能带脚本和表单,内联打开时放进沙箱(不透明的源),里面的东西拿不到本站的 Cookie 和存储;
+        // 浏览器自带的 PDF 查看器在沙箱里照常显示,图片不受影响,所以内联的一律加
+        Response.Headers.ContentSecurityPolicy = "sandbox";
         return File(download.Content, safeType, enableRangeProcessing: true);   // 已知安全的图片/PDF:inline 渲染
     }
 

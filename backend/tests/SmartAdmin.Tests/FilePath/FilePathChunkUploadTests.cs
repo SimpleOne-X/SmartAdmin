@@ -701,6 +701,51 @@ public class FilePathChunkUploadTests
         await AssertInvalid(service.ChunkCompleteAsync(code, init.UploadId));
     }
 
+    /// <summary>
+    /// 在分片写入的某一步之前删掉会话目录:模拟分片已通过会话检查、还在写,合并收尾或清扫器把整个会话删了。
+    /// <c>beforeWrite</c> 在起临时文件名时删(还没建临时文件),<c>beforeReplace</c> 在把写好的临时文件换成分片时删(重传已有的分片)。
+    /// </summary>
+    private sealed class VanishingSessionService(FilePathTestEnv env, string stage)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), TimeProvider.System, NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>(), env.Service<IFilePathCircuit>())
+    {
+        /// <summary>要删的会话目录;为 null 时什么都不做(init 和第一次上传照常走)。</summary>
+        public string? Dir { get; set; }
+
+        protected override string NewShortId()
+        {
+            if (stage == "beforeWrite" && Dir is not null) Directory.Delete(Dir, recursive: true);
+            return base.NewShortId();
+        }
+
+        // 两个平台都走「目标已存在时替换」这条路,才有地方在替换前插一刀
+        protected override bool UseFileReplace => true;
+
+        protected override void ReplaceFile(string temp, string full, string backup)
+        {
+            if (stage == "beforeReplace" && Dir is not null) Directory.Delete(Dir, recursive: true);
+            base.ReplaceFile(temp, full, backup);
+        }
+    }
+
+    [Theory]
+    [InlineData("beforeWrite")]
+    [InlineData("beforeReplace")]
+    public async Task Chunk_written_while_the_session_is_deleted_is_an_invalid_session(string stage)
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var (_, code) = await AddPathAsync(env);
+        var service = new VanishingSessionService(env, stage);
+        var init = await service.ChunkInitAsync(code, InitInput(Big));
+        await UploadChunk(service, code, init.UploadId, 0, Big);
+
+        service.Dir = SessionDir(env, init.UploadId);
+        await AssertInvalid(UploadChunk(service, code, init.UploadId, 0, Big));
+
+        // 会话没了就是没了:分片不会在暂存目录里重新长出一个残缺的会话目录
+        Assert.False(Directory.Exists(SessionDir(env, init.UploadId)));
+    }
+
     // ---- 清扫器 ----
 
     private static string NewSession(string staging, DateTime? lastWriteUtc = null, string? name = null)
