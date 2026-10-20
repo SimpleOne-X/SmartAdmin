@@ -603,6 +603,75 @@ public class FilePathChunkUploadTests
         }
     }
 
+    /// <summary><c>StoreAsync</c> 第一次调用抛指定异常,之后照常写:模拟合并时 NAS 抖了一下。</summary>
+    private sealed class FlakyStoreService(FilePathTestEnv env, Exception failure)
+        : FilePathUploadService(env.Service<IFilePathResolver>(), TimeProvider.System, NullLogger<FilePathUploadService>.Instance,
+            env.Service<AdminFilePathOptions>(), env.Service<ICurrentUser>())
+    {
+        private Exception? _failure = failure;
+
+        protected override Task<FilePathUploadOutput> StoreAsync(
+            FilePathTarget target, string fileName, long size, string? subPath, Stream content, CancellationToken ct)
+        {
+            if (Interlocked.Exchange(ref _failure, null) is { } e) throw e;
+            return base.StoreAsync(target, fileName, size, subPath, content, ct);
+        }
+    }
+
+    public static TheoryData<string> StorageFailures => ["folderUnavailable", "stagingIo"];
+
+    [Theory]
+    [MemberData(nameof(StorageFailures))]
+    public async Task Storage_failure_during_complete_keeps_the_session_for_another_try(string kind)
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var (_, code) = await AddPathAsync(env);
+        Exception failure = kind == "stagingIo"
+            ? new IOException("磁盘已满")
+            : new AdminException(ErrorCode.FilePathFolderUnavailable, new Dictionary<string, object?> { ["reason"] = "timeout" });
+        var service = new FlakyStoreService(env, failure);
+        var init = await service.ChunkInitAsync(code, InitInput(Big));
+        for (var i = 0; i < init.ChunkCount; i++) await UploadChunk(service, code, init.UploadId, i, Big);
+
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(() => service.ChunkCompleteAsync(code, init.UploadId));
+        Assert.Same(failure, thrown);
+
+        // 存储类失败只放掉认领:分片都在,不用整个重传,原样再合并一次就行
+        var names = FileNames(SessionDir(env, init.UploadId));
+        Assert.DoesNotContain("merging", names);
+        Assert.Contains("session.json", names);
+        Assert.Contains("0.part", names);
+        Assert.Contains("1.part", names);
+
+        var output = await service.ChunkCompleteAsync(code, init.UploadId);
+        await AssertSameBytes(Big, DiskPath(env, output.Path));
+        Assert.Empty(Directory.GetFileSystemEntries(env.Staging));
+    }
+
+    [Fact]
+    public async Task Ended_session_stays_dead_when_its_directory_cannot_be_removed()
+    {
+        await using var env = NewEnv(new MutableUser(1));
+        var service = env.Service<IFilePathUploadService>();
+        var (_, code) = await AddPathAsync(env);
+        var init = await service.ChunkInitAsync(code, InitInput(Small));
+        await UploadChunk(service, code, init.UploadId, 0, Small);
+
+        // 合并成功后收尾时 session.json 删不掉(Windows 上被别人开着、没给删除共享):
+        // 收尾不能只删掉认领标记而留下 session.json,否则这个已经合并过的会话又能收分片、再合并一次
+        var sessionFile = Path.Combine(SessionDir(env, init.UploadId), "session.json");
+        using (new FileStream(sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var output = await service.ChunkCompleteAsync(code, init.UploadId);
+            await AssertSameBytes(Small, DiskPath(env, output.Path));
+
+            await AssertInvalid(UploadChunk(service, code, init.UploadId, 0, Small));
+            await AssertInvalid(service.ChunkCompleteAsync(code, init.UploadId));
+        }
+
+        Assert.Single(Directory.EnumerateFiles(env.Root, "*", SearchOption.AllDirectories));
+    }
+
     [Fact]
     public async Task Unreadable_session_file_is_an_invalid_session()
     {
@@ -639,12 +708,25 @@ public class FilePathChunkUploadTests
 
     private static DateTime HoursAgo(int hours) => DateTime.UtcNow.AddHours(-hours);
 
-    /// <summary>清扫器只认暂存目录,不需要宿主和数据库:一个临时目录就够(SqlServer 上每建一个宿主要约 20 秒)。</summary>
+    /// <summary>
+    /// 清扫器只认暂存目录,不需要宿主和数据库:一个临时目录就够(SqlServer 上每建一个宿主要约 20 秒)。
+    /// 删除是尽力而为:杀毒或索引服务刚好开着里面的文件时删不掉,不能让收尾把已经通过的用例变红。
+    /// </summary>
     private sealed class TempDir : IDisposable
     {
         public string Root { get; } = Directory.CreateTempSubdirectory("smart-fp-sweep-").FullName;
 
-        public void Dispose() => Directory.Delete(Root, recursive: true);
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // 留在系统临时目录里,不影响别的用例
+            }
+        }
     }
 
     [Fact]

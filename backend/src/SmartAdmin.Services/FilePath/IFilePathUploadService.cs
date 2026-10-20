@@ -38,7 +38,8 @@ public interface IFilePathUploadService
     /// 合并分片并写入文件夹。缺片抛 <see cref="ErrorCode.FilePathChunkMissing"/>(args.index 是第一个缺的编号),此时会话保留,补传后可再次合并。
     /// 缺片检查通过后先认领会话:同一会话同时只有一个合并能成功,另一个(重复点击、超时重试)抛 <see cref="ErrorCode.FilePathUploadSessionInvalid"/>,
     /// 合并期间到达的分片同样是无效会话。认领成功的合并、按实际大小和当前规则再校验(同 <see cref="UploadAsync"/>)、核对哈希
-    /// (不符抛 <see cref="ErrorCode.FilePathChunkHashMismatch"/>)、写入,不论成败都删除会话。
+    /// (不符抛 <see cref="ErrorCode.FilePathChunkHashMismatch"/>)、写入。成功或校验类失败时会话结束;
+    /// 文件夹暂时访问不了(<see cref="ErrorCode.FilePathFolderUnavailable"/>)这类存储失败只放掉认领,会话保留,可以原样再合并一次。
     /// </summary>
     Task<FilePathUploadOutput> ChunkCompleteAsync(string code, string uploadId, CancellationToken ct = default);
 

@@ -170,29 +170,54 @@ public class FilePathUploadService(
                 new Dictionary<string, object?> { ["index"] = i });
 
         // 认领会话:独占创建标记文件是原子的,同一会话同时只有一个合并能成功。
-        // 输的一方(重复点击、客户端超时后重试)得到「会话无效」,不会走到下面的 finally 去删赢家正在合并的目录;
+        // 输的一方(重复点击、客户端超时后重试)得到「会话无效」,不会走到下面的收尾去删赢家正在合并的目录;
         // 标记在,合并期间到达的分片和合并也都是无效会话,所以 merged 从合并到写入文件夹之间没人动得了。
         // 不用 File.Move 改名认领:Windows 上两个并发的改名可以同时成功;也不靠文件锁:
         // 关掉文件锁(DOTNET_SYSTEM_IO_DISABLEFILELOCKING)或暂存卷由多个副本共用时,锁都不可靠
         ClaimSession(dir);
 
+        FilePathUploadOutput output;
         try
         {
-            var merged = Path.Combine(dir, MergedFile);
-            var (sha256, length) = await MergeAsync(dir, session.ChunkCount, merged, ct);
-            // 规则可能在 init 之后变过(只读、后缀、上限),按当前规则和实际大小再拦一次;
-            // 实际大小与声明不同时哈希必然对不上,不单独判断
-            ValidateUpload(target.Rule, session.FileName, length);
-            AdminException.ThrowIf(sha256 != session.Sha256, ErrorCode.FilePathChunkHashMismatch);
-
-            await using var content = new FileStream(merged, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
-            return await StoreAsync(target, session.FileName, length, session.SubPath, content, ct);
+            output = await MergeAndStoreAsync(target, dir, session, ct);
         }
-        finally
+        catch (Exception e) when (KeepsSession(e))
         {
-            DeleteSessionDir(dir);
+            // 存储类失败(文件夹暂时访问不了、暂存盘出错、请求被取消):只放掉认领,分片都留着,客户端原样再合并一次就行
+            ReleaseClaim(dir);
+            throw;
         }
+        catch
+        {
+            // 校验类失败(哈希不符、规则变了、业务路径撞名):再合并一次结果也一样,会话到此为止
+            EndSession(dir);
+            throw;
+        }
+
+        EndSession(dir);
+        return output;
     }
+
+    /// <summary>按序合并分片、按当前规则和哈希核对,再写进文件夹。会话目录的收尾由调用方按结果决定。</summary>
+    private async Task<FilePathUploadOutput> MergeAndStoreAsync(FilePathTarget target, string dir, ChunkSession session, CancellationToken ct)
+    {
+        var merged = Path.Combine(dir, MergedFile);
+        var (sha256, length) = await MergeAsync(dir, session.ChunkCount, merged, ct);
+        // 规则可能在 init 之后变过(只读、后缀、上限),按当前规则和实际大小再拦一次;
+        // 实际大小与声明不同时哈希必然对不上,不单独判断
+        ValidateUpload(target.Rule, session.FileName, length);
+        AdminException.ThrowIf(sha256 != session.Sha256, ErrorCode.FilePathChunkHashMismatch);
+
+        await using var content = new FileStream(merged, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+        return await StoreAsync(target, session.FileName, length, session.SubPath, content, ct);
+    }
+
+    /// <summary>
+    /// 合并失败后会话是否值得保留:业务错误里只有「文件夹暂时访问不了」是重试可能成功的;
+    /// 其余非业务异常(暂存盘的 IO 错误、取消)也保留,会话没被确认结束,过期后由清扫器收走。
+    /// </summary>
+    private static bool KeepsSession(Exception e) =>
+        e is not AdminException admin || admin.Code == ErrorCode.FilePathFolderUnavailable;
 
     /// <summary>暂存根目录。<see cref="AdminFilePathOptions.StagingPath"/> 已在启动时规范成完全限定路径。</summary>
     protected virtual string StagingRoot => options.StagingPath;
@@ -278,6 +303,43 @@ public class FilePathUploadService(
         }
 
         return (Convert.ToHexStringLower(hash.GetHashAndReset()), length);
+    }
+
+    /// <summary>
+    /// 结束会话:先删 <c>session.json</c>,它一没,这个 uploadId 的分片和合并都是无效会话,再删其余文件才没有窗口期。
+    /// 递归删除会先删到 <c>merging</c> 再删 <c>session.json</c>,中途失败就会留下一个没有认领标记、又读得出来的会话。
+    /// <c>session.json</c> 删不掉就整个目录(连同认领标记)留给 <see cref="FilePathStagingSweeper"/>。
+    /// </summary>
+    private void EndSession(string dir)
+    {
+        try
+        {
+            File.Delete(Path.Combine(dir, SessionFile));
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(e, "结束分片会话 {Session} 时删不掉 session.json,整个目录留给暂存清扫器", Path.GetFileName(dir));
+            return;
+        }
+
+        DeleteSessionDir(dir);
+    }
+
+    /// <summary>放掉合并的认领标记,会话照常可用。删不掉只记警告:会话保持认领状态,客户端得到「会话无效」后整个重传,目录留给清扫器。</summary>
+    private void ReleaseClaim(string dir)
+    {
+        try
+        {
+            File.Delete(Path.Combine(dir, ClaimedFile));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(e, "放掉分片会话 {Session} 的合并认领失败,留给暂存清扫器", Path.GetFileName(dir));
+        }
     }
 
     /// <summary>删会话目录。删不掉只记警告,留给 <see cref="FilePathStagingSweeper"/>,不能盖掉调用方正在抛的异常。</summary>

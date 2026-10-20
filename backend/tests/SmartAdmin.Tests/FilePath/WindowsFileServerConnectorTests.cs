@@ -44,6 +44,9 @@ public class WindowsFileServerConnectorTests
         /// <summary>第一次进入 <see cref="AddConnection"/> 时完成。</summary>
         public TaskCompletionSource AddStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>第一次进入 <see cref="CancelConnection"/> 时完成。</summary>
+        public TaskCompletionSource CancelStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public IReadOnlyList<string> Calls
         {
             get { lock (_calls) return [.. _calls]; }
@@ -72,6 +75,7 @@ public class WindowsFileServerConnectorTests
         protected override int CancelConnection(string remoteName)
         {
             lock (_calls) _calls.Add($"cancel {remoteName}");
+            CancelStarted.TrySetResult();
             if (CancelDelay > TimeSpan.Zero) Thread.Sleep(CancelDelay);
             return CancelResult;
         }
@@ -315,12 +319,16 @@ public class WindowsFileServerConnectorTests
         connector.Timeout = TimeSpan.FromMilliseconds(100);
         connector.AddDelay = TimeSpan.FromSeconds(1);
         await Fails(connector, Target());
+        // 超时只是不再等,native 调用在线程池里可能还没开始;等它真的进去了再数次数
+        await connector.AddStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         time.Advance(TimeSpan.FromSeconds(29));
         var cached = await Fails(connector, Target());
         Assert.Equal((FileAccessFailure.Timeout, 0), (cached.Reason, cached.Win32Code));
         Assert.Equal(1, connector.AddCount);
 
+        // 最后这次要连成功:恢复默认超时,慢的 runner 上线程池排队超过 100ms 也不会误判
+        connector.Timeout = null;
         connector.AddDelay = TimeSpan.Zero;
         time.Advance(TimeSpan.FromSeconds(2));
         await connector.EnsureConnectedAsync(Target(), retryFailed: false);
@@ -337,6 +345,7 @@ public class WindowsFileServerConnectorTests
 
         var e = await Fails(connector, Target(password: "new"));
         Assert.Equal(FileAccessFailure.Timeout, e.Reason);
+        await connector.CancelStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         await Fails(connector, Target(password: "new"));
         Assert.Equal((1, 1), (connector.AddCount, connector.CancelCount));
