@@ -18,11 +18,11 @@
 
 - **文件路径：管理员在后台登记文件服务器和文件夹，业务代码只认一个编码，就能把附件传到 NAS 或共享文件夹，再按编码下载。**
   与原有的「文件管理」是两套独立的上传下载，接口和组件互不通用。
-  - 新接口，四组路由前缀，都挂在模块 `FilePath` 下，可经 `SmartAdmin:Api:DisabledModules` 一起关闭：
-    - `api/v1/sys/file-path`：文件路径的增删改查与测试连接。
-    - `api/v1/sys/file-server`：文件服务器的增删改查与测试连接。
-    - `api/v1/sys/file-path/upload/{code}`：单文件与分片上传。
-    - `api/v1/sys/file-path/download/{code}`：下载，以及匿名可读的签名直链（`/view`）。
+  - 新接口，四个控制器，都挂在模块 `FilePath` 下，可经 `SmartAdmin:Api:DisabledModules` 一起关闭：
+    - 文件路径配置：`GET /api/v1/sys/file-path/page`、`GET /api/v1/sys/file-path/{id}`、`GET /api/v1/sys/file-path/status`、`GET /api/v1/sys/file-path/environment`、`POST /api/v1/sys/file-path/add`、`PUT /api/v1/sys/file-path/{id}`、`DELETE /api/v1/sys/file-path/{id}`、`POST /api/v1/sys/file-path/test`。
+    - 文件服务器配置：`GET /api/v1/sys/file-server/page`、`GET /api/v1/sys/file-server/{id}`、`GET /api/v1/sys/file-server/status`、`GET /api/v1/sys/file-server/options`、`POST /api/v1/sys/file-server/add`、`PUT /api/v1/sys/file-server/{id}`、`DELETE /api/v1/sys/file-server/{id}`、`POST /api/v1/sys/file-server/test`。
+    - 单文件与分片上传：`POST /api/v1/sys/file-path/upload/{code}`、`POST /api/v1/sys/file-path/upload/{code}/chunk/init`、`POST /api/v1/sys/file-path/upload/{code}/chunk`、`POST /api/v1/sys/file-path/upload/{code}/chunk/complete`。
+    - 下载：`GET /api/v1/sys/file-path/download/{code}`；匿名可读的签名直链是 `GET /api/v1/sys/file-path/download/{code}/view`。
   - 新组件 `FilePathUpload`（`smart-admin-web`），自动分片；一并导出 `uploadToFilePath`、`filePathFileApi`。
   - 后端新增 `IFilePathUploadService`、`IFilePathDownloadService`、`IFilePathLinkSigner`，供业务在后端写文件、取文件、签直链。
   - 新配置节 `SmartAdmin:FilePath`：`AllowedRoots`（根目录白名单，默认空，空则功能不可用）、`StagingPath`、`StagingTtlHours`、`LinkTtlMinutes`。
