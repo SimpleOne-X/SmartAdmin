@@ -418,6 +418,19 @@ public class FilePathUploadServiceTests
     }
 
     [Fact]
+    public async Task Delete_of_an_invalid_name_is_file_not_found()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+
+        // Windows 对含 * ? < > | " 的名字报 ERROR_INVALID_NAME:这样的文件不可能存在,和「文件不存在」一样,不是文件夹访问不了
+        var ex = await Rejected(new UnreachableService(env, new IOException("文件名、目录名或卷标语法不正确", unchecked((int)0x8007007B)))
+            .DeleteAsync(code, "a*.pdf"));
+
+        Assert.Equal(ErrorCode.FilePathFileNotFound, ex.Code);
+    }
+
+    [Fact]
     public async Task Delete_is_refused_on_read_only_row()
     {
         await using var env = FilePathTestEnv.Create();

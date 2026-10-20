@@ -44,7 +44,7 @@ public interface IFilePathUploadService
 
     /// <summary>
     /// 删除文件夹里的一个文件(不删目录)。只读的行抛 <see cref="ErrorCode.FilePathReadOnly"/>;
-    /// 路径不合法、含以点开头的段、文件不存在(包括路径指向目录)都一律抛 <see cref="ErrorCode.FilePathFileNotFound"/>;
+    /// 路径不合法、含以点开头的段、文件不存在(包括路径指向目录、名字含 Windows 不接受的字符)都一律抛 <see cref="ErrorCode.FilePathFileNotFound"/>;
     /// 访问失败(共享断开、拒绝访问)不当作「不存在」,抛 <see cref="ErrorCode.FilePathFolderUnavailable"/>。
     /// </summary>
     Task DeleteAsync(string code, string path, CancellationToken ct = default);

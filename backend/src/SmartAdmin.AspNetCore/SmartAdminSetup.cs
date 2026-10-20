@@ -177,6 +177,12 @@ public static class SmartAdminSetup
             sp.GetRequiredService<AdminUploadOptions>(),
             sp.GetRequiredService<TimeProvider>()));
 
+        // 文件路径的签名直链:载荷是「编码 + 相对路径 + 过期时刻」,子密钥与上面那把不同,两种链接互相验不过
+        services.TryAddSingleton<IFilePathLinkSigner>(sp => new FilePathLinkSigner(
+            sp.GetRequiredService<SymmetricSecurityKey>(),
+            sp.GetRequiredService<AdminFilePathOptions>(),
+            sp.GetRequiredService<TimeProvider>()));
+
         // 头像 URL 校验:依赖上面刚注册的 IFileUrlSigner,故放在这层而非 ServicesSetup——
         // 纯 Services 宿主(WorkerSetup)没有 IFileUrlSigner,PersonalService/UserService 拿到的是可选依赖,
         // 未注册时就是 null(跳过校验),不会在那种宿主里因缺依赖而 DI 解析失败。

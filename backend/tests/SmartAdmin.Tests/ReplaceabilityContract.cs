@@ -124,6 +124,8 @@ public static class ReplaceabilityContract
         (typeof(IFilePathConfigService), ServiceLifetime.Scoped),
         (typeof(IFilePathResolver), ServiceLifetime.Scoped),
         (typeof(IFilePathUploadService), ServiceLifetime.Scoped),
+        (typeof(IFilePathDownloadService), ServiceLifetime.Scoped),
+        (typeof(IFilePathLinkSigner), ServiceLifetime.Singleton),
         (typeof(IFilePathAccessChecker), ServiceLifetime.Scoped),
         (typeof(IFileServerConnector), ServiceLifetime.Singleton),
     ];

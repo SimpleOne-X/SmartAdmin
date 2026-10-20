@@ -317,7 +317,7 @@ public class FilePathUploadService(
             AdminException.ThrowIf(GetAttributes(full).HasFlag(FileAttributes.Directory), ErrorCode.FilePathFileNotFound);
             File.Delete(full);
         }
-        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception e) when (FileAccessFailure.IsMissingFile(e))
         {
             throw new AdminException(ErrorCode.FilePathFileNotFound);
         }

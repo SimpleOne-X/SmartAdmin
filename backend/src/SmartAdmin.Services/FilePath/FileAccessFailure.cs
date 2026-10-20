@@ -43,6 +43,16 @@ public static class FileAccessFailure
         _ => Unknown,
     };
 
+    /// <summary>ERROR_INVALID_NAME 包成的 HRESULT:Windows 对含 <c>* ? &lt; &gt; | "</c> 的名字这样报。</summary>
+    private const int InvalidName = unchecked((int)0x8007007B);
+
+    /// <summary>
+    /// 异常是否表示「这个文件不存在」:文件或其上级目录找不到,或者名字含 Windows 不接受的字符(这样的文件不可能存在)。
+    /// 拒绝访问、共享断开、超时不算——它们是文件夹访问不了,不能让调用方当作文件已经没了。删除和下载共用这一个判断。
+    /// </summary>
+    public static bool IsMissingFile(Exception e) =>
+        e is FileNotFoundException or DirectoryNotFoundException or IOException { HResult: InvalidName };
+
     /// <summary>异常 → 「文件夹不可访问」业务异常,原因码放进 args.reason,原异常留作 InnerException 供日志。</summary>
     public static AdminException ToError(Exception e) =>
         new(ErrorCode.FilePathFolderUnavailable, e, new Dictionary<string, object?> { ["reason"] = FromException(e) });

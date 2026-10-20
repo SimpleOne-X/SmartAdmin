@@ -226,6 +226,7 @@ public static class ServicesSetup
         services.TryAddScoped<IFilePathConfigService, FilePathConfigService>();
         services.TryAddScoped<IFilePathResolver, FilePathResolver>();
         services.TryAddScoped<IFilePathUploadService, FilePathUploadService>();
+        services.TryAddScoped<IFilePathDownloadService, FilePathDownloadService>();
         services.TryAddScoped<IFilePathAccessChecker, FilePathAccessChecker>();
         // 分片暂存清扫:双注册同一实例(同 FileGcService),单例可按类型注入直接调 SweepOnce,同一实例再作为后台任务托管
         services.TryAddSingleton<FilePathStagingSweeper>();
