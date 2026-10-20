@@ -54,6 +54,13 @@ public class FilePathUploadServiceTests
         protected override string NewShortId() => ids[_next++];
     }
 
+    /// <summary>读文件属性时抛指定异常:模拟共享断开、权限丢失(File.Exists 会把这些都报成「不存在」)。</summary>
+    private sealed class UnreachableService(IFilePathResolver resolver, Exception failure)
+        : FilePathUploadService(resolver, new FakeTimeProvider(Fixed), NullLogger<FilePathUploadService>.Instance)
+    {
+        protected override FileAttributes GetAttributes(string fullPath) => throw failure;
+    }
+
     /// <summary>先吐出一段内容,再抛 <see cref="IOException"/>:模拟传输中途断开。</summary>
     private sealed class BrokenStream : Stream
     {
@@ -161,7 +168,10 @@ public class FilePathUploadServiceTests
     [InlineData(@"\\nas01\files")]
     [InlineData("a//b")]
     [InlineData("a/")]
-    public async Task Business_path_rejects_traversal_sub_path(string subPath)
+    [InlineData("a/ /b")]
+    [InlineData("a/.. /b")]
+    [InlineData("a/.../b")]
+    public async Task Business_path_rejects_traversal_or_blank_sub_path(string subPath)
     {
         await using var env = FilePathTestEnv.Create();
         var code = await AddPathAsync(env, FilePathNamingRule.BusinessPath);
@@ -359,13 +369,50 @@ public class FilePathUploadServiceTests
         Assert.False(File.Exists(DiskPath(env, output.Path)));
 
         // 隐藏段、不存在、不合法的路径一律是「文件不存在」,隐藏文件原样保留
-        foreach (var path in new[] { ".x/a.pdf", @".x\a.pdf", "2026/10/none.pdf", "../x.pdf", "a:b.pdf", "" })
+        foreach (var path in new[] { ".x/a.pdf", @".x\a.pdf", "2026/10/none.pdf", "no-such-dir/none.pdf", "../x.pdf", "a:b.pdf", "" })
             Assert.Equal(ErrorCode.FilePathFileNotFound, (await Rejected(service.DeleteAsync(code, path))).Code);
         Assert.True(File.Exists(hidden));
+    }
 
-        // 目录不是文件,不删
-        Assert.Equal(ErrorCode.FilePathFileNotFound, (await Rejected(service.DeleteAsync(code, "2026"))).Code);
-        Assert.True(Directory.Exists(DiskPath(env, "2026")));
+    [Fact]
+    public async Task Delete_of_a_folder_is_file_not_found_and_keeps_it()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+        var service = NewService(env);
+        var output = await service.UploadAsync(code, Upload("a.pdf"));
+        var folder = Path.GetDirectoryName(DiskPath(env, output.Path))!;
+
+        // 路径指向目录:不是文件,不删,里面的文件也还在
+        var ex = await Rejected(service.DeleteAsync(code, "2026/10"));
+
+        Assert.Equal(ErrorCode.FilePathFileNotFound, ex.Code);
+        Assert.True(Directory.Exists(folder));
+        Assert.True(File.Exists(DiskPath(env, output.Path)));
+    }
+
+    [Fact]
+    public async Task Delete_reports_access_failure_instead_of_missing_file()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env);
+        var file = DiskPath(env, "a.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        await File.WriteAllTextAsync(file, "还在");
+        var resolver = env.Service<IFilePathResolver>();
+
+        // 共享断开 / 权限丢失不能报成「文件不存在」:业务会据此以为已经删了,NAS 上留下孤儿文件
+        var offline = await Rejected(new UnreachableService(resolver, new IOException("共享已断开", unchecked((int)0x80070035)))
+            .DeleteAsync(code, "a.pdf"));
+        Assert.Equal(ErrorCode.FilePathFolderUnavailable, offline.Code);
+        Assert.Equal(FileAccessFailure.NetworkPathNotFound, offline.Args!["reason"]);
+
+        var denied = await Rejected(new UnreachableService(resolver, new UnauthorizedAccessException())
+            .DeleteAsync(code, "a.pdf"));
+        Assert.Equal(ErrorCode.FilePathFolderUnavailable, denied.Code);
+        Assert.Equal(FileAccessFailure.AccessDenied, denied.Args!["reason"]);
+
+        Assert.True(File.Exists(file));
     }
 
     [Fact]

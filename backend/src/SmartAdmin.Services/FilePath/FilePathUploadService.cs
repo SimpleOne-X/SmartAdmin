@@ -25,6 +25,10 @@ public class FilePathUploadService(
     /// <summary>覆盖时替换目标文件的最多尝试次数(含第一次)。</summary>
     private const int MaxReplaceAttempts = 12;
 
+    // ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION 包成的 HRESULT
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
     /// <inheritdoc />
     public virtual async Task<FilePathUploadOutput> UploadAsync(string code, FilePathUploadInput input, CancellationToken ct = default)
     {
@@ -68,8 +72,13 @@ public class FilePathUploadService(
         var full = resolver.Combine(target, relative);
         try
         {
-            AdminException.ThrowIf(!File.Exists(full), ErrorCode.FilePathFileNotFound);
+            // 不用 File.Exists:它把共享断开、拒绝访问、超时都报成 false,调用方会当成「已经删了」而丢掉自己的记录,文件却还在
+            AdminException.ThrowIf(GetAttributes(full).HasFlag(FileAttributes.Directory), ErrorCode.FilePathFileNotFound);
             File.Delete(full);
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new AdminException(ErrorCode.FilePathFileNotFound);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -77,6 +86,12 @@ public class FilePathUploadService(
             throw FileAccessFailure.ToError(e);
         }
     }
+
+    /// <summary>
+    /// 读文件属性。文件或其上级目录不存在抛 <see cref="FileNotFoundException"/> / <see cref="DirectoryNotFoundException"/>,
+    /// 其余失败(拒绝访问、共享断开)抛原异常——删除据此区分「确实没有」和「访问不了」。
+    /// </summary>
+    protected virtual FileAttributes GetAttributes(string fullPath) => File.GetAttributes(fullPath);
 
     /// <summary>
     /// 只读、后缀、大小校验。后缀取清洗后文件名的后缀并转小写,和落盘的后缀是同一个;没有后缀的文件(<c>README</c>)不在白名单里,一律拒绝。
@@ -122,7 +137,8 @@ public class FilePathUploadService(
 
     /// <summary>
     /// 清洗 <paramref name="subPath"/> 的每一段(按文件名规则:冒号等非法字符换成 <c>_</c>)。
-    /// 拒绝绝对路径(首段为空)、空段、<c>.</c>/<c>..</c> 段——它们若交给清洗会变成普通名字,悄悄改写调用方的意图;
+    /// 拒绝绝对路径(首段为空)、空段,以及去掉末尾的点和空格后为空的段(<c>.</c>、<c>..</c>、<c>...</c>、空白)——
+    /// 它们若交给清洗会变成 <c>file</c> 这样的普通名字,悄悄改写调用方的意图;
     /// 清洗后超过 255 字节的段也拒绝:清洗只截主干,点后面很长的「后缀」不会被截,而这些段不经后缀白名单。
     /// </summary>
     protected virtual IEnumerable<string> SanitizeSubPath(string? subPath)
@@ -132,7 +148,7 @@ public class FilePathUploadService(
         var segments = new List<string>();
         foreach (var raw in subPath.Replace('\\', '/').Split('/'))
         {
-            if (raw.Length == 0 || raw is "." or "..") throw new AdminException(ErrorCode.FilePathInvalidPath);
+            if (raw.TrimEnd('.', ' ').Length == 0) throw new AdminException(ErrorCode.FilePathInvalidPath);
 
             var segment = FilePathRules.SanitizeFileName(raw);
             if (Encoding.UTF8.GetByteCount(segment) > MaxSegmentBytes) throw new AdminException(ErrorCode.FilePathInvalidPath);
@@ -150,7 +166,8 @@ public class FilePathUploadService(
 
     /// <summary>
     /// 把 <paramref name="content"/> 写成文件夹里的 <paramref name="relativePath"/>。
-    /// 同名且同名策略是覆盖(只对业务指定路径生效)时走临时文件替换,否则撞名抛 <see cref="ErrorCode.FilePathFileExists"/>。
+    /// 业务指定路径且同名策略是覆盖时,每次写入都先写临时文件再替换目标(不论目标此刻是否已存在);
+    /// 其余情况直接 <see cref="FileMode.CreateNew"/>,撞名抛 <see cref="ErrorCode.FilePathFileExists"/>。
     /// <see cref="IOException"/> 与 <see cref="UnauthorizedAccessException"/> 先记完整异常,再转成
     /// <see cref="ErrorCode.FilePathFolderUnavailable"/>——包括 <paramref name="content"/> 自己读失败。失败时不留半截文件。
     /// </summary>
@@ -219,7 +236,7 @@ public class FilePathUploadService(
 
     /// <summary>
     /// 用临时文件替换目标。Windows 上同一目标同时被几个替换抢着改(或被杀毒软件、仍开着的读取短暂占住)时,
-    /// <see cref="File.Move(string, string, bool)"/> 会瞬时失败(拒绝访问、共享冲突),稍等即可;所以带抖动退避重试,
+    /// <see cref="File.Move(string, string, bool)"/> 会瞬时失败(拒绝访问、共享冲突、锁冲突),稍等即可;所以只对这几种失败带抖动退避重试,
     /// 最多 <see cref="MaxReplaceAttempts"/> 次,最坏累计等待约 1.4 秒,仍失败就把最后一次的异常抛出去。
     /// </summary>
     private async Task ReplaceAsync(string temp, string full, CancellationToken ct)
@@ -231,13 +248,17 @@ public class FilePathUploadService(
                 File.Move(temp, full, overwrite: true);
                 return;
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException && attempt < MaxReplaceAttempts)
+            catch (Exception e) when (attempt < MaxReplaceAttempts && IsTransientReplaceFailure(e))
             {
                 logger.LogDebug(e, "替换 {Path} 被占用,第 {Attempt} 次尝试失败,稍后重试", full, attempt);
                 await Task.Delay(Random.Shared.Next(5, 20 * attempt + 5), ct);
             }
         }
     }
+
+    /// <summary>瞬时占用:拒绝访问(替换抢同一目标时 Windows 这样报),或 Win32 的共享冲突、锁冲突。其余 IO 错误是永久的,不重试。</summary>
+    private static bool IsTransientReplaceFailure(Exception e) =>
+        e is UnauthorizedAccessException || e is IOException { HResult: SharingViolation or LockViolation };
 
     private static FileStream OpenNew(string path) =>
         new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
