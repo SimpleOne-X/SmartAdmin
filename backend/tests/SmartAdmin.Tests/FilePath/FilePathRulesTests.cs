@@ -196,4 +196,29 @@ public class FilePathRulesTests
         Assert.Equal(ErrorCode.FilePathFolderUnavailable, ex.Code);
         Assert.Equal(FileAccessFailure.AccessDenied, ex.Args!["reason"]);
     }
+
+    [Fact]
+    public void RoleIds_format_sorted_distinct_and_parse_back()
+    {
+        Assert.Equal("3,5", FilePathRules.FormatRoleIds([5, 3, 5]));
+        Assert.Null(FilePathRules.FormatRoleIds([]));
+        Assert.Null(FilePathRules.FormatRoleIds(null));
+
+        Assert.Equal([3L, 5L], FilePathRules.ParseRoleIds("3,5"));
+        Assert.Equal([3L, 5L], FilePathRules.ParseRoleIds(" 3 , x,,5 "));
+        Assert.Empty(FilePathRules.ParseRoleIds(null));
+        Assert.Empty(FilePathRules.ParseRoleIds(""));
+    }
+
+    [Fact]
+    public void IsAllowedRoot_requires_absolute_path_inside_whitelist()
+    {
+        var root = Path.Combine(Tmp, "files");
+
+        Assert.True(FilePathRules.IsAllowedRoot(root, [root]));
+        Assert.True(FilePathRules.IsAllowedRoot(Path.Combine(root, "sub"), [root]));
+        Assert.False(FilePathRules.IsAllowedRoot(root + "2", [root]));
+        Assert.False(FilePathRules.IsAllowedRoot(root, []));
+        Assert.False(FilePathRules.IsAllowedRoot(Path.Combine("files", "sub"), [Path.GetFullPath("files")]));
+    }
 }

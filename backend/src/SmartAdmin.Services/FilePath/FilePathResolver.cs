@@ -1,0 +1,87 @@
+using SmartAdmin.Core;
+using SmartAdmin.SqlSugar;
+
+namespace SmartAdmin.Services;
+
+/// <summary>
+/// <see cref="IFilePathResolver"/> 默认实现。两张表各自整表读穿透缓存、变更即失效(由各自的管理服务负责),
+/// 规则在每次解析时由这两份缓存组合——改服务器或改文件路径,下一次解析就是新的。
+/// </summary>
+public class FilePathResolver(
+    IRepository<SysFilePath> paths,
+    IRepository<SysFileServer> servers,
+    ICacheProvider cache,
+    AdminCacheOptions cacheOptions,
+    IFileServerConnector connector,
+    AdminFilePathOptions options) : IFilePathResolver
+{
+    /// <inheritdoc />
+    public virtual async Task<FilePathRule> GetRuleAsync(string code, CancellationToken ct = default)
+    {
+        var path = (await LoadPathsAsync(ct)).FirstOrDefault(p => p.Enabled && p.Code == code);
+        AdminException.ThrowIf(path is null, ErrorCode.FilePathNotFound);
+
+        var server = (await LoadServersAsync(ct)).FirstOrDefault(s => s.Enabled && s.Id == path.ServerId);
+        AdminException.ThrowIf(server is null, ErrorCode.FileServerNotFound);
+
+        return ToRule(path, server);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<FilePathTarget> ResolveAsync(string code, CancellationToken ct = default)
+    {
+        var rule = await GetRuleAsync(code, ct);
+
+        // 白名单可能在保存之后改小,所以读取时再判一次;不能依赖保存时的结果
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rule.Server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+
+        try
+        {
+            await connector.EnsureConnectedAsync(rule.Server, retryFailed: false, ct);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or TimeoutException)
+        {
+            throw FileAccessFailure.ToError(e);
+        }
+
+        return new FilePathTarget(rule, rule.Folder is null
+            ? Path.GetFullPath(rule.Server.RootPath)
+            : FilePathRules.Combine(rule.Server.RootPath, rule.Folder));
+    }
+
+    /// <inheritdoc />
+    public virtual string Combine(FilePathTarget target, string relativePath) =>
+        FilePathRules.Combine(target.FolderFullPath, FilePathRules.NormalizeRelative(relativePath, allowEmpty: false));
+
+    /// <summary>配置行 + 文件服务器 → 规则。后缀、角色在这里从库里的逗号串拆成列表。</summary>
+    protected virtual FilePathRule ToRule(SysFilePath path, SysFileServer server) =>
+        new(path.Id, path.Code, new FileServerTarget(server.Id, server.RootPath, server.UserName, server.PasswordProtected),
+            path.Folder, path.NamingRule, path.OnConflict, path.ReadOnly,
+            FilePathRules.ParseExtensions(path.AllowedExtensions), path.MaxSizeMb,
+            FilePathRules.ParseRoleIds(path.UploadRoleIds), FilePathRules.ParseRoleIds(path.DownloadRoleIds));
+
+    /// <summary>文件路径整表读穿透缓存;变更即失效(由 <see cref="FilePathConfigService"/> 负责失效)。</summary>
+    protected virtual async Task<IReadOnlyList<SysFilePath>> LoadPathsAsync(CancellationToken ct)
+    {
+        var cached = await cache.GetAsync<List<SysFilePath>>(CacheKeys.FilePaths(), ct);
+        if (cached is not null) return cached;
+
+        var rows = await paths.AsQueryable().ToListAsync(ct);
+        await cache.SetAsync(CacheKeys.FilePaths(), rows, CacheTtl(), ct);
+        return rows;
+    }
+
+    /// <summary>文件服务器整表读穿透缓存;变更即失效(由 <see cref="FileServerService"/> 负责失效)。</summary>
+    protected virtual async Task<IReadOnlyList<SysFileServer>> LoadServersAsync(CancellationToken ct)
+    {
+        var cached = await cache.GetAsync<List<SysFileServer>>(CacheKeys.FileServers(), ct);
+        if (cached is not null) return cached;
+
+        var rows = await servers.AsQueryable().ToListAsync(ct);
+        await cache.SetAsync(CacheKeys.FileServers(), rows, CacheTtl(), ct);
+        return rows;
+    }
+
+    private TimeSpan? CacheTtl() =>
+        cacheOptions.PermissionMinutes > 0 ? TimeSpan.FromMinutes(cacheOptions.PermissionMinutes) : null;
+}

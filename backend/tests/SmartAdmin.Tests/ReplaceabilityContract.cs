@@ -121,6 +121,8 @@ public static class ReplaceabilityContract
 
         // 文件路径
         (typeof(IFileServerService), ServiceLifetime.Scoped),
+        (typeof(IFilePathConfigService), ServiceLifetime.Scoped),
+        (typeof(IFilePathResolver), ServiceLifetime.Scoped),
         (typeof(IFileServerConnector), ServiceLifetime.Singleton),
     ];
 

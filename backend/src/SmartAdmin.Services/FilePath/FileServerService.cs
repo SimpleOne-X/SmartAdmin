@@ -116,10 +116,7 @@ public class FileServerService(
 
         await EnsureHostAccountConsistentAsync(rootPath, userName, excludingId);
 
-        // 相对路径会按进程当前目录解析,结果随启动方式漂移,所以只收绝对路径
-        AdminException.ThrowIf(
-            !Path.IsPathFullyQualified(rootPath) || !FilePathRules.IsUnderAnyRoot(rootPath, options.AllowedRoots),
-            ErrorCode.FileServerRootNotAllowed);
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
 
         await EnsureNameAvailableAsync(input.Name, excludingId);
     }

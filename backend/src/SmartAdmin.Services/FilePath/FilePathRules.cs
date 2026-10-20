@@ -74,6 +74,26 @@ public static class FilePathRules
     public static bool IsUnderAnyRoot(string path, IEnumerable<string> roots) =>
         roots.Any(root => IsUnder(path, root));
 
+    /// <summary>
+    /// 文件服务器根路径是否可用:必须是绝对路径(相对路径按进程当前目录解析,结果随启动方式漂移),且在白名单内。
+    /// 保存时和读取时(白名单可能已经改小)用的是同一个判断。
+    /// </summary>
+    public static bool IsAllowedRoot(string rootPath, IEnumerable<string> allowedRoots) =>
+        Path.IsPathFullyQualified(rootPath) && IsUnderAnyRoot(rootPath, allowedRoots);
+
+    /// <summary>角色 Id 列表 → 库里存的逗号串:升序、去重;空或 null 存 <c>null</c>。</summary>
+    public static string? FormatRoleIds(IEnumerable<long>? roleIds)
+    {
+        var ids = (roleIds ?? []).Distinct().Order().ToList();
+        return ids.Count == 0 ? null : string.Join(',', ids);
+    }
+
+    /// <summary>库里的逗号串 → 角色 Id 列表,与 <see cref="FormatRoleIds"/> 互逆;空串、null 和解析不了的项都当没有。</summary>
+    public static IReadOnlyList<long> ParseRoleIds(string? csv) =>
+        (csv ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => long.TryParse(s, out var id) ? id : (long?)null)
+            .OfType<long>().ToList();
+
     /// <summary>相对路径中是否有以点开头的段(探针文件、覆盖用的临时文件、系统隐藏文件都是这种,下载一律当不存在)。</summary>
     public static bool HasHiddenSegment(string relative) =>
         relative.Split('/', '\\').Any(segment => segment.StartsWith('.'));
