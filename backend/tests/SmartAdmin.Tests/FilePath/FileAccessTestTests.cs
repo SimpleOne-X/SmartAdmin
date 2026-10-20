@@ -162,9 +162,11 @@ public class FileAccessTestTests
     {
         await using var env = FilePathTestEnv.Create();
         env.Connector.Hang = true;
+        // 先解析服务:第一次取服务会启动宿主(建表、种子),不能算进计时
+        var service = env.Service<IFileServerService>();
         var watch = Stopwatch.StartNew();
 
-        var result = await env.Service<IFileServerService>().TestAsync(new FileServerTestInput(null, env.Root, null, null));
+        var result = await service.TestAsync(new FileServerTestInput(null, env.Root, null, null));
 
         Assert.False(result.Ok);
         Assert.Equal(FileAccessFailure.Timeout, result.Reason);
