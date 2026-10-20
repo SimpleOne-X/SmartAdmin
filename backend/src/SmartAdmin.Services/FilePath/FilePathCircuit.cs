@@ -24,11 +24,7 @@ public class FilePathCircuit(TimeProvider time, ILogger<FilePathCircuit> logger)
         if (!_servers.TryGetValue(serverId, out var state)) return;
         lock (state)
         {
-            if (state.OpenUntil is not { } until) return;
-            var now = time.GetUtcNow();
-            if (now < until) throw Unavailable(state.Reason!);
-            // 放这一个请求过去试探,同时把窗口往后推:它的结果出来之前其余请求照旧被挡
-            state.OpenUntil = now + OpenDuration;
+            if (state.OpenUntil is { } until && time.GetUtcNow() < until) throw Unavailable(state.Reason!);
         }
     }
 
@@ -39,6 +35,7 @@ public class FilePathCircuit(TimeProvider time, ILogger<FilePathCircuit> logger)
         if (!state.Slots.Wait(0)) throw Unavailable(FileAccessFailure.Busy);
         try
         {
+            if (!probe) Admit(state);
             T result;
             try
             {
@@ -87,6 +84,21 @@ public class FilePathCircuit(TimeProvider time, ILogger<FilePathCircuit> logger)
         if (failure is OperationCanceledException) return null;
         var reason = FileAccessFailure.FromException(failure);
         return reason is FileAccessFailure.NetworkPathNotFound or FileAccessFailure.Timeout ? reason : null;
+    }
+
+    /// <summary>
+    /// 熔断打开且没满时长:直接报。满了:这个请求去试探,窗口往后推一段,它的结果出来之前其余请求照旧被挡。
+    /// 试探放在真正碰文件系统的这一步而不是 <see cref="ThrowIfOpen"/>:只写暂存的分片这类请求不碰服务器,不能占掉试探名额。
+    /// </summary>
+    private void Admit(ServerState state)
+    {
+        lock (state)
+        {
+            if (state.OpenUntil is not { } until) return;
+            var now = time.GetUtcNow();
+            if (now < until) throw Unavailable(state.Reason!);
+            state.OpenUntil = now + OpenDuration;
+        }
     }
 
     private void Close(long serverId, ServerState state)

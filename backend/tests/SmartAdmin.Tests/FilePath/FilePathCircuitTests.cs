@@ -5,7 +5,7 @@ using SmartAdmin.Services;
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 文件服务器熔断:网络类失败后 30 秒内直接报「文件夹无法访问」、不再碰文件系统,30 秒后放一个请求试探;
+/// 文件服务器熔断:网络类失败后 30 秒内直接报「文件夹无法访问」、不再碰文件系统,30 秒后放一个碰文件系统的请求试探;
 /// 在途满了立即报「繁忙」;测试连接、在线状态这类探针不打开熔断,成功时关闭熔断。
 /// </summary>
 public class FilePathCircuitTests
@@ -32,6 +32,13 @@ public class FilePathCircuitTests
         return e;
     }
 
+    private static async Task<AdminException> RejectedAsync(Task task)
+    {
+        var e = await Assert.ThrowsAsync<AdminException>(() => task);
+        Assert.Equal(ErrorCode.FilePathFolderUnavailable, e.Code);
+        return e;
+    }
+
     [Fact]
     public async Task Network_failure_opens_the_circuit_for_30_seconds_then_lets_one_request_through()
     {
@@ -39,22 +46,30 @@ public class FilePathCircuitTests
         var calls = 0;
         await Assert.ThrowsAsync<IOException>(() => circuit.RunAsync<int>(1, () => { calls++; throw NetworkGone(); }));
 
-        // 打开期间同一台服务器直接报上次失败的原因;别的服务器不受影响
+        // 打开期间同一台服务器直接报上次失败的原因,不执行访问;别的服务器不受影响
         Assert.Equal(FileAccessFailure.NetworkPathNotFound, Rejected(() => circuit.ThrowIfOpen(1)).Args!["reason"]);
+        await RejectedAsync(circuit.RunAsync(1, () => { calls++; return Task.FromResult(0); }));
         circuit.ThrowIfOpen(2);
         time.Advance(TimeSpan.FromSeconds(29));
         Rejected(() => circuit.ThrowIfOpen(1));
 
-        // 满 30 秒放一个请求过去试探,它的结果出来之前其余请求照旧直接报
+        // 满 30 秒:不碰文件系统的请求(如分片写暂存)照常通过,不占试探名额
         time.Advance(TimeSpan.FromSeconds(1));
         circuit.ThrowIfOpen(1);
+        circuit.ThrowIfOpen(1);
+
+        // 碰文件系统的放一个过去试探,它的结果出来之前其余请求照旧直接报
+        var trial = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var trialRun = circuit.RunAsync(1, () => { calls++; return trial.Task; });
+        await RejectedAsync(circuit.RunAsync(1, () => { calls++; return Task.FromResult(0); }));
         Rejected(() => circuit.ThrowIfOpen(1));
 
         // 试探成功,熔断关闭
-        Assert.Equal(7, await circuit.RunAsync(1, () => Task.FromResult(7)));
+        trial.SetResult(7);
+        Assert.Equal(7, await trialRun);
         circuit.ThrowIfOpen(1);
-        circuit.ThrowIfOpen(1);
-        Assert.Equal(1, calls);
+        Assert.Equal(3, await circuit.RunAsync(1, () => Task.FromResult(3)));
+        Assert.Equal(2, calls);
     }
 
     [Fact]
