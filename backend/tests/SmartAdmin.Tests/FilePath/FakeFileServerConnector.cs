@@ -17,6 +17,9 @@ public sealed class FakeFileServerConnector : IFileServerConnector
     /// <summary>为真时,每次调用在记录之后永不返回(模拟连不上又不报错的主机)。</summary>
     public bool Hang { get; set; }
 
+    /// <summary>每次调用在记录之后先等这么久再返回(模拟慢一点但连得上的主机)。</summary>
+    public TimeSpan Delay { get; set; }
+
     /// <summary>到目前为止的调用快照(并发调用下也安全)。</summary>
     public IReadOnlyList<(FileServerTarget Target, bool RetryFailed)> Calls
     {
@@ -35,5 +38,6 @@ public sealed class FakeFileServerConnector : IFileServerConnector
         }
         if (Fail is not null) throw Fail;
         if (Hang) await new TaskCompletionSource().Task;
+        if (Delay > TimeSpan.Zero) await Task.Delay(Delay, ct);
     }
 }

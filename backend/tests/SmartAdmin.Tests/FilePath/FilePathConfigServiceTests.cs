@@ -348,4 +348,24 @@ public class FilePathConfigServiceTests
         Assert.True(status.Online);
         circuit.ThrowIfOpen(serverId);
     }
+
+    [Fact]
+    public async Task Status_of_a_page_with_more_folders_than_the_in_flight_limit_reports_no_busy()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var serverId = await env.AddServerAsync();
+        var service = env.Service<IFilePathConfigService>();
+        var ids = new List<long>();
+        for (var i = 0; i < 20; i++)
+        {
+            Directory.CreateDirectory(Path.Combine(env.Root, $"F{i}"));
+            ids.Add(await service.AddAsync(Input(serverId, folder: $"F{i}", readOnly: true, extensions: null, maxSizeMb: null)));
+        }
+        env.Connector.Delay = TimeSpan.FromMilliseconds(200);
+
+        // 一页 20 行挂在同一台服务器上,探测不能自己把这台服务器的 16 个在途名额挤满
+        var statuses = await service.StatusAsync(ids);
+
+        Assert.All(statuses, s => Assert.True(s.Online, $"{s.Id}: {s.Reason}"));
+    }
 }

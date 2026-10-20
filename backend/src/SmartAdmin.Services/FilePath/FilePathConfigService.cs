@@ -118,17 +118,31 @@ public class FilePathConfigService(
             ? []
             : (await servers.AsQueryable().Where(s => serverIds.Contains(s.Id)).ToListAsync(ct)).ToDictionary(s => s.Id);
 
-        return await Task.WhenAll(idList.Where(rows.ContainsKey).Select(id =>
+        // 一页的行可能都挂在同一台服务器上:每台同时只探几个,别让探测自己挤满它的在途名额(业务请求也在用)。
+        // 排队在超时之外,排着的行不会被算成超时
+        var gates = serverRows.Keys.ToDictionary(sid => sid, _ => new SemaphoreSlim(StatusProbesPerServer));
+        return await Task.WhenAll(idList.Where(rows.ContainsKey).Select(async id =>
         {
             var path = rows[id];
-            var target = serverRows.TryGetValue(path.ServerId, out var s)
-                ? new FileServerTarget(s.Id, s.RootPath, s.UserName, s.PasswordProtected)
-                : null;
-            return FileAccessProbe.StatusAsync(id, t => target is null
-                ? throw new DirectoryNotFoundException()
-                : circuit.RunAsync(target.Id, () => ProbeAsync(target, path.Folder, write: false, retryFailed: false, t), probe: true), ct);
+            if (!serverRows.TryGetValue(path.ServerId, out var s))
+                return await FileAccessProbe.StatusAsync(id, _ => throw new DirectoryNotFoundException(), ct);
+
+            var target = new FileServerTarget(s.Id, s.RootPath, s.UserName, s.PasswordProtected);
+            var gate = gates[s.Id];
+            await gate.WaitAsync(ct);
+            try
+            {
+                return await FileAccessProbe.StatusAsync(id,
+                    t => circuit.RunAsync(target.Id, () => ProbeAsync(target, path.Folder, write: false, retryFailed: false, t), probe: true), ct);
+            }
+            finally
+            {
+                gate.Release();
+            }
         }));
     }
+
+    private const int StatusProbesPerServer = 8;
 
     // ── 内部辅助 ─────────────────────────────────────────────────────
 

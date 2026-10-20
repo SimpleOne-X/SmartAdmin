@@ -24,7 +24,7 @@ public interface IFilePathCircuit
     /// 在途已满抛 <see cref="Core.ErrorCode.FilePathFolderUnavailable"/>(原因 <see cref="FileAccessFailure.Busy"/>),不执行 <paramref name="access"/>。
     /// 熔断打开、还没满时长时同样直接抛(原因沿用);满了就放这一个请求去试探,并把时长往后推,
     /// 它的结果出来之前其余请求照旧被挡,它一直没有结果,再满一段后放下一个。探针不看熔断。
-    /// <paramref name="access"/> 的异常原样抛出:网络类失败打开熔断(<paramref name="probe"/> 为 true 时不打开),其余失败不改变熔断;成功关闭熔断。
+    /// <paramref name="access"/> 的异常原样抛出:网络类失败打开熔断(<paramref name="probe"/> 为 true 时不打开);成功,或者文件不存在、拒绝访问这类说明服务器连得上的失败,关闭熔断;取消不改变熔断。
     /// </summary>
     /// <param name="serverId">文件服务器 Id;熔断和在途名额都按它分开。</param>
     /// <param name="access">真正碰文件系统的那一段。</param>

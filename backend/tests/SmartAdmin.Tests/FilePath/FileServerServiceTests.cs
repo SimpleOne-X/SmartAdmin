@@ -103,6 +103,36 @@ public class FileServerServiceTests
     }
 
     [Fact]
+    public async Task Moving_a_row_with_an_account_to_a_mount_path_needs_no_password_where_accounts_are_unsupported()
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: false, extraRoots: ["//nas01/files"]);
+        var service = env.Service<IFileServerService>();
+        var name = NewName();
+        var id = await service.AddAsync(Input(name, "//nas01/files", "svc-files", "p@ss"));
+
+        // 这个平台不用账号连接,配置页的账号和密码框是置灰的:迁来的行改成挂载路径照常保存
+        await service.UpdateAsync(id, Input(name, env.Root, "svc-files", null));
+
+        Assert.Equal(env.Root, (await RowAsync(env, id)).RootPath);
+    }
+
+    [Fact]
+    public async Task Renaming_a_row_whose_account_differs_only_in_case_leaves_the_others_alone()
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas01/scan"]);
+        var service = env.Service<IFileServerService>();
+        var files = await service.AddAsync(Input("files", "//nas01/files", "Admin", null));
+        var scan = await service.AddAsync(Input("scan", "//nas01/scan", "admin", "p@ss"));
+        var before = await RowAsync(env, scan);
+
+        // 两行账号写法不同但算同一个;只改名称,别的行的账号和密码都不动
+        await service.UpdateAsync(files, Input("files-2", "//nas01/files", "Admin", null));
+
+        var after = await RowAsync(env, scan);
+        Assert.Equal((before.UserName, before.PasswordProtected), (after.UserName, after.PasswordProtected));
+    }
+
+    [Fact]
     public async Task Clearing_user_name_clears_password()
     {
         await using var env = FilePathTestEnv.Create();

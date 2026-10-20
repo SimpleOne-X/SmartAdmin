@@ -44,6 +44,8 @@ public class FilePathCircuit(TimeProvider time, ILogger<FilePathCircuit> logger)
             catch (Exception e)
             {
                 if (!probe) ReportFailure(serverId, e);
+                // 文件不存在、撞名、拒绝访问这类失败说明服务器连得上,试探算成功;取消说明不了什么
+                if (e is not OperationCanceledException && NetworkReason(e) is null) Close(serverId, state);
                 throw;
             }
 

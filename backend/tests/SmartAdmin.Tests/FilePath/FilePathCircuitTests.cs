@@ -112,6 +112,33 @@ public class FilePathCircuitTests
     }
 
     [Fact]
+    public async Task Trial_that_reaches_the_server_closes_the_circuit_even_when_the_request_fails()
+    {
+        var (circuit, time) = Create();
+        await Assert.ThrowsAsync<IOException>(() => circuit.RunAsync<int>(1, () => throw NetworkGone()));
+        time.Advance(TimeSpan.FromSeconds(30));
+
+        // 试探碰到的是文件不存在:服务器是通的,熔断关闭,不再多挡 30 秒
+        await Assert.ThrowsAsync<AdminException>(() => circuit.RunAsync<int>(1, () => throw new AdminException(ErrorCode.FilePathFileNotFound)));
+
+        circuit.ThrowIfOpen(1);
+        Assert.Equal(3, await circuit.RunAsync(1, () => Task.FromResult(3)));
+    }
+
+    [Fact]
+    public async Task Cancelled_trial_does_not_close_the_circuit()
+    {
+        var (circuit, time) = Create();
+        await Assert.ThrowsAsync<IOException>(() => circuit.RunAsync<int>(1, () => throw NetworkGone()));
+        time.Advance(TimeSpan.FromSeconds(30));
+
+        // 取消说明不了服务器通不通
+        await Assert.ThrowsAsync<OperationCanceledException>(() => circuit.RunAsync<int>(1, () => throw new OperationCanceledException()));
+
+        Rejected(() => circuit.ThrowIfOpen(1));
+    }
+
+    [Fact]
     public async Task Full_in_flight_rejects_immediately_without_running_the_access()
     {
         var (circuit, _) = Create();

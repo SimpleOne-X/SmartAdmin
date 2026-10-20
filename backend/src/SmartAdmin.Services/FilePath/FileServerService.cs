@@ -67,12 +67,15 @@ public class FileServerService(
         // 级联只在修改且主机没变时发生;改到另一台主机的,ValidateAsync 已经要求账号与那台主机一致
         var host = ShareHost(entity.RootPath);
         var sameHost = host is not null && string.Equals(host, ShareHost(CleanRootPath(input.RootPath)), StringComparison.OrdinalIgnoreCase);
+        var savedUserName = entity.UserName;
         Apply(entity, input);
         var passwordChanged = entity.UserName is not null && !string.IsNullOrEmpty(input.Password);
+        // 这一行的账号(按原样)和密码都没改就不级联:只改名称不能把它的信封复制给别的行
+        var credentialChanged = passwordChanged || !string.Equals(savedUserName, entity.UserName, StringComparison.Ordinal);
         await servers.ExecuteInTransactionAsync(async () =>
         {
             // 账号按原样比较:只差大小写也要统一写法;信封每次加密都不同,只有这次改了密码才拿它比
-            var others = !sameHost ? [] : (await servers.AsQueryable().Where(s => s.Id != entity.Id).ToListAsync())
+            var others = !sameHost || !credentialChanged ? [] : (await servers.AsQueryable().Where(s => s.Id != entity.Id).ToListAsync())
                 .Where(s => string.Equals(ShareHost(s.RootPath), host, StringComparison.OrdinalIgnoreCase)
                     && (!string.Equals(s.UserName, entity.UserName, StringComparison.Ordinal)
                         || passwordChanged && s.PasswordProtected != entity.PasswordProtected))
@@ -155,9 +158,11 @@ public class FileServerService(
             || !string.Equals(host, ShareHost(rootPath), StringComparison.OrdinalIgnoreCase);
         await ValidateLocationAsync(rootPath, userName, saved?.Id, checkHostAccount);
 
-        // 旧密码只在主机和账号都没变时沿用;否则密码留空就等于把空信封存下来,级联时还会复制给整台主机
+        // 旧密码只在主机和账号都没变时沿用;否则密码留空就等于把空信封存下来,级联时还会复制给整台主机。
+        // 连接器不用账号的平台上配置页填不了密码,账号和密码只是原样留着
         AdminException.ThrowIf(
-            saved is not null && userName is not null && string.IsNullOrEmpty(input.Password) && !CanReuseSavedPassword(saved, rootPath, userName),
+            connector.SupportsCredentials && saved is not null && userName is not null && string.IsNullOrEmpty(input.Password)
+            && !CanReuseSavedPassword(saved, rootPath, userName),
             ErrorCode.FileServerPasswordRequired);
 
         await EnsureNameAvailableAsync(input.Name, saved?.Id);
