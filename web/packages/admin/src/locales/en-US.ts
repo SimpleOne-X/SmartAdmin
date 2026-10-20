@@ -2044,9 +2044,10 @@ export default {
         'The root path is not allowed; ask your administrator to add it to SmartAdmin:FilePath:AllowedRoots',
       shareRequired: 'With an account set, the root path must be a share path like \\\\host\\share',
       accountConflict:
-        'Host {host} already uses another account; one host can only use one account',
+        'Host {host} already uses another account; one host can only use one account. To change it, edit an existing file server on that host',
       inUse: 'This file server is still used by file paths and cannot be deleted',
       dataProtectionKeyMissing: 'The data protection key is unavailable, cannot save the password',
+      passwordRequired: 'The host or account changed, the password must be entered again',
     },
     reason: {
       accessDenied: 'Access denied',
@@ -2156,9 +2157,12 @@ export default {
       rootPathPlaceholder: '\\\\nas01\\files or /mnt/nas01',
       userNamePlaceholder: 'Optional, e.g. svc-files',
       passwordPlaceholder: 'Password',
-      passwordHint:
-        'Leave empty to keep it. Changing the host or account with an empty password clears the old one',
+      passwordHint: 'Leave empty to keep it. Enter it again when the host or account changes',
       passwordReentry: 'The host or account changed, enter the password again',
+      cascadeChange:
+        'Other file servers on the same host will switch to this account and password too',
+      cascadeClear:
+        'All file servers on the same host will be accessed as the identity the backend runs as',
       credentialsUnsupported:
         'This system does not connect to shares with an account. The host provides the credentials when it mounts the share.',
     },

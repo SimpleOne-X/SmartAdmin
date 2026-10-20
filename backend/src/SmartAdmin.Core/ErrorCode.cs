@@ -495,6 +495,10 @@ public enum ErrorCode
     [MsgKey("error.fileServer.dataProtectionKeyMissing")]
     FileServerKeyMissing = 44156,
 
+    /// <summary>修改时换了主机或账号(账号不为空),密码却留空:旧密码不能沿用,必须重新填写</summary>
+    [MsgKey("error.fileServer.passwordRequired")]
+    FileServerPasswordRequired = 44157,
+
     // ── 45xxx 消息通知 ───────────────────────────────────────────────
 
     /// <summary>通知不存在(或已被删除)</summary>

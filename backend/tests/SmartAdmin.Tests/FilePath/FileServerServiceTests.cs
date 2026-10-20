@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
@@ -66,23 +67,39 @@ public class FileServerServiceTests
         Assert.True((await service.GetAsync(id)).HasPassword);
     }
 
-    [Theory]
-    [InlineData("//nas02/files", "svc-files", false)]   // 换了主机
-    [InlineData("//nas01/files", "svc-other", false)]   // 换了账号
-    [InlineData("//nas01/files", "SVC-FILES", true)]    // 账号只差大小写,算同一个
-    public async Task Blank_password_on_update_kept_only_for_same_host_and_account(string root, string userName, bool kept)
+    [Fact]
+    public async Task Blank_password_on_update_kept_when_account_differs_only_in_case()
     {
-        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas02/files"]);
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files"]);
         var service = env.Service<IFileServerService>();
         var name = NewName();
         var id = await service.AddAsync(Input(name, "//nas01/files", "svc-files", "p@ss"));
         var before = (await RowAsync(env, id)).PasswordProtected;
 
-        await service.UpdateAsync(id, Input(name, root, userName, null));
+        // 账号只差大小写算同一个账号:密码留空照样沿用,账号按新的写法保存
+        await service.UpdateAsync(id, Input(name, "//nas01/files", "SVC-FILES", null));
 
-        // 旧密码不跟着去新主机、也不配给新账号
-        Assert.Equal(kept ? before : null, (await RowAsync(env, id)).PasswordProtected);
-        Assert.Equal(kept, (await service.GetAsync(id)).HasPassword);
+        var row = await RowAsync(env, id);
+        Assert.Equal(("SVC-FILES", before), (row.UserName, row.PasswordProtected));
+    }
+
+    [Theory]
+    [InlineData("//nas02/files", "svc-files")]   // 换了主机
+    [InlineData("//nas01/files", "svc-other")]   // 换了账号
+    public async Task Blank_password_rejected_when_host_or_account_changes(string root, string userName)
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas02/files"]);
+        var service = env.Service<IFileServerService>();
+        var name = NewName();
+        var id = await service.AddAsync(Input(name, "//nas01/files", "svc-files", "p@ss"));
+        var before = await RowAsync(env, id);
+
+        // 旧密码不能带去新主机、也不能配给新账号;清空的信封更不能级联给整台主机,所以必须重填
+        var ex = await Rejected(service.UpdateAsync(id, Input(name, root, userName, null)));
+
+        Assert.Equal(ErrorCode.FileServerPasswordRequired, ex.Code);
+        var after = await RowAsync(env, id);
+        Assert.Equal((before.RootPath, before.UserName, before.PasswordProtected), (after.RootPath, after.UserName, after.PasswordProtected));
     }
 
     [Fact]
@@ -273,5 +290,173 @@ public class FileServerServiceTests
         await Prime();
         await service.DeleteAsync(id);
         await AssertEvicted("删除");
+    }
+
+    // ── 同一主机的账号与密码一起改 ─────────────────────────────────────
+
+    /// <summary>nas01 上两行(files、scan),nas02 上一行;账号密码各自一致。</summary>
+    private static async Task<(long Files, long Scan, long Other)> HostRowsAsync(FilePathTestEnv env)
+    {
+        var service = env.Service<IFileServerService>();
+        var files = await service.AddAsync(Input("files", "//nas01/files", "svc-files", "p@ss"));
+        var scan = await service.AddAsync(Input("scan", "//nas01/scan", "svc-files", "p@ss"));
+        var other = await service.AddAsync(Input("other", "//nas02/files", "svc-other", "x"));
+        return (files, scan, other);
+    }
+
+    private static FilePathTestEnv HostEnv(Action<IServiceCollection>? overrides = null) =>
+        FilePathTestEnv.Create(supportsCredentials: true, overrides: overrides, extraRoots: ["//nas01/files", "//nas01/scan", "//nas02/files"]);
+
+    private static async Task<(string? UserName, string? Envelope)> CredentialAsync(FilePathTestEnv env, long id)
+    {
+        var row = await RowAsync(env, id);
+        return (row.UserName, row.PasswordProtected);
+    }
+
+    [Fact]
+    public async Task Changing_account_updates_every_row_on_the_same_host()
+    {
+        await using var env = HostEnv();
+        var (files, scan, other) = await HostRowsAsync(env);
+        var otherBefore = await CredentialAsync(env, other);
+
+        await env.Service<IFileServerService>().UpdateAsync(files, Input("files", "//nas01/files", "svc-new", "n3w"));
+
+        var a = await CredentialAsync(env, files);
+        Assert.Equal(("svc-new", a.Envelope), await CredentialAsync(env, scan));
+        Assert.Equal("n3w", env.Service<ISecretProtector>().Unprotect(a.Envelope!));
+        // 别的主机不动
+        Assert.Equal(otherBefore, await CredentialAsync(env, other));
+    }
+
+    [Fact]
+    public async Task Changing_only_the_password_updates_every_row_on_the_same_host()
+    {
+        await using var env = HostEnv();
+        var (files, scan, _) = await HostRowsAsync(env);
+
+        await env.Service<IFileServerService>().UpdateAsync(scan, Input("scan", "//nas01/scan", "svc-files", "n3w"));
+
+        var b = await CredentialAsync(env, scan);
+        Assert.Equal(("svc-files", b.Envelope), await CredentialAsync(env, files));
+        Assert.Equal("n3w", env.Service<ISecretProtector>().Unprotect(b.Envelope!));
+    }
+
+    [Fact]
+    public async Task Account_case_change_updates_every_row_on_the_same_host()
+    {
+        await using var env = HostEnv();
+        var (files, scan, _) = await HostRowsAsync(env);
+
+        // 只差大小写也一起改,同一台主机上各行的写法始终一致
+        await env.Service<IFileServerService>().UpdateAsync(files, Input("files", "//nas01/files", "SVC-Files", null));
+
+        var a = await CredentialAsync(env, files);
+        Assert.Equal("SVC-Files", a.UserName);
+        Assert.Equal(a, await CredentialAsync(env, scan));
+    }
+
+    [Fact]
+    public async Task Clearing_account_clears_every_row_on_the_same_host()
+    {
+        await using var env = HostEnv();
+        var (files, scan, other) = await HostRowsAsync(env);
+
+        await env.Service<IFileServerService>().UpdateAsync(files, Input("files", "//nas01/files", null, null));
+
+        Assert.Equal((null, null), await CredentialAsync(env, files));
+        Assert.Equal((null, null), await CredentialAsync(env, scan));
+        Assert.Equal("svc-other", (await CredentialAsync(env, other)).UserName);
+    }
+
+    [Fact]
+    public async Task Renaming_does_not_touch_other_rows()
+    {
+        await using var env = HostEnv();
+        var (files, scan, _) = await HostRowsAsync(env);
+        var before = await RowAsync(env, scan);
+
+        await env.Service<IFileServerService>().UpdateAsync(files, Input("files-2", "//nas01/files", "svc-files", null));
+
+        var after = await RowAsync(env, scan);
+        Assert.Equal((before.UserName, before.PasswordProtected, before.UpdateTime), (after.UserName, after.PasswordProtected, after.UpdateTime));
+    }
+
+    [Fact]
+    public async Task Moving_to_another_host_with_a_different_account_is_still_rejected()
+    {
+        await using var env = HostEnv();
+        var (files, scan, other) = await HostRowsAsync(env);
+        var service = env.Service<IFileServerService>();
+
+        // 换到 nas02:那台主机上已经是 svc-other,不替那台主机改账号
+        var moved = await Rejected(service.UpdateAsync(files, Input("files", "//nas02/files", "svc-files", "p@ss")));
+        Assert.Equal(ErrorCode.FileServerAccountConflict, moved.Code);
+        Assert.Equal("svc-other", (await CredentialAsync(env, other)).UserName);
+
+        // 新增也不级联
+        var added = await Rejected(service.AddAsync(Input(NewName(), "//nas01/files", "svc-b", "p@ss")));
+        Assert.Equal(ErrorCode.FileServerAccountConflict, added.Code);
+        Assert.Equal("svc-files", (await CredentialAsync(env, scan)).UserName);
+    }
+
+    [Fact]
+    public async Task Cascade_invalidates_the_resolver_cache_for_the_other_rows()
+    {
+        await using var env = HostEnv();
+        var (files, scan, _) = await HostRowsAsync(env);
+        var (_, code) = await env.AddRawPathAsync(scan, null, null);
+        var resolver = env.Service<IFilePathResolver>();
+        await resolver.ResolveAsync(code);   // 先把整表缓存读热
+
+        await env.Service<IFileServerService>().UpdateAsync(files, Input("files", "//nas01/files", "svc-new", "n3w"));
+        await resolver.ResolveAsync(code);
+
+        var target = env.Connector.Calls[^1].Target;
+        Assert.Equal((scan, "svc-new"), (target.Id, target.UserName));
+        Assert.Equal("n3w", env.Service<ISecretProtector>().Unprotect(target.PasswordProtected!));
+    }
+
+    /// <summary>级联写完再失败:本行和级联行的修改都要一起回滚。</summary>
+    private sealed class FailingCascadeService(
+        IRepository<SysFileServer> servers, IRepository<SysFilePath> paths, IDataProtectionKeyProvider keyProvider,
+        ISecretProtector secretProtector, ICacheProvider cache, IFileServerConnector connector, AdminFilePathOptions options,
+        ILogger<FileServerService> logger)
+        : FileServerService(servers, paths, keyProvider, secretProtector, cache, connector, options, logger)
+    {
+        protected override async Task CascadeHostCredentialAsync(SysFileServer saved, IReadOnlyList<SysFileServer> others)
+        {
+            await base.CascadeHostCredentialAsync(saved, others);
+            throw new InvalidOperationException("级联之后失败");
+        }
+    }
+
+    [Fact]
+    public async Task Failed_cascade_rolls_back_the_whole_update()
+    {
+        await using var env = HostEnv(s => s.Replace(ServiceDescriptor.Scoped<IFileServerService, FailingCascadeService>()));
+        var (files, scan, _) = await HostRowsAsync(env);
+        var a = await CredentialAsync(env, files);
+        var b = await CredentialAsync(env, scan);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            env.Service<IFileServerService>().UpdateAsync(files, Input("files", "//nas01/files", "svc-new", "n3w")));
+
+        Assert.Equal(a, await CredentialAsync(env, files));
+        Assert.Equal(b, await CredentialAsync(env, scan));
+    }
+
+    [Fact]
+    public async Task Test_connection_does_not_check_same_host_account()
+    {
+        await using var env = HostEnv();
+        var (files, _, _) = await HostRowsAsync(env);
+
+        env.Connector.Fail = new IOException("不去连真的主机");
+
+        // 保存前先试新账号:同主机别的行还是旧账号,测试连接不能因此拒绝
+        await env.Service<IFileServerService>().TestAsync(new FileServerTestInput(files, "//nas01/files", "svc-new", "n3w"));
+
+        Assert.Equal("svc-new", env.Connector.Calls[^1].Target.UserName);
     }
 }

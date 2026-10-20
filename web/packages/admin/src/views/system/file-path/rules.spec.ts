@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CODE_PATTERN,
+  credentialCascade,
   exampleFileName,
   folderPreview,
   hostOf,
@@ -154,10 +155,11 @@ describe('passwordReentryRequired', () => {
     expect(passwordReentryRequired(saved, '\\\\nas02\\files', null)).toBe(false)
   })
 
-  it('原来就没有设置密码:不用重填', () => {
-    expect(passwordReentryRequired({ ...saved, hasPassword: false }, '\\\\nas02\\files', 'x')).toBe(
-      false,
-    )
+  it('原来没有设置密码也一样:换了主机或账号就要重填,空信封不能沿用到新主机或新账号', () => {
+    const noPassword = { ...saved, hasPassword: false }
+    expect(passwordReentryRequired(noPassword, '\\\\nas02\\files', 'svc-files')).toBe(true)
+    expect(passwordReentryRequired(noPassword, '\\\\nas01\\files', 'svc-other')).toBe(true)
+    expect(passwordReentryRequired(noPassword, '\\\\nas01\\files', 'svc-files')).toBe(false)
   })
 
   it('本机路径之间互改,主机都是空串:不用重填', () => {
@@ -168,6 +170,45 @@ describe('passwordReentryRequired', () => {
   it('原来没有账号、现在填了账号:账号变了,要重填', () => {
     const anon = { rootPath: '\\\\nas01\\files', userName: null, hasPassword: true }
     expect(passwordReentryRequired(anon, '\\\\nas01\\files', 'svc-files')).toBe(true)
+  })
+})
+
+describe('credentialCascade', () => {
+  const saved = { rootPath: '\\\\nas01\\files', userName: 'svc-files' }
+
+  it('同一主机上改了账号或填了新密码:同主机其他行一起改', () => {
+    expect(credentialCascade(saved, '\\\\nas01\\files', 'svc-new', '')).toBe('change')
+    expect(credentialCascade(saved, '\\\\nas01\\files', 'svc-files', 'n3w')).toBe('change')
+    expect(credentialCascade(saved, '\\\\NAS01\\scan', 'svc-files', 'n3w')).toBe('change')
+  })
+
+  it('账号只差大小写也一起改:同一台主机上各行的写法保持一致', () => {
+    expect(credentialCascade(saved, '\\\\nas01\\files', 'SVC-Files', '')).toBe('change')
+  })
+
+  it('账号去掉首尾空白后没变、密码留空:不影响别的行', () => {
+    expect(credentialCascade(saved, '\\\\nas01\\files', ' svc-files ', '')).toBeNull()
+  })
+
+  it('清空账号:整台主机改用后端运行身份', () => {
+    expect(credentialCascade(saved, '\\\\nas01\\files', '  ', '')).toBe('clear')
+    expect(credentialCascade(saved, '\\\\nas01\\files', null, 'ignored')).toBe('clear')
+  })
+
+  it('原来就没有账号、现在也没有:不影响别的行', () => {
+    expect(credentialCascade({ ...saved, userName: null }, '\\\\nas01\\files', '', '')).toBeNull()
+  })
+
+  it('原来没有账号、现在填了:同主机其他行一起改', () => {
+    expect(
+      credentialCascade({ ...saved, userName: null }, '\\\\nas01\\files', 'svc-files', 'p'),
+    ).toBe('change')
+  })
+
+  it('换到另一台主机或本机路径:不级联(另一台主机按账号一致校验)', () => {
+    expect(credentialCascade(saved, '\\\\nas02\\files', 'svc-new', 'n3w')).toBeNull()
+    expect(credentialCascade(saved, 'D:\\files', null, '')).toBeNull()
+    expect(credentialCascade({ rootPath: '/mnt/a', userName: 'u' }, '/mnt/b', 'v', 'p')).toBeNull()
   })
 })
 

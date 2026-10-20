@@ -48,18 +48,18 @@ Open the "File Paths" page in the "Files" menu group and switch to the "File ser
 A few rules apply on save:
 
 - With an account filled in, the root path must be a share path in the `\\host\share` form (`44153`). This is enforced only on Windows; Linux ignores the account anyway.
-- **One host can only use one account.** Windows accepts a single set of credentials per host, so rows whose root paths share a host name must use the same account (`44154`). The account comparison is case-insensitive and blank counts as one value. Host names are compared case-insensitively and as written, with no name resolution, so `\\nas01` and `\\10.0.0.5` count as two hosts. Disabled rows take part in the comparison.
-- A blank password means "unchanged". But if the host or account changed and the password is still blank, the old password is cleared: it is not carried over to the new host or paired with the new account. So enter the password again when you change the account or move to another host. Clearing the account clears the password too.
+- **One host uses one account and password.** Windows accepts a single set of credentials per host, so rows whose root paths share a host name always carry the same account and password. When you add a row, or move a root path to another host, the account must match the rows already on that host, otherwise the save is rejected (`44154`). The account comparison is case-insensitive and blank counts as one value. Host names are compared case-insensitively and as written, with no name resolution, so `\\nas01` and `\\10.0.0.5` count as two hosts. Disabled rows take part in the comparison.
+- A blank password means "unchanged". When an edit changes the host or account, the password must be entered again, and a blank one is rejected (`44157`): the old password is not carried over to the new host or paired with the new account. Clearing the account clears the password too.
 - Saving a password needs a persistent data protection key, otherwise it is rejected (`44156`). See [Deployment](#deployment) below.
 - A file server still referenced by file paths cannot be deleted (`44155`).
 
-With several rows on one host, you cannot change the account on just one of them: the changed row would disagree with the others, and the save is rejected.
+When you change the account or password of a row and its host stays the same, the other rows on that host change to the same account and password in the same transaction, and an account that differs only in letter case is rewritten in the new spelling too. Clearing the account switches every row on the host to the identity the backend runs as. The edit dialog says so under the password box. Changing only the name, the remark or other fields leaves the other rows alone.
 
-"Test connection" in the edit dialog tests what is currently typed, with no need to save first, using the same rules as saving. It tries, in order: connect (when an account is set), the root path exists, and it is readable (it stops at the first entry and never lists the whole directory). No result within 5 seconds reports "Timed out". When editing an existing row with the password left blank, the saved password is reused, provided neither host nor account changed.
+"Test connection" in the edit dialog tests what is currently typed, with no need to save first, using the same rules as saving, except that it skips the same-host account check so you can try a new account before saving. Testing a new account drops the connections the backend holds to that host, and the other rows reconnect with their saved account the next time they are used. It tries, in order: connect (when an account is set), the root path exists, and it is readable (it stops at the first entry and never lists the whole directory). No result within 5 seconds reports "Timed out". When editing an existing row with the password left blank, the saved password is reused, provided neither host nor account changed.
 
 The "online status" in the list checks in parallel whether each row's root path exists, with a 3-second timeout per row and no file writes. In a multi-replica deployment it reflects whether the replica that handled the request can reach the path.
 
-After you change an account or password, no restart is needed: the next access uses the new credentials.
+After you change an account or password, no restart is needed: the next access uses the new credentials. The backend first drops every share it holds on that host with the old credentials, then connects with the new ones. In a multi-replica deployment, each replica does this on its own next access.
 
 ## Configure a file path
 
@@ -306,10 +306,10 @@ On a wrong account or password the kernel doesn't retry on every request, so a d
 
 One Windows logon session accepts a single set of credentials per host, and a second set gets error 1219 (`ERROR_SESSION_CREDENTIAL_CONFLICT`), which the UI shows as "Credential conflict". The backend log, which is written in Chinese, records it as `Win32 错误 1219`, so search for the number 1219. There are two common sources:
 
-- Different accounts configured on the same host. Saving already blocks this (`44154`), unless the data was changed directly in the database.
+- Different accounts configured on the same host. Saving already keeps the rows of one host in step, unless the data was changed directly in the database.
 - Another program in the backend process's logon session is already connected to the same host with other credentials. When you develop locally with `dotnet run`, the backend runs in your own logon session, and if Explorer has the same NAS open with your account, that is exactly this case. In development, leave the file server's account blank and the backend accesses it with your own identity.
 
-When deploying, run the backend under its own identity and don't share it with other programs.
+On 1219 the backend drops every share it holds on that host and reconnects once, and reports the error only if the conflict remains. When deploying, run the backend under its own identity and don't share it with other programs.
 
 ## Error codes
 
@@ -341,5 +341,6 @@ File paths take `44100`–`44199`, following the segments in [Error codes](/back
 | `44154` | The host already has another account configured |
 | `44155` | The file server is still referenced by file paths and cannot be deleted |
 | `44156` | The data protection key is an in-process ephemeral key, so saving a password is refused |
+| `44157` | An edit changed the host or account but left the password blank |
 
-The way out of `44154`: with several rows on one host, changing the account is blocked because the other rows still hold the old account. In the UI, delete the file paths that reference these servers and then the file servers themselves, and recreate them with the new account. The files on disk are untouched, and the relative paths stored in business tables stay valid.
+The way out of `44154`: to give a host a new account, edit the account and password of any one row on that host, and the other rows change with it. For a new row, or a row moving to that host, first enter the account the host already uses, save, and then change the whole host if needed.

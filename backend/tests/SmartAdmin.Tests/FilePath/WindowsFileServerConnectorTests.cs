@@ -84,6 +84,12 @@ public class WindowsFileServerConnectorTests
     private static FileServerTarget Target(string? userName = "svc-files", string password = "p@ss") =>
         new(1, $@"{Share}\docs", userName, userName is null ? null : "enc:" + password);
 
+    /// <summary>同一台主机 nas01 上的另一个共享。</summary>
+    private const string Scan = @"\\nas01\scan";
+
+    private static FileServerTarget ScanTarget(string? userName = "svc-files", string password = "p@ss") =>
+        new(2, Scan, userName, userName is null ? null : "enc:" + password);
+
     private static (TestConnector Connector, FakeTimeProvider Time) Create()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -385,5 +391,71 @@ public class WindowsFileServerConnectorTests
         await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
         await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
         Assert.Equal(3, connector.CancelCount);
+    }
+
+    // ── 同一台主机只用一套凭据 ─────────────────────────────────────────
+
+    [Fact]
+    public async Task New_credentials_disconnect_the_other_shares_of_the_host_first()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(ScanTarget("svc-old", "old"), retryFailed: false);
+
+        // 管理员把整台主机换成新账号,先访问的是 files:scan 还挂着旧账号,不断开它新账号就会得到 1219
+        await connector.EnsureConnectedAsync(Target("svc-new", "new"), retryFailed: false);
+
+        Assert.Equal([$"add {Scan} svc-old old", $"cancel {Scan}", $"add {Share} svc-new new"], connector.Calls);
+        // scan 下次访问按新账号重连,不会拿着记下的旧连接当成已连上
+        await connector.EnsureConnectedAsync(ScanTarget("svc-new", "new"), retryFailed: false);
+        Assert.Equal($"add {Scan} svc-new new", connector.Calls[^1]);
+    }
+
+    [Fact]
+    public async Task Shares_with_the_same_credentials_stay_connected()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(ScanTarget(), retryFailed: false);
+
+        // 账号写法只差大小写也是同一套凭据:Windows 的账号名不区分大小写
+        await connector.EnsureConnectedAsync(Target(userName: "SVC-FILES"), retryFailed: false);
+
+        Assert.Equal([$"add {Scan} svc-files p@ss", $"add {Share} SVC-FILES p@ss"], connector.Calls);
+    }
+
+    [Fact]
+    public async Task Account_case_change_does_not_reconnect()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+
+        await connector.EnsureConnectedAsync(Target(userName: "SVC-Files"), retryFailed: false);
+
+        Assert.Equal([$"add {Share} svc-files p@ss"], connector.Calls);
+    }
+
+    [Fact]
+    public async Task Credential_conflict_disconnects_every_share_of_the_host_then_retries_once()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(ScanTarget(), retryFailed: false);
+        connector.AddResults.Enqueue(1219);
+        connector.AddResults.Enqueue(0);
+
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+
+        Assert.Equal(
+            [$"add {Scan} svc-files p@ss", $"add {Share} svc-files p@ss", $"cancel {Share}", $"cancel {Scan}", $"add {Share} svc-files p@ss"],
+            connector.Calls);
+    }
+
+    [Fact]
+    public async Task Other_host_is_left_alone()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(new FileServerTarget(3, @"\\nas02\files", "svc-other", "enc:x"), retryFailed: false);
+
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+
+        Assert.Equal([@"add \\nas02\files svc-other x", $"add {Share} svc-files p@ss"], connector.Calls);
     }
 }

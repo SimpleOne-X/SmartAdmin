@@ -61,22 +61,41 @@ export function hostOf(rootPath: string): string {
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 /**
- * 保存或测试连接时,密码留空会沿用已保存的密码,但主机或账号换了就不会(后端 CanReuseSavedPassword)。
- * 此时用户必须重新填密码,否则旧密码被清掉、新的连接多半失败。
- * 同时满足才返回 true:原来设置过密码;新账号不为空(清空账号 = 改成匿名访问,不需要密码);主机或账号变了。
+ * 保存或测试连接时,密码留空会沿用已保存的密码,但主机或账号换了就不会(后端 CanReuseSavedPassword),
+ * 修改时后端直接拒绝保存(44157),原来有没有设置密码都一样。
+ * 同时满足才返回 true:新账号不为空(清空账号 = 改用后端运行身份,不需要密码);主机或账号变了。
  * 主机、账号都不区分大小写,账号先去首尾空白,null 与空串相同。
  */
 export function passwordReentryRequired(
-  original: { rootPath: string; userName?: string | null; hasPassword: boolean },
+  original: { rootPath: string; userName?: string | null },
   rootPath: string,
   userName: string | null | undefined,
 ): boolean {
   const account = (userName ?? '').trim()
-  if (!original.hasPassword || !account) return false
+  if (!account) return false
   return (
     !same(hostOf(original.rootPath), hostOf(rootPath)) ||
     !same((original.userName ?? '').trim(), account)
   )
+}
+
+/**
+ * 修改一台文件服务器的账号或密码时,后端会把同一主机的其他文件服务器一起改成相同的账号和密码(Windows 对一台主机只接受一套凭据)。
+ * 返回表单要给出的提示:'change' 同主机其他行一起改成这个账号和密码;'clear' 清空账号,整台主机改用后端运行身份;null 不影响别的行。
+ * 只在主机没变时级联,换到另一台主机或本机路径时为 null。账号先去首尾空白、按原样比较:只差大小写也算改了,后端会统一写法。
+ */
+export function credentialCascade(
+  original: { rootPath: string; userName?: string | null },
+  rootPath: string,
+  userName: string | null | undefined,
+  password: string,
+): 'change' | 'clear' | null {
+  const host = hostOf(original.rootPath)
+  if (!host || !same(host, hostOf(rootPath))) return null
+  const before = (original.userName ?? '').trim()
+  const account = (userName ?? '').trim()
+  if (!account) return before ? 'clear' : null
+  return account !== before || password !== '' ? 'change' : null
 }
 
 /**

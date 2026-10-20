@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 文件服务器新增/编辑抽屉。show/editing 走 v-model + prop(null = 新增),与 AI 厂商的 ProviderForm 同一协议。
-// 密码留空表示不改;换了主机或账号而密码仍留空,后端会清掉旧密码,所以这种情况表单不让过。
+// 密码留空表示不改;换了主机或账号而密码仍留空,后端拒绝保存(44157),表单先挡住。
+// 同一主机的文件服务器共用一套账号和密码:改了账号或密码,保存后同主机的其他行一起改,表单在密码框下提示。
 import { computed, reactive, ref, watch } from 'vue'
 import {
   NAlert,
@@ -29,7 +30,7 @@ import {
 } from '#/api'
 import { translateError } from '#/utils/error'
 import { reasonText } from '../access'
-import { passwordReentryRequired } from '../rules'
+import { credentialCascade, passwordReentryRequired } from '../rules'
 
 const show = defineModel<boolean>('show', { default: false })
 const props = defineProps<{
@@ -74,7 +75,7 @@ const blank = (): ServerFormState => ({
 })
 const form = reactive<ServerFormState>(blank())
 
-// 换主机或账号且已设置过密码时必须重填。不支持账号密码的平台(Linux)上不要求:那里换主机同样会让这条判断成立,
+// 换主机或账号时必须重填(原来有没有密码都一样)。不支持账号密码的平台(Linux)上不要求:那里换主机同样会让这条判断成立,
 // 但后端不用账号密码连接,密码框也是置灰的,所以由 supportsCredentials 直接挡掉。
 const reentry = computed(
   () =>
@@ -82,6 +83,15 @@ const reentry = computed(
     supportsCredentials.value &&
     passwordReentryRequired(props.editing, form.rootPath, form.userName),
 )
+
+// 同主机级联的提示;只在编辑、平台支持账号时出现
+const cascadeHint = computed(() => {
+  if (props.editing === null || !supportsCredentials.value) return null
+  const kind = credentialCascade(props.editing, form.rootPath, form.userName, form.password)
+  return (
+    kind && t(kind === 'clear' ? 'filePath.server.cascadeClear' : 'filePath.server.cascadeChange')
+  )
+})
 
 const rules: FormRules = {
   name: {
@@ -232,6 +242,7 @@ async function save() {
             </n-tag>
           </n-space>
           <span class="hint">{{ t('filePath.server.passwordHint') }}</span>
+          <span v-if="cascadeHint" class="hint cascade">{{ cascadeHint }}</span>
         </n-space>
       </n-form-item>
       <n-form-item :label="t('filePath.test.action')">
@@ -277,6 +288,9 @@ async function save() {
 .hint {
   font-size: 13px;
   color: var(--text-3);
+}
+.cascade {
+  color: var(--warn);
 }
 .test-result {
   display: inline-flex;
