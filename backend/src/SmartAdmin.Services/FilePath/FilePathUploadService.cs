@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SmartAdmin.Core;
 
@@ -11,13 +12,34 @@ namespace SmartAdmin.Services;
 /// 它会复检服务器根路径的白名单并确保已连上,<see cref="IFilePathResolver.GetRuleAsync"/> 不做这两件事,不能用在这里。
 /// <para>写入一律 <see cref="FileMode.CreateNew"/>,撞名由 <c>FilePathFileExists</c> 带出;同名覆盖先写同文件夹里的临时文件再替换,
 /// 写到一半失败时旧文件原样保留。命名、校验、写入拆成 <c>protected virtual</c> 步骤,消费者可以子类化覆写其中一步。</para>
+/// <para>分片上传把每个会话放在 <c>StagingPath/{uploadId}/</c>:<c>session.json</c> 记用户、编码和文件的声明值,<c>{index}.part</c> 是分片,
+/// 合并成 <c>merged</c> 并核对哈希后,和单文件上传走同一个 <see cref="StoreAsync"/> 落到文件夹。
+/// 会话目录里只有这些,不放服务器或目标信息(<see cref="FilePathTarget"/> 带着账号密码信封)。</para>
 /// </summary>
+/// <param name="resolver">定位文件夹。</param>
+/// <param name="time">命名用的时钟。</param>
+/// <param name="logger">日志。</param>
+/// <param name="options">
+/// 分片上传的暂存目录来自它。可选参数:本类是 public 可继承,加必需参数即源码破坏性变更;
+/// 经 DI 解析时一定会注入,手工构造又要用分片上传时必须传入,否则分片方法抛 <see cref="InvalidOperationException"/>。
+/// </param>
+/// <param name="currentUser">
+/// 分片会话绑定的用户。可选原因同上;没有当前用户(<see langword="null"/> 或未登录)时绑定 0。
+/// </param>
 public class FilePathUploadService(
     IFilePathResolver resolver,
     TimeProvider time,
-    ILogger<FilePathUploadService> logger) : IFilePathUploadService
+    ILogger<FilePathUploadService> logger,
+    AdminFilePathOptions? options = null,
+    ICurrentUser? currentUser = null) : IFilePathUploadService
 {
     private const int BufferSize = 81920;
+
+    /// <summary>分片大小:由服务端定,客户端按它切。</summary>
+    public const int ChunkSize = 5 * 1024 * 1024;
+
+    private const string SessionFile = "session.json";
+    private const string MergedFile = "merged";
 
     /// <summary>NAS 上单个路径段的字节上限(UTF-8)。</summary>
     private const int MaxSegmentBytes = 255;
@@ -29,25 +51,218 @@ public class FilePathUploadService(
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
+    /// <summary>会话目录里 <c>session.json</c> 的内容。字段就是这些,不加服务器或目标信息。</summary>
+    private sealed record ChunkSession(
+        long UserId, string Code, string FileName, long Size, string Sha256, string? SubPath, int ChunkSize, int ChunkCount);
+
     /// <inheritdoc />
     public virtual async Task<FilePathUploadOutput> UploadAsync(string code, FilePathUploadInput input, CancellationToken ct = default)
     {
         var target = await resolver.ResolveAsync(code, ct);
         ValidateUpload(target.Rule, input.FileName, input.Size);
 
-        var relative = BuildRelativePath(target.Rule, input.FileName, input.SubPath);
+        return await StoreAsync(target, input.FileName, input.Size, input.SubPath, input.Content, ct);
+    }
+
+    /// <summary>
+    /// 按命名规则定名字并写进文件夹,单文件上传和分片合并共用。年/月/原名_短ID、日期/GUID 的名字是随机生成的,
+    /// 撞名就换一个再试一次(<paramref name="content"/> 在撞名时还没被读过);业务指定的路径撞名是调用方要知道的结果,照原样抛出。
+    /// 出参的 <see cref="FilePathUploadOutput.Size"/> 取 <paramref name="size"/>。校验由调用方先做。
+    /// </summary>
+    protected virtual async Task<FilePathUploadOutput> StoreAsync(
+        FilePathTarget target, string fileName, long size, string? subPath, Stream content, CancellationToken ct)
+    {
+        var relative = BuildRelativePath(target.Rule, fileName, subPath);
         try
         {
-            await WriteAsync(target, relative, input.Content, ct);
+            await WriteAsync(target, relative, content, ct);
         }
-        // 年/月/原名_短ID、日期/GUID 的名字是随机生成的,撞名就换一个再试一次;业务指定的路径撞名是调用方要知道的结果
         catch (AdminException e) when (e.Code == ErrorCode.FilePathFileExists && target.Rule.NamingRule != FilePathNamingRule.BusinessPath)
         {
-            relative = BuildRelativePath(target.Rule, input.FileName, input.SubPath);
-            await WriteAsync(target, relative, input.Content, ct);
+            relative = BuildRelativePath(target.Rule, fileName, subPath);
+            await WriteAsync(target, relative, content, ct);
         }
 
-        return new FilePathUploadOutput(relative, FilePathRules.SanitizeFileName(input.FileName), input.Size);
+        return new FilePathUploadOutput(relative, FilePathRules.SanitizeFileName(fileName), size);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<FilePathChunkInitOutput> ChunkInitAsync(string code, FilePathChunkInitInput input, CancellationToken ct = default)
+    {
+        var target = await resolver.ResolveAsync(code, ct);
+        ValidateUpload(target.Rule, input.FileName, input.Size);
+        var sha256 = NormalizeSha256(input.Sha256);
+        AdminException.ThrowIf(input.Size < 0 || sha256 is null, ErrorCode.FilePathUploadSessionInvalid);
+        // 业务路径的 subPath 不合法在这里就拒绝,不用等整个文件传完;算出来的名字这里用不上
+        _ = BuildRelativePath(target.Rule, input.FileName, input.SubPath);
+
+        var chunkCount = (int)((input.Size + ChunkSize - 1) / ChunkSize);
+        var uploadId = NewUploadId();
+        var dir = Path.Combine(StagingRoot, uploadId);
+        var session = new ChunkSession(CurrentUserId, code, input.FileName, input.Size, sha256!, input.SubPath, ChunkSize, chunkCount);
+        try
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllBytesAsync(Path.Combine(dir, SessionFile), JsonSerializer.SerializeToUtf8Bytes(session), ct);
+        }
+        catch
+        {
+            DeleteSessionDir(dir);
+            throw;
+        }
+
+        return new FilePathChunkInitOutput(uploadId, ChunkSize, chunkCount);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task ChunkAsync(string code, string uploadId, int index, Stream content, CancellationToken ct = default)
+    {
+        await resolver.ResolveAsync(code, ct);
+        var (dir, session) = await LoadSessionAsync(code, uploadId, ct);
+        AdminException.ThrowIf(index < 0 || index >= session.ChunkCount, ErrorCode.FilePathUploadSessionInvalid);
+
+        // 非末片正好是 ChunkSize,末片是剩下的
+        var expected = index < session.ChunkCount - 1 ? session.ChunkSize : session.Size - (long)(session.ChunkCount - 1) * session.ChunkSize;
+        var part = Path.Combine(dir, $"{index}.part");
+        // 先写临时名再 Move 覆盖:重传失败时上一次的分片原样保留,长度不对的分片也不会以 .part 的名字留下
+        var temp = Path.Combine(dir, $"{index}.{NewShortId()}.tmp");
+        var moved = false;
+        try
+        {
+            await using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, useAsync: true))
+            {
+                var buffer = new byte[BufferSize];
+                long total = 0;
+                int read;
+                // 边读边数:超出应有长度就立刻停下,多出来的字节不写进暂存,也不再把流读下去
+                while ((read = await content.ReadAsync(buffer, ct)) > 0)
+                {
+                    total += read;
+                    if (total > expected) throw InvalidSession();
+                    await file.WriteAsync(buffer.AsMemory(0, read), ct);
+                }
+
+                if (total != expected) throw InvalidSession();
+            }
+
+            File.Move(temp, part, overwrite: true);
+            moved = true;
+        }
+        finally
+        {
+            if (!moved) TryDelete(temp);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<FilePathUploadOutput> ChunkCompleteAsync(string code, string uploadId, CancellationToken ct = default)
+    {
+        var target = await resolver.ResolveAsync(code, ct);
+        var (dir, session) = await LoadSessionAsync(code, uploadId, ct);
+
+        // 缺片不毁掉会话:客户端按 index 补传空缺后可以再合并
+        for (var i = 0; i < session.ChunkCount; i++)
+            AdminException.ThrowIf(!File.Exists(Path.Combine(dir, $"{i}.part")), ErrorCode.FilePathChunkMissing,
+                new Dictionary<string, object?> { ["index"] = i });
+
+        try
+        {
+            var merged = Path.Combine(dir, MergedFile);
+            var (sha256, length) = await MergeAsync(dir, session.ChunkCount, merged, ct);
+            // 规则可能在 init 之后变过(只读、后缀、上限),按当前规则和实际大小再拦一次;
+            // 实际大小与声明不同时哈希必然对不上,不单独判断
+            ValidateUpload(target.Rule, session.FileName, length);
+            AdminException.ThrowIf(sha256 != session.Sha256, ErrorCode.FilePathChunkHashMismatch);
+
+            await using var content = new FileStream(merged, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+            return await StoreAsync(target, session.FileName, length, session.SubPath, content, ct);
+        }
+        finally
+        {
+            DeleteSessionDir(dir);
+        }
+    }
+
+    /// <summary>暂存根目录。<see cref="AdminFilePathOptions.StagingPath"/> 已在启动时规范成完全限定路径。</summary>
+    protected virtual string StagingRoot =>
+        options?.StagingPath ?? throw new InvalidOperationException($"分片上传需要 {nameof(AdminFilePathOptions)}:经 DI 解析本服务时会自动注入,手工构造时请传入。");
+
+    /// <summary>分片会话的 Id:32 位小写十六进制,会被拼进暂存路径,所以格式不能变(见 <see cref="FilePathRules.IsUploadId"/>)。</summary>
+    protected virtual string NewUploadId() => Guid.NewGuid().ToString("N");
+
+    private long CurrentUserId => currentUser?.UserId ?? 0;
+
+    private static AdminException InvalidSession() => new(ErrorCode.FilePathUploadSessionInvalid);
+
+    /// <summary>SHA-256 声明值:去首尾空白、转小写,必须是 64 位十六进制,否则 null。</summary>
+    private static string? NormalizeSha256(string? value)
+    {
+        var sha = value?.Trim().ToLowerInvariant();
+        return sha is { Length: 64 } && sha.All(char.IsAsciiHexDigitLower) ? sha : null;
+    }
+
+    /// <summary>
+    /// 读出会话并核对归属,返回会话目录。<paramref name="uploadId"/> 会被拼进路径,所以第一步先校验格式,
+    /// 再确认拼出来的目录在暂存根目录之下,最后核对会话里的用户和编码;任何一步不通过都是 <see cref="ErrorCode.FilePathUploadSessionInvalid"/>。
+    /// 会话不存在(没发过、已合并、已被清扫)与归属不符对调用方没有区别。
+    /// </summary>
+    private async Task<(string Dir, ChunkSession Session)> LoadSessionAsync(string code, string uploadId, CancellationToken ct)
+    {
+        if (!FilePathRules.IsUploadId(uploadId)) throw InvalidSession();
+        var dir = Path.Combine(StagingRoot, uploadId);
+        if (!FilePathRules.IsUnder(dir, StagingRoot)) throw InvalidSession();
+
+        ChunkSession? session;
+        try
+        {
+            session = JsonSerializer.Deserialize<ChunkSession>(await File.ReadAllBytesAsync(Path.Combine(dir, SessionFile), ct));
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or JsonException)
+        {
+            throw InvalidSession();
+        }
+
+        if (session is null || session.UserId != CurrentUserId || session.Code != code) throw InvalidSession();
+        return (dir, session);
+    }
+
+    /// <summary>按序把分片拼成 <paramref name="merged"/>,同时算出整体的 SHA-256(小写十六进制)和总长度。</summary>
+    private static async Task<(string Sha256, long Length)> MergeAsync(string dir, int chunkCount, string merged, CancellationToken ct)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[BufferSize];
+        long length = 0;
+        await using var output = new FileStream(merged, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
+        for (var i = 0; i < chunkCount; i++)
+        {
+            await using var part = new FileStream(Path.Combine(dir, $"{i}.part"), FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+            int read;
+            while ((read = await part.ReadAsync(buffer, ct)) > 0)
+            {
+                hash.AppendData(buffer, 0, read);
+                await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                length += read;
+            }
+        }
+
+        return (Convert.ToHexStringLower(hash.GetHashAndReset()), length);
+    }
+
+    /// <summary>删会话目录。删不掉只记警告,留给 <see cref="FilePathStagingSweeper"/>,不能盖掉调用方正在抛的异常。</summary>
+    private void DeleteSessionDir(string dir)
+    {
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // 已经没了
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(e, "删除分片会话 {Session} 失败,留给暂存清扫器", Path.GetFileName(dir));
+        }
     }
 
     /// <inheritdoc />

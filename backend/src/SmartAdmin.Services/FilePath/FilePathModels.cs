@@ -68,3 +68,15 @@ public sealed record FilePathUploadInput(Stream Content, string FileName, long S
 /// <see cref="Name"/> 是清洗后的原始文件名;<see cref="ViewUrl"/> 由 HTTP 入口按调用者的下载权限填写,服务本身不签发。
 /// </summary>
 public sealed record FilePathUploadOutput(string Path, string Name, long Size, string? ViewUrl = null);
+
+/// <summary>
+/// 分片上传初始化入参。<see cref="Size"/> 与 <see cref="Sha256"/> 是整个文件的声明值:大小用来在上传前按规则拦截并算出分片数,
+/// 哈希在合并后核对。<see cref="Sha256"/> 是 64 位十六进制,首尾空白与大小写忽略。<see cref="SubPath"/> 同 <see cref="FilePathUploadInput.SubPath"/>。
+/// </summary>
+public sealed record FilePathChunkInitInput(string FileName, long Size, string Sha256, string? SubPath);
+
+/// <summary>分片上传初始化出参。分片大小由服务端定,客户端按 <see cref="ChunkSize"/> 切成 <see cref="ChunkCount"/> 片(编号从 0 起),最后一片可以短。</summary>
+public sealed record FilePathChunkInitOutput(string UploadId, int ChunkSize, int ChunkCount);
+
+/// <summary>分片上传合并入参。</summary>
+public sealed record FilePathChunkCompleteInput(string UploadId);

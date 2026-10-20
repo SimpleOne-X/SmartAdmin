@@ -70,6 +70,14 @@ public static class FilePathRules
         return full.StartsWith(prefix, cmp);
     }
 
+    /// <summary>
+    /// 是否是分片上传会话的 Id:32 位小写十六进制(<c>Guid.ToString("N")</c>)。它会被拼进暂存路径,也是暂存目录里会话目录的名字,
+    /// 上传和清扫都先过这一关,别的名字(<c>..</c>、带分隔符的、大写的、多一位少一位的)一律不是会话。
+    /// 逐字符判断而不用 <c>^…$</c> 正则:<c>$</c> 会放过末尾的换行。
+    /// </summary>
+    public static bool IsUploadId(string? value) =>
+        value is { Length: 32 } && value.All(char.IsAsciiHexDigitLower);
+
     /// <summary><paramref name="path"/> 是否在任一根目录之下。</summary>
     public static bool IsUnderAnyRoot(string path, IEnumerable<string> roots) =>
         roots.Any(root => IsUnder(path, root));

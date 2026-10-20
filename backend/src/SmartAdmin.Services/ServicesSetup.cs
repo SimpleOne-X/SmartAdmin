@@ -227,6 +227,9 @@ public static class ServicesSetup
         services.TryAddScoped<IFilePathResolver, FilePathResolver>();
         services.TryAddScoped<IFilePathUploadService, FilePathUploadService>();
         services.TryAddScoped<IFilePathAccessChecker, FilePathAccessChecker>();
+        // 分片暂存清扫:双注册同一实例(同 FileGcService),单例可按类型注入直接调 SweepOnce,同一实例再作为后台任务托管
+        services.TryAddSingleton<FilePathStagingSweeper>();
+        services.AddHostedService(sp => sp.GetRequiredService<FilePathStagingSweeper>());
 
         // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞
         services.AddHostedService<WorkerIdLeaseGuard>();
