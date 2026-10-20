@@ -47,6 +47,25 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 表外还有一项慢 SQL 告警阈值，配置键是 `SmartAdmin:Database:SlowSqlMillis`，默认 `1000` 毫秒。执行耗时超过它的语句，会连同 SQL 和参数打一条 `Warning`。失败的 SQL 则总是打 `Error`，带语句和参数，不受这项控制，也没有开关能关掉。想看全部语句就把它调小，比如 `1`，但生产上这么干会把日志淹掉。日志类别是 `SmartAdmin.Sql`，想单独调级别就调它。
 
+## 文件路径（可选）
+
+业务附件要落到 NAS 或共享文件夹时才需要看这一节，不用就跳过。配置节是 `SmartAdmin:FilePath`：
+
+| 配置项 | 默认 | 说明 |
+|---|---|---|
+| `AllowedRoots` | 空 | 根目录白名单。空表示功能不可用，必须由运维显式放行 |
+| `StagingPath` | `./data/file-path-staging` | 分片上传的暂存目录，相对路径按 ContentRoot 解析 |
+| `StagingTtlHours` | `24` | 分片会话闲置多久后清掉暂存 |
+| `LinkTtlMinutes` | `60` | 签名直链的默认有效分钟数 |
+
+部署时要留意三件事：
+
+- 页面上保存文件服务器的密码，要先配持久的 `SmartAdmin:Security:DataProtection:Key`，否则被拒绝。账号留空、用后端运行身份访问的方式不存密码，用不着它。
+- 多副本时，`StagingPath` 放在共享卷上，或者让负载均衡开会话保持；每个副本都要能访问同一个共享。
+- Linux 和 Docker 上由宿主机挂载共享，白名单填挂载根目录。
+
+完整的配置、挂载和排错步骤见[文件路径](/zh/guide/file-paths)。
+
 ## 生产建表闸门：首次建表与升级补列
 
 生产环境有一道建表安全闸门。只要 `ASPNETCORE_ENVIRONMENT=Production`，哪怕 `EnableCodeFirst=true`（默认就是 true），也不会自动建表或改表。生产库通常由 DBA 手工维护，应用不该擅自 `ALTER`。想放行，显式打开这一项：

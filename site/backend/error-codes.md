@@ -15,7 +15,7 @@ How a code turns into a Chinese or English sentence on the frontend belongs to [
 | `41000`–`41999` | Permissions and data scope |
 | `42000`–`42999` | User, org, role, menu |
 | `43000`–`43999` | Dictionary, config |
-| `44000`–`44999` | File upload |
+| `44000`–`44999` | File upload (`44100`–`44199` for file paths) |
 | `45000`–`45999` | Notifications |
 | `46000`–`46999` | Import, export |
 | `47000`–`47999` | Scheduled jobs |

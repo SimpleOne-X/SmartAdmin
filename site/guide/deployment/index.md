@@ -47,6 +47,25 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 One item outside the table: `SmartAdmin:Database:SlowSqlMillis` (the slow-SQL warning threshold, default `1000` ms): any statement taking longer than that is logged at `Warning` along with its SQL and parameters; failed SQL is always logged at `Error` (with statement and parameters), unaffected by this setting and with no switch to turn it off. To observe every statement, lower it (e.g. `1`), but in production that drowns the logs. The log category is `SmartAdmin.Sql` — tune its level on its own if you want.
 
+## File paths (optional)
+
+Read this section only if business attachments need to land on a NAS or a shared folder; otherwise skip it. The config section is `SmartAdmin:FilePath`:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `AllowedRoots` | empty | Root directory whitelist. Empty means the feature is unusable; an operator must allow roots explicitly |
+| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads; a relative path resolves against the ContentRoot |
+| `StagingTtlHours` | `24` | How long an idle chunk session lasts before its staging is cleared |
+| `LinkTtlMinutes` | `60` | Default validity of a signed link, in minutes |
+
+Three things to watch when deploying:
+
+- Saving a file server's password on the settings page needs a persistent `SmartAdmin:Security:DataProtection:Key` first, or it is rejected. Leaving the account blank and accessing with the backend's run identity stores no password, so it doesn't need the key.
+- With multiple replicas, put `StagingPath` on a shared volume or enable session affinity on the load balancer; every replica must be able to reach the same share.
+- On Linux and Docker the host mounts the share, and the whitelist holds the mount root.
+
+For the full configuration, mount and troubleshooting steps, see [File Paths](/guide/file-paths).
+
 ## The production table-creation gate: first-time creation and upgrade columns
 
 Production has a table-creation safety gate: when `ASPNETCORE_ENVIRONMENT=Production`, tables aren't created or altered automatically even with `EnableCodeFirst=true` (true by default) — a production database is usually maintained by hand by a DBA, and the app shouldn't `ALTER` it on its own. To let it through, turn this on explicitly:
