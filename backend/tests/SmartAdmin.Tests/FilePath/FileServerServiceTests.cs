@@ -66,6 +66,25 @@ public class FileServerServiceTests
         Assert.True((await service.GetAsync(id)).HasPassword);
     }
 
+    [Theory]
+    [InlineData("//nas02/files", "svc-files", false)]   // 换了主机
+    [InlineData("//nas01/files", "svc-other", false)]   // 换了账号
+    [InlineData("//nas01/files", "SVC-FILES", true)]    // 账号只差大小写,算同一个
+    public async Task Blank_password_on_update_kept_only_for_same_host_and_account(string root, string userName, bool kept)
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas02/files"]);
+        var service = env.Service<IFileServerService>();
+        var name = NewName();
+        var id = await service.AddAsync(Input(name, "//nas01/files", "svc-files", "p@ss"));
+        var before = (await RowAsync(env, id)).PasswordProtected;
+
+        await service.UpdateAsync(id, Input(name, root, userName, null));
+
+        // 旧密码不跟着去新主机、也不配给新账号
+        Assert.Equal(kept ? before : null, (await RowAsync(env, id)).PasswordProtected);
+        Assert.Equal(kept, (await service.GetAsync(id)).HasPassword);
+    }
+
     [Fact]
     public async Task Clearing_user_name_clears_password()
     {

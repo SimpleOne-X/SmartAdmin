@@ -12,11 +12,14 @@ public class WindowsFileServerConnectorTests
 {
     private const string Share = @"\\nas01\files";
 
-    /// <summary>信封就是 <c>enc:</c> 加明文,断言能看出连接器把解开的明文交给了 native 调用。</summary>
+    /// <summary>
+    /// 信封是「前缀 + 冒号 + 明文」,断言能看出连接器把解开的明文交给了 native 调用;
+    /// 前缀可以随便换,用来造「同一个密码、不同的信封」(真实的信封每次加密都带随机数)。
+    /// </summary>
     private sealed class PrefixProtector : ISecretProtector
     {
         public string Protect(string plaintext) => "enc:" + plaintext;
-        public string Unprotect(string envelope) => envelope["enc:".Length..];
+        public string Unprotect(string envelope) => envelope[(envelope.IndexOf(':') + 1)..];
     }
 
     private sealed class TestConnector(FakeTimeProvider time)
@@ -31,7 +34,15 @@ public class WindowsFileServerConnectorTests
 
         public TimeSpan AddDelay { get; set; }
 
+        public TimeSpan CancelDelay { get; set; }
+
         public TimeSpan? Timeout { get; set; }
+
+        /// <summary>最近一次 <see cref="AddConnection"/> 收到的密码,用来区分空串和 null。</summary>
+        public string? LastPassword { get; private set; }
+
+        /// <summary>第一次进入 <see cref="AddConnection"/> 时完成。</summary>
+        public TaskCompletionSource AddStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public IReadOnlyList<string> Calls
         {
@@ -39,6 +50,8 @@ public class WindowsFileServerConnectorTests
         }
 
         public int AddCount => Calls.Count(c => c.StartsWith("add ", StringComparison.Ordinal));
+
+        public int CancelCount => Calls.Count(c => c.StartsWith("cancel ", StringComparison.Ordinal));
 
         protected override TimeSpan ConnectTimeout => Timeout ?? base.ConnectTimeout;
 
@@ -48,8 +61,10 @@ public class WindowsFileServerConnectorTests
             lock (_calls)
             {
                 _calls.Add($"add {remoteName} {userName} {password}");
+                LastPassword = password;
                 rc = AddResults.Count > 0 ? AddResults.Dequeue() : 0;
             }
+            AddStarted.TrySetResult();
             if (AddDelay > TimeSpan.Zero) Thread.Sleep(AddDelay);
             return rc;
         }
@@ -57,6 +72,7 @@ public class WindowsFileServerConnectorTests
         protected override int CancelConnection(string remoteName)
         {
             lock (_calls) _calls.Add($"cancel {remoteName}");
+            if (CancelDelay > TimeSpan.Zero) Thread.Sleep(CancelDelay);
             return CancelResult;
         }
     }
@@ -246,5 +262,119 @@ public class WindowsFileServerConnectorTests
 
         Assert.Equal(FileAccessFailure.Unknown, e.Reason);
         Assert.Empty(connector.Calls);
+    }
+
+    [Fact]
+    public async Task Missing_password_is_sent_as_empty_string()
+    {
+        var (connector, _) = Create();
+
+        await connector.EnsureConnectedAsync(new FileServerTarget(1, Share, "svc-files", null), retryFailed: false);
+
+        // NULL 表示「用这个账号的默认密码」,空串才是「不用密码」
+        Assert.Equal(1, connector.AddCount);
+        Assert.Equal("", connector.LastPassword);
+    }
+
+    [Fact]
+    public async Task Same_password_in_another_envelope_does_not_reconnect()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+
+        // 同一个密码重新加密出来的信封不同,凭据并没有变
+        await connector.EnsureConnectedAsync(Target() with { PasswordProtected = "nonce2:p@ss" }, retryFailed: false);
+
+        Assert.Equal([$"add {Share} svc-files p@ss"], connector.Calls);
+    }
+
+    [Fact]
+    public async Task Caller_giving_up_still_records_bad_credentials()
+    {
+        var (connector, _) = Create();
+        connector.AddResults.Enqueue(1326);
+        connector.AddDelay = TimeSpan.FromMilliseconds(300);
+        using var cts = new CancellationTokenSource();
+
+        var first = connector.EnsureConnectedAsync(Target(), retryFailed: false, cts.Token);
+        await connector.AddStarted.Task;
+        await cts.CancelAsync();
+
+        // 拿到锁之后调用方的令牌不再起作用:native 的结果照样记下,下一个请求不再拿错密码去试
+        var e = await Assert.ThrowsAsync<FileServerConnectException>(() => first);
+        Assert.Equal(FileAccessFailure.BadCredentials, e.Reason);
+        var again = await Fails(connector, Target());
+        Assert.Equal(FileAccessFailure.BadCredentials, again.Reason);
+        Assert.Equal(1, connector.AddCount);
+    }
+
+    [Fact]
+    public async Task Timeout_backs_off_for_30_seconds()
+    {
+        var (connector, time) = Create();
+        connector.Timeout = TimeSpan.FromMilliseconds(100);
+        connector.AddDelay = TimeSpan.FromSeconds(1);
+        await Fails(connector, Target());
+
+        time.Advance(TimeSpan.FromSeconds(29));
+        var cached = await Fails(connector, Target());
+        Assert.Equal((FileAccessFailure.Timeout, 0), (cached.Reason, cached.Win32Code));
+        Assert.Equal(1, connector.AddCount);
+
+        connector.AddDelay = TimeSpan.Zero;
+        time.Advance(TimeSpan.FromSeconds(2));
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+        Assert.Equal(2, connector.AddCount);
+    }
+
+    [Fact]
+    public async Task Slow_cancel_times_out_and_backs_off()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(password: "old"), retryFailed: false);
+        connector.Timeout = TimeSpan.FromMilliseconds(100);
+        connector.CancelDelay = TimeSpan.FromSeconds(1);
+
+        var e = await Fails(connector, Target(password: "new"));
+        Assert.Equal(FileAccessFailure.Timeout, e.Reason);
+
+        await Fails(connector, Target(password: "new"));
+        Assert.Equal((1, 1), (connector.AddCount, connector.CancelCount));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2250)]   // ERROR_NOT_CONNECTED:旧连接本来就不在了
+    public async Task Clearing_user_name_disconnects_old_connection(int cancelResult)
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+        connector.CancelResult = cancelResult;
+
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+
+        Assert.Equal([$"add {Share} svc-files p@ss", $"cancel {Share}"], connector.Calls);
+        // 旧连接已经忘掉:再填回账号要重新连
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+        Assert.Equal(2, connector.AddCount);
+    }
+
+    [Fact]
+    public async Task Clearing_user_name_keeps_old_connection_while_files_open()
+    {
+        var (connector, _) = Create();
+        await connector.EnsureConnectedAsync(Target(), retryFailed: false);
+        connector.CancelResult = 2401;   // ERROR_OPEN_FILES
+
+        // 还有文件开着:继续用旧连接,每次访问都再试着断
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+        Assert.Equal(2, connector.CancelCount);
+
+        connector.CancelResult = 0;
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+        await connector.EnsureConnectedAsync(Target(userName: null), retryFailed: false);
+        Assert.Equal(3, connector.CancelCount);
     }
 }

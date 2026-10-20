@@ -55,6 +55,25 @@ public class FileAccessTestTests
         Assert.True(retryFailed);
     }
 
+    [Theory]
+    [InlineData("//nas02/files", "svc-files", false)]   // 换了主机
+    [InlineData("//nas01/files", "svc-other", false)]   // 换了账号
+    [InlineData("//nas01/files", "SVC-FILES", true)]    // 账号只差大小写,算同一个
+    public async Task Server_test_reuses_saved_password_only_for_same_host_and_account(string root, string userName, bool reused)
+    {
+        await using var env = FilePathTestEnv.Create(supportsCredentials: true, extraRoots: ["//nas01/files", "//nas02/files"]);
+        var service = env.Service<IFileServerService>();
+        var id = await service.AddAsync(new FileServerSaveInput(NewName(), "//nas01/files", "svc-files", "p@ss", true, null));
+        var saved = (await env.Service<IRepository<SysFileServer>>().GetByIdAsync(id))!.PasswordProtected;
+        // 连接器在记录之后就失败,探测不会真去访问这台主机
+        env.Connector.Fail = new FileServerConnectException(FileAccessFailure.BadCredentials, 1326);
+
+        await service.TestAsync(new FileServerTestInput(id, root, userName, null));
+
+        var (target, _) = Assert.Single(env.Connector.Calls);
+        Assert.Equal(reused ? saved : null, target.PasswordProtected);
+    }
+
     [Fact]
     public async Task Server_test_protects_typed_password_without_saving()
     {

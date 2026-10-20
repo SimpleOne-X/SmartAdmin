@@ -7,7 +7,7 @@ namespace SmartAdmin.Services;
 /// <summary>
 /// <see cref="IFileServerService"/> 默认实现。
 /// <para>密码和 AI 厂商的 API Key 同一套规则:出参只有「是否已设置」,留空表示不改,数据保护密钥是进程内临时密钥时拒绝保存
-/// (重启后信封就解不开了)。清空账号时密码一并清空。</para>
+/// (重启后信封就解不开了)。清空账号时密码一并清空;换了主机或账号而密码留空时,旧密码也清掉。</para>
 /// </summary>
 public class FileServerService(
     IRepository<SysFileServer> servers,
@@ -58,6 +58,8 @@ public class FileServerService(
         var entity = await servers.GetRequiredAsync(id, ErrorCode.FileServerNotFound);
         await ValidateAsync(input, excludingId: id);
 
+        // 密码留空表示不改,但主机或账号换了,旧密码就不再适用:清掉,而不是带去新主机或配给新账号
+        if (!CanReuseSavedPassword(entity, CleanRootPath(input.RootPath), CleanUserName(input.UserName))) entity.PasswordProtected = null;
         Apply(entity, input);
         await servers.UpdateAsync(entity);
 
@@ -148,7 +150,8 @@ public class FileServerService(
 
     /// <summary>
     /// 测试连接的目标:先走和保存相同的 <see cref="ValidateLocationAsync"/>(不通过抛 <see cref="AdminException"/>)。
-    /// 填了密码就现场加密成信封交给连接器,只在内存里,不落库;留空且是编辑已有的行时用库里已保存的信封。
+    /// 填了密码就现场加密成信封交给连接器,只在内存里,不落库;留空且是编辑已有的行时,
+    /// 只有 <see cref="CanReuseSavedPassword"/> 放行才用库里已保存的信封,否则按没有密码去连。
     /// </summary>
     protected virtual async Task<FileServerTarget> ToTestTargetAsync(FileServerTestInput input)
     {
@@ -159,8 +162,21 @@ public class FileServerService(
 
         var envelope = userName is null ? null
             : !string.IsNullOrEmpty(input.Password) ? secretProtector.Protect(input.Password)
-            : saved?.PasswordProtected;
+            : saved is not null && CanReuseSavedPassword(saved, rootPath, userName) ? saved.PasswordProtected
+            : null;
         return new FileServerTarget(input.Id ?? 0, rootPath, userName, envelope);
+    }
+
+    /// <summary>
+    /// 密码留空时能否沿用这一行已保存的密码(测试连接与修改共用):主机和账号都没变才行,否则旧密码会被带去另一台主机,
+    /// 或配给另一个账号去试。主机取共享路径里的主机名,不是共享路径的根按「本机」算;主机和账号都不区分大小写,账号 null 与空串相同。
+    /// </summary>
+    protected virtual bool CanReuseSavedPassword(SysFileServer saved, string rootPath, string? userName)
+    {
+        static string HostOf(string root) => FilePathRules.TryGetShare(root, out var host, out _) ? host : "";
+
+        return string.Equals(HostOf(saved.RootPath), HostOf(rootPath), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(CleanUserName(saved.UserName) ?? "", userName ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

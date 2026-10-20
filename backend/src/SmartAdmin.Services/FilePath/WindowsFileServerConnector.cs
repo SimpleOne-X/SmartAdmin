@@ -11,11 +11,12 @@ namespace SmartAdmin.Services;
 /// Windows 上的连接器:填了账号的文件服务器,在第一次访问之前用 <c>WNetAddConnection2W</c>(<c>mpr.dll</c>)
 /// 按账号密码建立不分配盘符的连接。连接属于后端进程的登录会话,之后进程里访问这个共享都用这套凭据。
 /// <list type="bullet">
-///   <item>每个共享记着当前连接用的凭据指纹(共享、账号、密码信封);配置改了就先断开旧连接再按新凭据连。
-///         断开不强制,还有文件开着时继续用旧连接,下次访问再换。</item>
-///   <item>同一个共享的连接操作串行(每个共享一把锁)。native 调用是阻塞的,放在线程池里跑并加超时。</item>
+///   <item>每个共享记着当前连接用的凭据指纹(共享、账号、解开后的密码的哈希;信封每次加密都带随机数,不能拿来比);
+///         配置改了就先断开旧连接再按新凭据连,账号清空了就断开。断开不强制,还有文件开着时继续用旧连接,下次访问再换。</item>
+///   <item>同一个共享的连接操作串行(每个共享一把锁)。调用方的取消令牌只用来等锁;拿到锁之后 native 调用只受
+///         <see cref="ConnectTimeout"/> 限制,结果一定记进状态。</item>
 ///   <item>账号或密码错误不自动重试:这套凭据记为失败,直到配置改了或有人点测试连接;否则每个请求都拿错密码去试,很快就把域账号锁住。
-///         网络类失败过 30 秒再试。</item>
+///         网络类失败(含超时)过 30 秒再试。</item>
 /// </list>
 /// 两个 native 调用是 <c>protected virtual</c>,测试用子类替掉,不碰真实的网络。
 /// </summary>
@@ -25,6 +26,7 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
     private const int ResourceTypeDisk = 1;                  // RESOURCETYPE_DISK
     private const int ErrorAlreadyAssigned = 85;             // ERROR_ALREADY_ASSIGNED
     private const int ErrorSessionCredentialConflict = 1219; // ERROR_SESSION_CREDENTIAL_CONFLICT
+    private const int ErrorNotConnected = 2250;              // ERROR_NOT_CONNECTED
     private const int ErrorOpenFiles = 2401;                 // ERROR_OPEN_FILES
 
     /// <summary>
@@ -40,18 +42,65 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
     /// <inheritdoc />
     public virtual bool SupportsCredentials => true;
 
-    /// <summary>单次 native 连接调用的时限(真实时间)。主机不通时这个调用可能卡十几秒。</summary>
+    /// <summary>单次 native 调用(连接或断开)的时限(真实时间)。主机不通时这个调用可能卡十几秒。</summary>
     protected virtual TimeSpan ConnectTimeout => TimeSpan.FromSeconds(15);
 
     /// <inheritdoc />
     public virtual async Task EnsureConnectedAsync(FileServerTarget target, bool retryFailed, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(target.UserName)) return;
+        var isShare = FilePathRules.TryGetShare(target.RootPath, out _, out var share);
+        if (string.IsNullOrEmpty(target.UserName))
+        {
+            if (isShare) await DisconnectAsync(share, ct);
+            return;
+        }
         // 保存时已校验「填了账号必须是共享路径」,走到这里说明库里的数据被改过
-        if (!FilePathRules.TryGetShare(target.RootPath, out _, out var share))
-            throw new FileServerConnectException(FileAccessFailure.Unknown, 0);
+        if (!isShare) throw new FileServerConnectException(FileAccessFailure.Unknown, 0);
 
-        var fingerprint = Fingerprint(share, target.UserName, target.PasswordProtected);
+        await ConnectAsync(share, target.UserName, Unprotect(share, target.PasswordProtected), retryFailed, ct);
+    }
+
+    /// <summary>
+    /// 账号清空之后断开这个共享先前用账号建的连接:不断开的话进程里访问这个共享仍带着旧凭据,测试连接也会误报正常。
+    /// 断开成功(或本来就不在了)才忘掉旧连接;还有文件开着、超时等情况继续用旧连接,下次访问再断。
+    /// </summary>
+    protected virtual async Task DisconnectAsync(string share, CancellationToken ct)
+    {
+        // 从没用账号连过的共享不用拿锁
+        if (!_shares.TryGetValue(share, out var state)) return;
+        await state.Lock.WaitAsync(ct);
+        try
+        {
+            if (state.ConnectedFingerprint is null) return;
+            var rc = await RunNativeAsync(() => CancelConnection(share));
+            if (rc is 0 or ErrorNotConnected)
+            {
+                state.ConnectedFingerprint = null;
+                logger.LogInformation("文件服务器共享 {Share} 不再用账号访问,已断开先前的连接", share);
+            }
+            else
+            {
+                logger.LogInformation("断开文件服务器共享 {Share} 先前的连接失败:Win32 错误 {Win32Code},暂时继续用旧连接,下次访问再断", share, rc);
+            }
+        }
+        catch (TimeoutException)
+        {
+            logger.LogWarning("断开文件服务器共享 {Share} 先前的连接超时,暂时继续用旧连接,下次访问再断", share);
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 按账号密码确保连上:同一套凭据已连上就返回;这套凭据记着失败且不该重试时直接抛;先断开别的凭据的旧连接,再连。
+    /// 连接的结果(含超时)一律记进状态。调用方的令牌只用来等锁:调用方先放弃时结果照样记下,
+    /// 否则错密码的结果被丢掉,下一个请求又拿它去试。
+    /// </summary>
+    protected virtual async Task ConnectAsync(string share, string userName, string password, bool retryFailed, CancellationToken ct)
+    {
+        var fingerprint = Fingerprint(share, userName, password);
         var state = _shares.GetOrAdd(share, _ => new ShareState());
         await state.Lock.WaitAsync(ct);
         try
@@ -59,50 +108,60 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
             if (state.ConnectedFingerprint == fingerprint) return;
             if (state.Failure is { } failed && failed.Fingerprint == fingerprint && !retryFailed
                 && (CredentialErrors.Contains(failed.Win32Code) || time.GetUtcNow() - failed.At < NetworkRetryAfter))
-                throw new FileServerConnectException(FileAccessFailure.FromWin32(failed.Win32Code), failed.Win32Code);
+                throw new FileServerConnectException(failed.Reason, failed.Win32Code);
 
-            if (state.ConnectedFingerprint is not null)
+            int rc;
+            try
             {
-                if (CancelConnection(share) == ErrorOpenFiles)
+                if (state.ConnectedFingerprint is not null)
                 {
-                    logger.LogInformation("文件服务器共享 {Share} 还有文件开着,暂时继续用旧连接,下次访问再换新凭据", share);
-                    return;
+                    if (await RunNativeAsync(() => CancelConnection(share)) == ErrorOpenFiles)
+                    {
+                        logger.LogInformation("文件服务器共享 {Share} 还有文件开着,暂时继续用旧连接,下次访问再换新凭据", share);
+                        return;
+                    }
+                    state.ConnectedFingerprint = null;
                 }
-                state.ConnectedFingerprint = null;
+                rc = await AddConnectionAsync(share, userName, password);
             }
-
-            var password = Unprotect(share, target.PasswordProtected);
-            var rc = await ConnectAsync(share, target.UserName, password, ct);
-            if (rc == ErrorSessionCredentialConflict)
+            catch (TimeoutException)
             {
-                // 常见于后端重启前用旧密码连过:断开这个共享再连一次
-                CancelConnection(share);
-                rc = await ConnectAsync(share, target.UserName, password, ct);
+                // 按网络类失败记下:30 秒内不再去连,免得主机不通时每个请求都排在锁后面等满时限
+                state.Failure = new ConnectFailure(fingerprint, FileAccessFailure.Timeout, 0, time.GetUtcNow());
+                logger.LogWarning("用账号 {UserName} 连接文件服务器共享 {Share} 超时", userName, share);
+                throw new FileServerConnectException(FileAccessFailure.Timeout, 0);
             }
 
             if (rc is 0 or ErrorAlreadyAssigned)
             {
                 state.ConnectedFingerprint = fingerprint;
                 state.Failure = null;
-                logger.LogInformation("已用账号 {UserName} 连接文件服务器共享 {Share}", target.UserName, share);
+                logger.LogInformation("已用账号 {UserName} 连接文件服务器共享 {Share}", userName, share);
                 return;
             }
 
             var reason = FileAccessFailure.FromWin32(rc);
-            state.Failure = new ConnectFailure(fingerprint, rc, time.GetUtcNow());
+            state.Failure = new ConnectFailure(fingerprint, reason, rc, time.GetUtcNow());
             logger.LogWarning("用账号 {UserName} 连接文件服务器共享 {Share} 失败:Win32 错误 {Win32Code}({Reason})",
-                target.UserName, share, rc, reason);
+                userName, share, rc, reason);
             throw new FileServerConnectException(reason, rc);
-        }
-        catch (TimeoutException)
-        {
-            logger.LogWarning("用账号 {UserName} 连接文件服务器共享 {Share} 超时", target.UserName, share);
-            throw new FileServerConnectException(FileAccessFailure.Timeout, 0);
         }
         finally
         {
             state.Lock.Release();
         }
+    }
+
+    /// <summary>
+    /// 调 <see cref="AddConnection"/>;返回 1219(这台主机上还留着别的凭据的连接,常见于后端重启前用旧密码连过)时断开这个共享再连一次。
+    /// 返回 Win32 错误码;任一次 native 调用超时抛 <see cref="TimeoutException"/>。
+    /// </summary>
+    protected virtual async Task<int> AddConnectionAsync(string share, string userName, string password)
+    {
+        var rc = await RunNativeAsync(() => AddConnection(share, userName, password));
+        if (rc != ErrorSessionCredentialConflict) return rc;
+        await RunNativeAsync(() => CancelConnection(share));
+        return await RunNativeAsync(() => AddConnection(share, userName, password));
     }
 
     /// <summary>
@@ -117,17 +176,20 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
     /// <summary>断开连接(<c>WNetCancelConnection2W</c>,不强制:还有文件开着时返回 2401)。返回 Win32 错误码,0 为成功。</summary>
     protected virtual int CancelConnection(string remoteName) => WNetCancelConnection2(remoteName, 0, false);
 
-    /// <summary>在线程池里调 <see cref="AddConnection"/>,超过 <see cref="ConnectTimeout"/> 抛 <see cref="TimeoutException"/>。</summary>
-    private Task<int> ConnectAsync(string share, string userName, string? password, CancellationToken ct)
+    /// <summary>在线程池里跑一个阻塞的 native 调用,超过 <see cref="ConnectTimeout"/>(真实时间)抛 <see cref="TimeoutException"/>。</summary>
+    private Task<int> RunNativeAsync(Func<int> call)
     {
-        // shortcut: 超时后后台那次连接仍在跑，下一次请求可能并发再连；真出现连接风暴时改成复用在途任务
-        return Task.Run(() => AddConnection(share, userName, password), CancellationToken.None).WaitAsync(ConnectTimeout, ct);
+        // shortcut: 超时后放弃的那次 native 调用不再跟踪,它之后连上或失败都不进状态,退避过后的重试可能和它并发;真出现连接风暴时改成复用在途任务
+        return Task.Run(call, CancellationToken.None).WaitAsync(ConnectTimeout);
     }
 
-    /// <summary>解开密码信封;解不开(数据保护密钥换过)按连接失败处理,而不是让请求变成 500。</summary>
-    private string? Unprotect(string share, string? envelope)
+    /// <summary>
+    /// 解开密码信封。没有密码时是空串:交给 native 的空串表示「不用密码」,null 则表示「用这个账号的默认密码」。
+    /// 解不开(数据保护密钥换过)按连接失败处理,而不是让请求变成 500。
+    /// </summary>
+    private string Unprotect(string share, string? envelope)
     {
-        if (string.IsNullOrEmpty(envelope)) return null;
+        if (string.IsNullOrEmpty(envelope)) return "";
         try
         {
             return protector.Unprotect(envelope);
@@ -139,10 +201,12 @@ public class WindowsFileServerConnector(ISecretProtector protector, ILogger<Wind
         }
     }
 
-    private static string Fingerprint(string share, string userName, string? passwordProtected) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{share.ToLowerInvariant()}\n{userName}\n{passwordProtected}")));
+    /// <summary>凭据指纹:只留哈希,明文密码不存进状态。</summary>
+    private static string Fingerprint(string share, string userName, string password) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{share.ToLowerInvariant()}\n{userName}\n{password}")));
 
-    private sealed record ConnectFailure(string Fingerprint, int Win32Code, DateTimeOffset At);
+    /// <summary>一次连接失败;超时的 <see cref="Win32Code"/> 是 0,按网络类失败处理。</summary>
+    private sealed record ConnectFailure(string Fingerprint, string Reason, int Win32Code, DateTimeOffset At);
 
     /// <summary>一个共享的连接状态;字段只在持有 <see cref="Lock"/> 时读写。</summary>
     private sealed class ShareState

@@ -33,18 +33,25 @@ public sealed class FilePathTestEnv : IAsyncDisposable
 
     /// <param name="supportsCredentials">替身连接器是否声明支持账号连接(决定「填了账号必须是共享路径」是否生效)。</param>
     /// <param name="overrides">在换连接器之后追加的服务覆盖。</param>
-    public static FilePathTestEnv Create(bool supportsCredentials = false, Action<IServiceCollection>? overrides = null)
+    /// <param name="extraRoots">
+    /// 追加进白名单的根路径。共享路径写成 <c>//nas01/files</c>:Windows 和 Linux 都认它是绝对路径;
+    /// 用到它的用例要让替身连接器失败,免得真去访问这台主机。
+    /// </param>
+    public static FilePathTestEnv Create(
+        bool supportsCredentials = false, Action<IServiceCollection>? overrides = null, params string[] extraRoots)
     {
         var root = Directory.CreateTempSubdirectory("smart-fp-root-").FullName;
         var staging = Directory.CreateTempSubdirectory("smart-fp-staging-").FullName;
         var connector = new FakeFileServerConnector { SupportsCredentials = supportsCredentials };
+        var settings = new Dictionary<string, string?>
+        {
+            ["SmartAdmin:FilePath:AllowedRoots:0"] = root,
+            ["SmartAdmin:FilePath:StagingPath"] = staging,
+        };
+        for (var i = 0; i < extraRoots.Length; i++) settings[$"SmartAdmin:FilePath:AllowedRoots:{i + 1}"] = extraRoots[i];
         var factory = new AdminAppFactory
         {
-            Settings = new Dictionary<string, string?>
-            {
-                ["SmartAdmin:FilePath:AllowedRoots:0"] = root,
-                ["SmartAdmin:FilePath:StagingPath"] = staging,
-            },
+            Settings = settings,
             Overrides = s =>
             {
                 s.Replace(ServiceDescriptor.Singleton<IFileServerConnector>(connector));
