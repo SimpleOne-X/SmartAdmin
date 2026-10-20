@@ -36,10 +36,10 @@ onMounted(async () => {
 function rolesText(ids: (number | string)[]) {
   return ids.length === 0
     ? t('filePath.path.allLoggedIn')
-    : ids.map(id => roleNames.value[String(id)] ?? `#${id}`).join('、')
+    : ids.map(id => roleNames.value[String(id)] ?? `#${id}`).join(t('filePath.path.roleSeparator'))
 }
 
-// 行数据 → 更新入参:openEdit 回填与行内启停共用(后端没有独立启停端点,走全量 update)
+// 行数据 → 更新入参:只给行内启停用(后端没有独立启停端点,走全量 update);编辑抽屉按行数据自己回填
 const toInput = (r: FilePathView): FilePathUpdateInput => ({
   name: r.name,
   serverId: r.serverId,

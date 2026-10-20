@@ -40,6 +40,7 @@ import {
   exampleFileName,
   folderPreview,
   normalizeExtensions,
+  overwriteRisk,
 } from '../rules'
 
 const show = defineModel<boolean>('show', { default: false })
@@ -125,13 +126,7 @@ const namingOptions = computed(() =>
   })),
 )
 
-// 同名覆盖又没限制上传角色:任何登录用户都能覆盖这个路径下的文件
-const overwriteRisk = computed(
-  () =>
-    form.namingRule === NamingRule.BusinessPath &&
-    form.onConflict === ConflictMode.Overwrite &&
-    form.uploadRoleIds.length === 0,
-)
+const showOverwriteRisk = computed(() => overwriteRisk(form))
 
 const rules: FormRules = {
   code: {
@@ -322,7 +317,7 @@ async function save() {
               {{ t('filePath.onConflict.overwrite') }}
             </n-radio-button>
           </n-radio-group>
-          <n-alert v-if="overwriteRisk" type="warning" :bordered="false">
+          <n-alert v-if="showOverwriteRisk" type="warning" :bordered="false">
             {{ t('filePath.path.overwriteRisk') }}
           </n-alert>
         </n-space>

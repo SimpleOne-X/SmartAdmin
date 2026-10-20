@@ -13,6 +13,24 @@ export const NAMING_RULE_LABEL_KEYS: Record<number, string> = {
 /** 业务指定路径撞名时的处理(与后端 FilePathConflictMode 的值一致);其余命名规则不会撞名。 */
 export const ConflictMode = { Reject: 0, Overwrite: 1 } as const
 
+/**
+ * 业务指定路径 + 同名覆盖 + 没限制上传角色:任何登录用户都能覆盖这个文件夹里的同名文件,表单要给出警告。
+ * 只读的行不收上传,谈不上覆盖。
+ */
+export function overwriteRisk(form: {
+  namingRule: number
+  onConflict: number
+  readOnly: boolean
+  uploadRoleIds: readonly unknown[]
+}): boolean {
+  return (
+    !form.readOnly &&
+    form.namingRule === NamingRule.BusinessPath &&
+    form.onConflict === ConflictMode.Overwrite &&
+    form.uploadRoleIds.length === 0
+  )
+}
+
 /** 编码:字母、数字、点、下划线、连字符,1–64 位。 */
 export const CODE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
 

@@ -2056,6 +2056,7 @@ export default {
       readOnly: '只读',
       onConflict: '同名处理',
       allLoggedIn: '所有登录用户',
+      roleSeparator: '、',
       unknownRule: '未知规则',
       addTitle: '新增文件路径',
       editTitle: '编辑文件路径',

@@ -4,7 +4,10 @@ import {
   exampleFileName,
   folderPreview,
   hostOf,
+  NamingRule,
+  ConflictMode,
   normalizeExtensions,
+  overwriteRisk,
   passwordReentryRequired,
 } from './rules'
 
@@ -165,5 +168,28 @@ describe('passwordReentryRequired', () => {
   it('原来没有账号、现在填了账号:账号变了,要重填', () => {
     const anon = { rootPath: '\\\\nas01\\files', userName: null, hasPassword: true }
     expect(passwordReentryRequired(anon, '\\\\nas01\\files', 'svc-files')).toBe(true)
+  })
+})
+
+describe('overwriteRisk', () => {
+  const risky = {
+    namingRule: NamingRule.BusinessPath,
+    onConflict: ConflictMode.Overwrite,
+    readOnly: false,
+    uploadRoleIds: [] as string[],
+  }
+
+  it('业务指定路径、同名覆盖、没限制上传角色:有风险', () => {
+    expect(overwriteRisk(risky)).toBe(true)
+  })
+
+  it('限制了上传角色、同名拒绝或别的命名规则:没有风险', () => {
+    expect(overwriteRisk({ ...risky, uploadRoleIds: ['1'] })).toBe(false)
+    expect(overwriteRisk({ ...risky, onConflict: ConflictMode.Reject })).toBe(false)
+    expect(overwriteRisk({ ...risky, namingRule: NamingRule.DateGuid })).toBe(false)
+  })
+
+  it('只读的行不收上传,谈不上覆盖', () => {
+    expect(overwriteRisk({ ...risky, readOnly: true })).toBe(false)
   })
 })

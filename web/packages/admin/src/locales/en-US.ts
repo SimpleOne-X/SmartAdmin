@@ -2111,6 +2111,7 @@ export default {
       readOnly: 'Read-only',
       onConflict: 'On name clash',
       allLoggedIn: 'All signed-in users',
+      roleSeparator: ', ',
       unknownRule: 'Unknown rule',
       addTitle: 'Add file path',
       editTitle: 'Edit file path',

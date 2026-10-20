@@ -74,7 +74,8 @@ const blank = (): ServerFormState => ({
 })
 const form = reactive<ServerFormState>(blank())
 
-// 换主机或账号且已设置过密码时必须重填;账号输入框置灰的平台(Linux)上用户改不了账号,也就不会触发。
+// 换主机或账号且已设置过密码时必须重填。不支持账号密码的平台(Linux)上不要求:那里换主机同样会让这条判断成立,
+// 但后端不用账号密码连接,密码框也是置灰的,所以由 supportsCredentials 直接挡掉。
 const reentry = computed(
   () =>
     props.editing !== null &&
@@ -120,6 +121,12 @@ watch(show, v => {
         }
       : blank(),
   )
+})
+
+// 放在回填之后注册:打开抽屉时先按 editing 回填,再判断要不要重填,不拿上一次的表单值去校验。
+// 主机或账号改过之后要不要重填密码可能变了:重新校验密码框,改回原值时过时的「请重新填写密码」随之消失
+watch(reentry, () => {
+  formRef.value?.validate(undefined, ['password']).catch(() => undefined)
 })
 
 // ── 测试连接:用表单里当前填的值,结果在返回体里(ok=false 不代表接口失败) ──
