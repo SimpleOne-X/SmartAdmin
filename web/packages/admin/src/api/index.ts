@@ -1252,6 +1252,183 @@ export const fileApi = {
       .then(r => unwrap<FileUploadOutput>(r)),
 }
 
+// ── 文件路径:文件服务器 / 文件路径配置 / 上传下载(与上面 sys_file 的上传是两条独立的路) ──
+
+export type FileServerView = components['schemas']['FileServerView']
+export type FileServerSaveInput = components['schemas']['FileServerSaveInput']
+export type FileServerTestInput = components['schemas']['FileServerTestInput']
+export type FileServerOption = components['schemas']['FileServerOption']
+export type FileAccessTestResult = components['schemas']['FileAccessTestResult']
+export type FileAccessStatus = components['schemas']['FileAccessStatus']
+export type FilePathView = components['schemas']['FilePathView']
+export type FilePathAddInput = components['schemas']['FilePathAddInput']
+export type FilePathUpdateInput = components['schemas']['FilePathUpdateInput']
+export type FilePathTestInput = components['schemas']['FilePathTestInput']
+export type FilePathEnvironment = components['schemas']['FilePathEnvironment']
+export type FilePathUploadOutput = components['schemas']['FilePathUploadOutput']
+/** 分片初始化出参:契约里 int32 写作 number | string,线上实际是数字,这里收窄成 number 供切片计算。 */
+export interface FilePathChunkInitOutput {
+  uploadId: string
+  chunkSize: number
+  chunkCount: number
+}
+
+export const fileServerApi = {
+  /** 文件服务器分页;keyword 模糊匹配名称或根路径。 */
+  page: (params: { page: number; pageSize: number; keyword?: string; enabled?: boolean }) =>
+    client
+      .GET('/api/v1/sys/file-server/page', {
+        params: {
+          query: { ...pageParams(params), Keyword: params.keyword, Enabled: params.enabled },
+        },
+      })
+      .then(r => toPage<FileServerView>(r)),
+  get: (id: number) =>
+    client
+      .GET('/api/v1/sys/file-server/{id}', { params: { path: { id } } })
+      .then(r => unwrap<FileServerView>(r)),
+  add: (body: FileServerSaveInput) =>
+    client.POST('/api/v1/sys/file-server/add', { body }).then(r => unwrap<number>(r)),
+  update: (id: number, body: FileServerSaveInput) =>
+    client
+      .PUT('/api/v1/sys/file-server/{id}', { params: { path: { id } }, body })
+      .then(r => unwrap<boolean>(r)),
+  remove: (id: number) =>
+    client
+      .DELETE('/api/v1/sys/file-server/{id}', { params: { path: { id } } })
+      .then(r => unwrap<boolean>(r)),
+  /** 测试连接:用表单里当前填的值,不要求先保存;失败原因在返回体里,不抛异常。 */
+  test: (body: FileServerTestInput) =>
+    client
+      .POST('/api/v1/sys/file-server/test', { body })
+      .then(r => unwrap<FileAccessTestResult>(r)),
+  /** 一批文件服务器的在线状态;不缓存,每次现连。 */
+  status: (ids: number[]) =>
+    client
+      .GET('/api/v1/sys/file-server/status', { params: { query: { ids } } })
+      .then(r => unwrap<FileAccessStatus[]>(r)),
+  /** 下拉选项(配文件路径时选服务器)。 */
+  options: () =>
+    client.GET('/api/v1/sys/file-server/options', {}).then(r => unwrap<FileServerOption[]>(r)),
+}
+
+export const filePathApi = {
+  /** 文件路径分页;keyword 模糊匹配编码或名称。 */
+  page: (params: {
+    page: number
+    pageSize: number
+    keyword?: string
+    serverId?: number
+    enabled?: boolean
+  }) =>
+    client
+      .GET('/api/v1/sys/file-path/page', {
+        params: {
+          query: {
+            ...pageParams(params),
+            Keyword: params.keyword,
+            ServerId: params.serverId,
+            Enabled: params.enabled,
+          },
+        },
+      })
+      .then(r => toPage<FilePathView>(r)),
+  get: (id: number) =>
+    client
+      .GET('/api/v1/sys/file-path/{id}', { params: { path: { id } } })
+      .then(r => unwrap<FilePathView>(r)),
+  add: (body: FilePathAddInput) =>
+    client.POST('/api/v1/sys/file-path/add', { body }).then(r => unwrap<number>(r)),
+  /** 编码是业务引用它的键,保存后不能改,所以更新入参里没有 code。 */
+  update: (id: number, body: FilePathUpdateInput) =>
+    client
+      .PUT('/api/v1/sys/file-path/{id}', { params: { path: { id } }, body })
+      .then(r => unwrap<boolean>(r)),
+  remove: (id: number) =>
+    client
+      .DELETE('/api/v1/sys/file-path/{id}', { params: { path: { id } } })
+      .then(r => unwrap<boolean>(r)),
+  /** 测试连接:用弹窗里当前选的服务器、子文件夹和读写方式,不要求先保存。 */
+  test: (body: FilePathTestInput) =>
+    client.POST('/api/v1/sys/file-path/test', { body }).then(r => unwrap<FileAccessTestResult>(r)),
+  /** 一批文件路径的在线状态;不缓存,每次现连。 */
+  status: (ids: number[]) =>
+    client
+      .GET('/api/v1/sys/file-path/status', { params: { query: { ids } } })
+      .then(r => unwrap<FileAccessStatus[]>(r)),
+  /** 配置页的环境信息:白名单根目录,以及当前平台能不能用账号连接共享。 */
+  environment: () =>
+    client.GET('/api/v1/sys/file-path/environment', {}).then(r => unwrap<FilePathEnvironment>(r)),
+}
+
+// 按编码上传 / 下载。任何登录用户都能调,谁能往哪个文件路径传、从哪个下载由该路径的角色配置决定,所以没有权限码。
+export const filePathFileApi = {
+  /** 单文件上传:返回相对文件夹的路径,业务存它、之后凭它下载。subPath 仅「业务指定路径」命名规则用。 */
+  upload: (code: string, file: File, subPath?: string) =>
+    client
+      .POST('/api/v1/sys/file-path/upload/{code}', {
+        timeout: LONG_TIMEOUT_MS,
+        params: { path: { code } },
+        body: { file: file as unknown as string, subPath },
+        bodySerializer: body => {
+          const b = body as unknown as { file: File; subPath?: string }
+          const fd = new FormData()
+          fd.append('file', b.file)
+          if (b.subPath) fd.append('subPath', b.subPath)
+          return fd
+        },
+      })
+      .then(r => unwrap<FilePathUploadOutput>(r)),
+  /** 分片初始化:服务端按声明的文件名、大小拦规则,通过才建暂存会话,分片大小与片数以它返回的为准。 */
+  chunkInit: (
+    code: string,
+    input: { fileName: string; size: number; sha256: string; subPath?: string },
+  ) =>
+    client
+      .POST('/api/v1/sys/file-path/upload/{code}/chunk/init', {
+        params: { path: { code } },
+        body: { ...input, subPath: input.subPath ?? null },
+      })
+      .then(r => unwrap<FilePathChunkInitOutput>(r)),
+  /** 上传一个分片(multipart:uploadId + index + chunk),同 upload 用 bodySerializer 建 FormData。 */
+  chunk: (code: string, uploadId: string, index: number, blob: Blob) =>
+    client
+      .POST('/api/v1/sys/file-path/upload/{code}/chunk', {
+        timeout: LONG_TIMEOUT_MS,
+        params: { path: { code } },
+        body: { uploadId, index, chunk: blob as unknown as string },
+        bodySerializer: body => {
+          const b = body as unknown as { uploadId: string; index: number; chunk: Blob }
+          const fd = new FormData()
+          fd.append('uploadId', b.uploadId)
+          fd.append('index', String(b.index))
+          fd.append('chunk', b.chunk)
+          return fd
+        },
+      })
+      .then(r => {
+        unwrap<boolean>(r)
+      }),
+  /** 完成:服务端合并、按实际大小和当前规则再校验、核对哈希后写入。 */
+  chunkComplete: (code: string, uploadId: string) =>
+    client
+      .POST('/api/v1/sys/file-path/upload/{code}/chunk/complete', {
+        timeout: LONG_TIMEOUT_MS,
+        params: { path: { code } },
+        body: { uploadId },
+      })
+      .then(r => unwrap<FilePathUploadOutput>(r)),
+  /** 下载:parseAs blob 取原始字节;业务失败服务端回 200 + 信封,unwrapDownload 会辨出来抛 ApiError。 */
+  download: (code: string, path: string, name?: string) =>
+    client
+      .GET('/api/v1/sys/file-path/download/{code}', {
+        timeout: LONG_TIMEOUT_MS,
+        params: { path: { code }, query: { path, name } },
+        parseAs: 'blob',
+      })
+      .then(r => unwrapDownload(r)),
+}
+
 // 在线会话:只读分页 + 按 sessionId 强制下线。
 export const sessionApi = {
   /** 在线会话分页(只读)。后端仅支持按 UserId 过滤,这里不带业务搜索。 */

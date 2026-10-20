@@ -21,6 +21,19 @@ describe('translateError', () => {
     expect(translateError(err)).toBe('账号或密码错误')
   })
 
+  // 「文件夹无法访问」的 reason 是后端的原因码(accessDenied 这类),界面上要看到的是翻译后的原因。
+  it('translates_reason_arg', () => {
+    const err = new ApiError(44114, 'error.filePath.folderUnavailable', { reason: 'accessDenied' })
+    const text = translateError(err)
+    expect(text).toContain('拒绝访问')
+    expect(text).not.toContain('accessDenied')
+  })
+
+  it('未知的 reason 原样显示', () => {
+    const err = new ApiError(44114, 'error.filePath.folderUnavailable', { reason: 'somethingNew' })
+    expect(translateError(err)).toBe('文件夹无法访问:somethingNew')
+  })
+
   it('msgKey 未命中但有 message → message,普通 Error → message', () => {
     const withUnknownKey = new ApiError(
       99999,

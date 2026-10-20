@@ -72,6 +72,7 @@ SmartAdmin 内接入约定:
 | DictTag | 表格列字典翻译 + 语义色标签 | `src/components/DictTag/README.md` |
 | OrgTreeSelect | 机构树下拉;拉 `org/options`(平铺,登录即可调用,不占机构页查询码)→ `utils/tree.buildTree` 拼树,`$attrs` 透传 n-tree-select;`excludeSubtreeOf` 剪自身子树防成环;取数失败时空态写「加载失败」 | `src/components/OrgTreeSelect/README.md` |
 | FileUpload | 封 n-upload `custom-request`;内部 `fileApi.upload` 自动带 Bearer,成功 `emit('uploaded', out)`,上传起止各 `emit('loadingChange', bool)`(try/finally 兜底,给触发器加"上传中"spinner);`$attrs` 透传(accept/multiple/show-file-list)。`chunked` 走分片/断点续传/秒传(`utils/chunkUpload`,进度回 n-upload) | `src/components/FileUpload/README.md` |
+| FilePathUpload | 按文件路径编码上传,落到管理员配置的文件夹(与 FileUpload 的内核文件表是两条路);封 n-upload `custom-request`,内部 `uploadToFilePath`,成功 `emit('uploaded', { path, name, size, viewUrl })`,起止各 `emit('loadingChange', bool)`;`$attrs` 透传。超过 20 MB 自动分片,进度回 n-upload;业务表存 `path`,`viewUrl` 无下载权限时为 null | `src/components/FilePathUpload/README.md` |
 | PasswordStrength | 密码强度条 + 规则清单(紧贴输入框、弱/中/强取 err/warn/ok 语义色);自包含,`:value` 传密码明文,内部拉当前生效密码策略动态构建规则(改密页 / 建用户页共用) | `src/components/PasswordStrength/README.md` |
 | ApiSelect | 通用远程分页下拉基座;`fetch(keyword)` 回归一选项,管加载/远程搜索防抖/竞态/loading,`$attrs` 透传 n-select | `src/components/ApiSelect/README.md` |
 | UserSelect | 人员选择器;基于 ApiSelect,`userApi.options` 搜索(登录即可调用,不占用户页查询码)+ 可选 `orgId` 部门过滤,label 为「姓名(账号)」 | `src/components/UserSelect/README.md` |
