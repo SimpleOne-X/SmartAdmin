@@ -15,8 +15,8 @@ public class SysFileServer : BaseEntity
     [SugarColumn(Length = 100, ColumnDescription = "名称(唯一)")]
     public string Name { get; set; } = "";
 
-    /// <summary>根路径,绝对路径,必须落在 <c>SmartAdmin:FilePath:AllowedRoots</c> 白名单内</summary>
-    [SugarColumn(Length = 260, ColumnDescription = "根路径(绝对路径,须在白名单内)")]
+    /// <summary>根路径,绝对路径;配了 <c>SmartAdmin:FilePath:AllowedRoots</c> 时必须落在其中,没配时不能碰程序目录和分片暂存目录</summary>
+    [SugarColumn(Length = 260, ColumnDescription = "根路径(绝对路径)")]
     public string RootPath { get; set; } = "";
 
     /// <summary>访问账号(<c>域\账号</c> 或 <c>账号</c>);null = 用后端自己的运行身份访问</summary>

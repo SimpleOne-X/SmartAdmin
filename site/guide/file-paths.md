@@ -4,11 +4,13 @@ An administrator configures once, in the back office, which file server and whic
 
 The kernel's existing "Files" feature (the `FileUpload` component and the `/api/v1/sys/file/*` endpoints) is a separate system. The "Files" menu group holds two pages side by side: the original "Files" page covers that system, and the "File Paths" page covers this one. The endpoints and components are not interchangeable, so pick one for each business field and don't mix them.
 
-## Allow the root directories first
+## Who bounds the root paths
 
-A file server's root path must fall inside the directories listed in `SmartAdmin:FilePath:AllowedRoots`. With an empty whitelist every root path is rejected (`44152`), and the settings page shows a hint at the top asking you to configure it first.
+`SmartAdmin:FilePath:AllowedRoots` is empty by default, and then the root path is typed straight into the File Servers page; any absolute path works. Only two directories are off limits: the program directory and the chunk staging directory. A root path that equals one of them, sits inside one, or contains one is rejected (`44158`). The program directory holds `appsettings.json` and the program files, and the staging directory holds chunks not yet merged; neither should be downloadable by path.
 
-The whitelist lives in the config file rather than the UI because it is a security boundary. If an administrator could type any root path in the UI, they could point files at the program directory or a static-site directory, or loop back to the local machine through a share such as `\\127.0.0.1\c$\…`. Adding a share means editing the config and restarting, which is done by an operator who can log in to the server.
+That check does not stop a share that loops back to the local machine, such as `\\127.0.0.1\c$\…`. Without a whitelist the boundary is the account that can edit file servers, so give that page to super admins only.
+
+For a boundary no back-office account can cross, configure the whitelist: the root path must then fall inside a directory listed in `AllowedRoots`, or it is rejected (`44152`). The whitelist lives in the config file where administrators in the UI can't change it; adding a share means editing the config and restarting, which is done by an operator who can log in to the server.
 
 ```json
 {
@@ -20,14 +22,14 @@ The whitelist lives in the config file rather than the UI because it is a securi
 }
 ```
 
-Matching is a prefix check on "whitelist directory + separator", so with `\\nas01\files` in the list, `\\nas01\files2` is not allowed. The check runs on save and again on every use (uploads and downloads return `44152`), so shrinking the whitelist makes any file server outside it unusable immediately.
+Matching is a prefix check on "whitelist directory + separator", so with `\\nas01\files` in the list, `\\nas01\files2` is not allowed. The check runs on save and again on every use (uploads and downloads return `44152`), so shrinking the whitelist makes any file server outside it unusable immediately. Without a whitelist the check also runs on every use: if the staging directory later moves under a root path, that file server's uploads and downloads return `44158` at once.
 
 The `SmartAdmin:FilePath` section has four items:
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `AllowedRoots` | empty array | Root directory whitelist, absolute paths. Empty means the feature is unusable |
-| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads. A relative path resolves against ContentRoot. It must not sit under a directory listed in `AllowedRoots`, where chunks could be downloaded by path, so startup fails if it does |
+| `AllowedRoots` | empty array | Root directory whitelist, absolute paths. Empty means root paths are typed in the UI and only keep clear of the program and staging directories |
+| `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads. A relative path resolves against ContentRoot. It must not sit under a directory listed in `AllowedRoots`, where chunks could be downloaded by path, so startup fails if it does. Without a whitelist, file server root paths keep clear of it instead |
 | `StagingTtlHours` | `24` | A chunk session with no new chunk for this long is treated as abandoned and its staging is cleared. Must be greater than 0 |
 | `LinkTtlMinutes` | `60` | Default validity of a signed link in minutes; the caller can pass another when signing. Must be greater than 0 |
 
@@ -40,7 +42,7 @@ Open the "File Paths" page in the "Files" menu group and switch to the "File ser
 | Field | Notes |
 |---|---|
 | Name | Unique, up to 64 characters |
-| Root path | Absolute path, must fall inside the whitelist. On Windows write `\\nas01\files\sub` or `//nas01/files/sub`; on Linux and Docker write the mount path as the container sees it, such as `/mnt/nas01/files` |
+| Root path | Absolute path. With a whitelist it must fall inside it; without one it must keep clear of the program and staging directories. On Windows write `\\nas01\files\sub` or `//nas01/files/sub`; on Linux and Docker write the mount path as the container sees it, such as `/mnt/nas01/files` |
 | Account | `DOMAIN\account` or `account`. Blank means access with the backend's own run identity. Greyed out on Linux |
 | Password | Encrypted in the database, never returned by the API; the UI only shows "set" |
 | Enabled | When disabled, every file path under it stops accepting uploads and downloads |
@@ -301,7 +303,7 @@ When reaching the file server fails, the UI shows a reason. Test connection and 
 | File server busy | More than 16 file operations are running on this server at once; try again shortly |
 | Unknown error | None of the above; look in the backend log for the full exception and the system error code |
 
-When the whitelist was shrunk later and the root path now falls outside it, uploads and downloads return `44152` directly and never reach the reasons above. Test connection and the online status don't touch that path, and their reason shows as "Access denied".
+When the whitelist was shrunk later and the root path now falls outside it, or the staging directory moved under the root path, uploads and downloads return `44152` or `44158` directly and never reach the reasons above. Test connection and the online status don't touch that path, and their reason shows as "Access denied".
 
 On a wrong account or password the kernel doesn't retry on every request, so a domain account isn't locked within minutes. It tries again only after you correct the configuration or click "Test connection". Network failures are retried after 30 seconds.
 
@@ -341,11 +343,12 @@ File paths take `44100`–`44199`, following the segments in [Error codes](/back
 | `44117` | Invalid upload session: malformed or unknown id, expired, not owned by the current user or code, or already claimed by another merge. At init, a `sha256` that isn't 64 hex digits or a negative `size`, a chunk index out of range, a chunk whose length doesn't match the expected length, and a session deleted while a chunk is being written also return this code |
 | `44150` | The file server doesn't exist or is disabled |
 | `44151` | The file server name already exists |
-| `44152` | The root path isn't in the whitelist, checked on save and on every upload and download. A root path with control characters also returns this code on save or test |
+| `44152` | With a whitelist configured, the root path isn't in it. Checked on save and on every upload and download; a root path with control characters also returns this code on save or test |
 | `44153` | An account is set but the root path isn't in the `\\host\share` form |
 | `44154` | The host already has another account configured |
 | `44155` | The file server is still referenced by file paths and cannot be deleted |
 | `44156` | The data protection key is an in-process ephemeral key, so saving a password is refused |
 | `44157` | An edit changed the host or account but left the password blank |
+| `44158` | Without a whitelist, the root path isn't absolute or touches the program directory or the chunk staging directory. Checked at the same points as `44152`, including the control-character case |
 
 The way out of `44154`: to give a host a new account, edit the account and password of any one row on that host, and the other rows change with it. For a new row, or a row moving to that host, first enter the account the host already uses, save, and then change the whole host if needed.

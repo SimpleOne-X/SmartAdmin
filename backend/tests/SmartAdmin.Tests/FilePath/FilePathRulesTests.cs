@@ -240,12 +240,34 @@ public class FilePathRulesTests
     public void IsAllowedRoot_requires_absolute_path_inside_whitelist()
     {
         var root = Path.Combine(Tmp, "files");
+        var options = new AdminFilePathOptions { AllowedRoots = [root] };
 
-        Assert.True(FilePathRules.IsAllowedRoot(root, [root]));
-        Assert.True(FilePathRules.IsAllowedRoot(Path.Combine(root, "sub"), [root]));
-        Assert.False(FilePathRules.IsAllowedRoot(root + "2", [root]));
-        Assert.False(FilePathRules.IsAllowedRoot(root, []));
-        Assert.False(FilePathRules.IsAllowedRoot(Path.Combine("files", "sub"), [Path.GetFullPath("files")]));
+        Assert.True(FilePathRules.IsAllowedRoot(root, options));
+        Assert.True(FilePathRules.IsAllowedRoot(Path.Combine(root, "sub"), options));
+        Assert.False(FilePathRules.IsAllowedRoot(root + "2", options));
+        Assert.False(FilePathRules.IsAllowedRoot(Path.Combine("files", "sub"),
+            new AdminFilePathOptions { AllowedRoots = [Path.GetFullPath("files")] }));
+        Assert.Equal(ErrorCode.FileServerRootNotAllowed, FilePathRules.RootRejection(options));
+    }
+
+    [Fact]
+    public void IsAllowedRoot_without_whitelist_keeps_clear_of_program_and_staging_directories()
+    {
+        var staging = Path.Combine(Tmp, "staging");
+        var options = new AdminFilePathOptions { StagingPath = staging };
+        var program = AppContext.BaseDirectory;
+
+        Assert.True(FilePathRules.IsAllowedRoot(Path.Combine(Tmp, "files"), options));
+        Assert.True(FilePathRules.IsAllowedRoot(staging + "2", options));
+        // 等于、落在里面、包含它们都不行
+        foreach (var root in new[]
+                 {
+                     program, Path.Combine(program, "wwwroot"), Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(program))!,
+                     Path.GetPathRoot(program)!, staging, Path.Combine(staging, "x"), Tmp,
+                 })
+            Assert.False(FilePathRules.IsAllowedRoot(root, options), root);
+        Assert.False(FilePathRules.IsAllowedRoot(Path.Combine("files", "sub"), options));
+        Assert.Equal(ErrorCode.FileServerRootProtected, FilePathRules.RootRejection(options));
     }
 
     [Theory]

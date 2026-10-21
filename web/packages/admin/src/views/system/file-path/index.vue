@@ -3,7 +3,7 @@
 // 页签按各自列表的查询权限显示,默认打开第一个看得见的。
 // 环境信息(白名单根目录、平台能不能用账号)挂载时取一次,白名单为空时顶部提示,服务器页签用它给根路径候选。
 import { computed, onMounted, ref } from 'vue'
-import { NAlert, NTabPane, NTabs, useMessage } from 'naive-ui'
+import { NTabPane, NTabs, useMessage } from 'naive-ui'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { filePathApi, type FilePathEnvironment } from '#/api'
@@ -36,9 +36,6 @@ onMounted(async () => {
 
 <template>
   <div class="view fill-page">
-    <n-alert v-if="environment && environment.allowedRoots.length === 0" type="warning">
-      {{ t('filePath.rootsEmpty') }}
-    </n-alert>
     <!-- 形状 4:.fill-tabs 把 n-tabs → 面板容器 → .n-tab-pane 一路拉成 flex 列,
          面板里的 SmartTable 就接上高度链了(见 styles/layout.css ⑧)。 -->
     <n-tabs

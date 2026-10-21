@@ -54,7 +54,7 @@ public sealed record FilePathRule(
     FilePathConflictMode OnConflict, bool ReadOnly, IReadOnlyList<string> AllowedExtensions, int? MaxSizeMb,
     IReadOnlyList<long> UploadRoleIds, IReadOnlyList<long> DownloadRoleIds);
 
-/// <summary>已通过白名单复检、连接器已就绪的落盘位置;<see cref="FolderFullPath"/> 是文件夹的完全限定路径。</summary>
+/// <summary>已通过根路径复检、连接器已就绪的落盘位置;<see cref="FolderFullPath"/> 是文件夹的完全限定路径。</summary>
 public sealed record FilePathTarget(FilePathRule Rule, string FolderFullPath);
 
 /// <summary>

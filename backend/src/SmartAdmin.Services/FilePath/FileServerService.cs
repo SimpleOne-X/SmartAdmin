@@ -170,12 +170,12 @@ public class FileServerService(
 
     /// <summary>
     /// 根路径与账号的校验,保存和测试连接共用(测试连接的入参没有名称,所以名称唯一不在这里)。
-    /// 顺序即检查顺序:根路径非空且不含控制字符 → 填了账号时须是共享路径(仅连接器支持账号时)→ 同主机账号一致(<paramref name="checkHostAccount"/> 为真时)→ 在白名单内。
+    /// 顺序即检查顺序:根路径非空且不含控制字符 → 填了账号时须是共享路径(仅连接器支持账号时)→ 同主机账号一致(<paramref name="checkHostAccount"/> 为真时)→ 根路径可用(<see cref="FilePathRules.IsAllowedRoot"/>)。
     /// </summary>
     protected virtual async Task ValidateLocationAsync(string rootPath, string? userName, long? excludingId, bool checkHostAccount)
     {
         // NUL 会让后面的路径函数直接抛 ArgumentException(变成 500),其余控制字符会原样带进连接和文件操作
-        AdminException.ThrowIf(rootPath.Length == 0 || rootPath.Any(char.IsControl), ErrorCode.FileServerRootNotAllowed);
+        AdminException.ThrowIf(rootPath.Length == 0 || rootPath.Any(char.IsControl), FilePathRules.RootRejection(options));
 
         AdminException.ThrowIf(
             connector.SupportsCredentials && userName is not null && !FilePathRules.TryGetShare(rootPath, out _, out _),
@@ -183,7 +183,7 @@ public class FileServerService(
 
         if (checkHostAccount) await EnsureHostAccountConsistentAsync(rootPath, userName, excludingId);
 
-        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rootPath, options), FilePathRules.RootRejection(options));
     }
 
     /// <summary>
@@ -221,11 +221,11 @@ public class FileServerService(
 
     /// <summary>
     /// 探测一台服务器:确保已连上,再确认根路径存在;<paramref name="readEntries"/> 时还要取到第一个条目(可读),不列完整个目录。
-    /// 根路径不在白名单内(白名单可能在保存之后改小)按拒绝访问处理,不去碰这个路径。
+    /// 根路径不可用(白名单可能在保存之后改小、暂存目录可能挪动)按拒绝访问处理,不去碰这个路径。
     /// </summary>
     protected virtual async Task ProbeAsync(FileServerTarget target, bool retryFailed, bool readEntries, CancellationToken ct)
     {
-        if (!FilePathRules.IsAllowedRoot(target.RootPath, options.AllowedRoots)) throw new UnauthorizedAccessException();
+        if (!FilePathRules.IsAllowedRoot(target.RootPath, options)) throw new UnauthorizedAccessException();
 
         await connector.EnsureConnectedAsync(target, retryFailed, ct);
         FileAccessProbe.RequireFolder(target.RootPath);

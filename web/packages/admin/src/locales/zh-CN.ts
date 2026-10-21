@@ -1996,6 +1996,8 @@ export default {
       inUse: '该文件服务器仍被文件路径引用,不能删除',
       dataProtectionKeyMissing: '数据保护密钥不可用,无法保存密码',
       passwordRequired: '换了主机或账号,必须重新填写密码',
+      rootProtected:
+        '根路径必须是绝对路径,且不能是程序目录、分片暂存目录,不能在它们里面,也不能包含它们',
     },
     reason: {
       accessDenied: '拒绝访问',
@@ -2022,7 +2024,6 @@ export default {
 
   // 文件路径配置页(文件路径 + 文件服务器两个页签)
   filePath: {
-    rootsEmpty: '请先在 appsettings 的 SmartAdmin:FilePath:AllowedRoots 中配置根目录',
     tabs: { path: '文件路径', server: '文件服务器' },
     saved: '保存成功',
     deleted: '已删除',

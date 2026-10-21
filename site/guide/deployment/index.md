@@ -53,7 +53,7 @@ Read this section only if business attachments need to land on a NAS or a shared
 
 | Setting | Default | Notes |
 |---|---|---|
-| `AllowedRoots` | empty | Root directory whitelist. Empty means the feature is unusable; an operator must allow roots explicitly |
+| `AllowedRoots` | empty | Root directory whitelist. Empty means root paths are typed in the UI and only keep clear of the program and staging directories; configure it for a boundary no back-office account can cross |
 | `StagingPath` | `./data/file-path-staging` | Staging directory for chunked uploads; a relative path resolves against the ContentRoot. It must not sit under a directory listed in `AllowedRoots`, or startup fails |
 | `StagingTtlHours` | `24` | How long an idle chunk session lasts before its staging is cleared |
 | `LinkTtlMinutes` | `60` | Default validity of a signed link, in minutes |
@@ -62,7 +62,7 @@ Three things to watch when deploying:
 
 - Saving a file server's password on the settings page needs a persistent `SmartAdmin:Security:DataProtection:Key` first, or it is rejected. Leaving the account blank and accessing with the backend's run identity stores no password, so it doesn't need the key.
 - With multiple replicas, put `StagingPath` on a shared volume or enable session affinity on the load balancer; every replica must be able to reach the same share.
-- On Linux and Docker the host mounts the share, and the whitelist holds the mount root.
+- On Linux and Docker the host mounts the share and the root path is the mount path inside the container; with a whitelist, it holds the mount root.
 
 For the full configuration, mount and troubleshooting steps, see [File Paths](/guide/file-paths).
 

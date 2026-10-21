@@ -84,11 +84,19 @@ public static class FilePathRules
         roots.Any(root => IsUnder(path, root));
 
     /// <summary>
-    /// 文件服务器根路径是否可用:必须是绝对路径(相对路径按进程当前目录解析,结果随启动方式漂移),且在白名单内。
-    /// 保存时和读取时(白名单可能已经改小)用的是同一个判断。
+    /// 文件服务器根路径是否可用:必须是绝对路径(相对路径按进程当前目录解析,结果随启动方式漂移)。
+    /// 配了 <see cref="AdminFilePathOptions.AllowedRoots"/> 时还要落在其中某一个之下;没配时根路径由界面直接填,
+    /// 只拦程序目录和分片暂存目录:等于、落在里面、包含它们都不行,免得 appsettings 和程序文件能按路径下载、分片能被按路径读走。
+    /// 保存时和读取时(白名单可能改小,暂存目录可能挪动)用的是同一个判断。
     /// </summary>
-    public static bool IsAllowedRoot(string rootPath, IEnumerable<string> allowedRoots) =>
-        Path.IsPathFullyQualified(rootPath) && IsUnderAnyRoot(rootPath, allowedRoots);
+    public static bool IsAllowedRoot(string rootPath, AdminFilePathOptions options) =>
+        Path.IsPathFullyQualified(rootPath) && (options.AllowedRoots.Length > 0
+            ? IsUnderAnyRoot(rootPath, options.AllowedRoots)
+            : !new[] { AppContext.BaseDirectory, options.StagingPath }.Any(p => IsUnder(rootPath, p) || IsUnder(p, rootPath)));
+
+    /// <summary>根路径不可用时报哪个错误码:配了白名单报不在白名单内,没配报碰到了程序目录或暂存目录。</summary>
+    public static ErrorCode RootRejection(AdminFilePathOptions options) =>
+        options.AllowedRoots.Length > 0 ? ErrorCode.FileServerRootNotAllowed : ErrorCode.FileServerRootProtected;
 
     /// <summary>角色 Id 列表 → 库里存的逗号串:升序、去重;空或 null 存 <c>null</c>。</summary>
     public static string? FormatRoleIds(IEnumerable<long>? roleIds)

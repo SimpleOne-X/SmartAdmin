@@ -17,8 +17,8 @@ public interface IFilePathResolver
     Task<FilePathRule> GetRuleAsync(string code, CancellationToken ct = default);
 
     /// <summary>
-    /// 在 <see cref="GetRuleAsync"/> 的基础上:对服务器根路径做白名单复检(白名单可能在保存之后改小,
-    /// 不通过抛 <see cref="ErrorCode.FileServerRootNotAllowed"/>),调连接器确保已连上,再拼出文件夹完整路径。
+    /// 在 <see cref="GetRuleAsync"/> 的基础上:对服务器根路径复检 <see cref="FilePathRules.IsAllowedRoot"/>(白名单可能在保存之后改小、暂存目录可能挪动,
+    /// 不通过抛 <see cref="FilePathRules.RootRejection"/> 给出的错误码),调连接器确保已连上,再拼出文件夹完整路径。
     /// 连接器的失败转成 <see cref="ErrorCode.FilePathFolderUnavailable"/>(args.reason 是原因码)。
     /// 连接之前先过 <see cref="IFilePathCircuit.ThrowIfOpen"/>:这台服务器的熔断打开时直接抛同一个错误码,不去连。
     /// </summary>

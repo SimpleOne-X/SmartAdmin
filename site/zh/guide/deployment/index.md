@@ -53,7 +53,7 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 | 配置项 | 默认 | 说明 |
 |---|---|---|
-| `AllowedRoots` | 空 | 根目录白名单。空表示功能不可用，必须由运维显式放行 |
+| `AllowedRoots` | 空 | 根目录白名单。空表示根路径直接在界面填，只避开程序目录和暂存目录。要一道后台账号越不过去的边界，就配上它 |
 | `StagingPath` | `./data/file-path-staging` | 分片上传的暂存目录，相对路径按 ContentRoot 解析，不能放在 `AllowedRoots` 列出的目录之下，否则启动失败 |
 | `StagingTtlHours` | `24` | 分片会话闲置多久后清掉暂存 |
 | `LinkTtlMinutes` | `60` | 签名直链的默认有效分钟数 |
@@ -62,7 +62,7 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 - 页面上保存文件服务器的密码，要先配持久的 `SmartAdmin:Security:DataProtection:Key`，否则被拒绝。账号留空、用后端运行身份访问的方式不存密码，用不着它。
 - 多副本时，`StagingPath` 放在共享卷上，或者让负载均衡开会话保持；每个副本都要能访问同一个共享。
-- Linux 和 Docker 上由宿主机挂载共享，白名单填挂载根目录。
+- Linux 和 Docker 上由宿主机挂载共享，根路径填容器里的挂载路径，配了白名单就把挂载根目录填进去。
 
 完整的配置、挂载和排错步骤见[文件路径](/zh/guide/file-paths)。
 

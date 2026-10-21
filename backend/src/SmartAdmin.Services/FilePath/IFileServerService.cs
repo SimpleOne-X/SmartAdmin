@@ -16,7 +16,7 @@ public interface IFileServerService
     Task<FileServerView> GetAsync(long id);
 
     /// <summary>
-    /// 新增。校验规则见 <see cref="FileServerService"/>:根路径须在白名单内;连接器支持账号时填了账号必须是共享路径;
+    /// 新增。校验规则见 <see cref="FileServerService"/>:根路径须通过 <see cref="FilePathRules.IsAllowedRoot"/>;连接器支持账号时填了账号必须是共享路径;
     /// 同一主机只能用同一个账号;名称唯一。填了密码而数据保护密钥是临时密钥时抛 <see cref="ErrorCode.FileServerKeyMissing"/>。返回新 Id。
     /// </summary>
     Task<long> AddAsync(FileServerSaveInput input);
@@ -36,7 +36,7 @@ public interface IFileServerService
 
     /// <summary>
     /// 测试连接,测的是弹窗里当前填的内容,不要求先保存、也不落库:连接(填了账号时,忽略此前记下的失败)→ 根路径存在 → 能取到第一个条目。
-    /// 校验和保存相同(白名单、共享路径),但不查名称和同主机账号一致,好在保存前先试新账号;不通过抛 <see cref="AdminException"/>;
+    /// 校验和保存相同(根路径、共享路径),但不查名称和同主机账号一致,好在保存前先试新账号;不通过抛 <see cref="AdminException"/>;
     /// 其余失败(含 5 秒超时)放进结果的原因码,不抛异常。
     /// </summary>
     Task<FileAccessTestResult> TestAsync(FileServerTestInput input, CancellationToken ct = default);

@@ -99,7 +99,7 @@ public class FilePathConfigService(
     {
         var folder = NormalizeFolder(input.Folder);
         var server = await servers.GetRequiredAsync(input.ServerId, ErrorCode.FileServerNotFound);
-        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(server.RootPath, options), FilePathRules.RootRejection(options));
 
         var target = new FileServerTarget(server.Id, server.RootPath, server.UserName, server.PasswordProtected);
         return await FileAccessProbe.TestAsync(
@@ -199,11 +199,11 @@ public class FilePathConfigService(
 
     /// <summary>
     /// 探测一个文件夹:确保服务器已连上;可写时先建文件夹,再写入、读回、删除一个 <c>.smartadmin-probe-{GUID}</c> 文件;只读时只确认文件夹存在。
-    /// 根路径不在白名单内(白名单可能在保存之后改小)按拒绝访问处理,不去碰这个路径。
+    /// 根路径不可用(白名单可能在保存之后改小、暂存目录可能挪动)按拒绝访问处理,不去碰这个路径。
     /// </summary>
     protected virtual async Task ProbeAsync(FileServerTarget server, string? folder, bool write, bool retryFailed, CancellationToken ct)
     {
-        if (!FilePathRules.IsAllowedRoot(server.RootPath, options.AllowedRoots)) throw new UnauthorizedAccessException();
+        if (!FilePathRules.IsAllowedRoot(server.RootPath, options)) throw new UnauthorizedAccessException();
 
         await connector.EnsureConnectedAsync(server, retryFailed, ct);
         var fullPath = folder is null ? Path.GetFullPath(server.RootPath) : FilePathRules.Combine(server.RootPath, folder);

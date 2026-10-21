@@ -9,7 +9,7 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// <see cref="IFilePathUploadService"/> 默认实现。上传和删除一律经 <see cref="IFilePathResolver.ResolveAsync"/> 定位文件夹——
-/// 它会复检服务器根路径的白名单并确保已连上,<see cref="IFilePathResolver.GetRuleAsync"/> 不做这两件事,不能用在这里。
+/// 它会复检服务器根路径并确保已连上,<see cref="IFilePathResolver.GetRuleAsync"/> 不做这两件事,不能用在这里。
 /// <para>写入一律 <see cref="FileMode.CreateNew"/>,撞名由 <c>FilePathFileExists</c> 带出;同名覆盖先写同文件夹里的临时文件再替换,
 /// 写到一半失败时旧文件原样保留。命名、校验、写入拆成 <c>protected virtual</c> 步骤,消费者可以子类化覆写其中一步。</para>
 /// <para>分片上传把每个会话放在 <c>StagingPath/{uploadId}/</c>:<c>session.json</c> 记用户、编码和文件的声明值,<c>{index}.part</c> 是分片,

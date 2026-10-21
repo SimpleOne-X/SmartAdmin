@@ -475,7 +475,7 @@ public enum ErrorCode
     [MsgKey("error.fileServer.nameExists")]
     FileServerNameExists = 44151,
 
-    /// <summary>根路径不在 <c>SmartAdmin:FilePath:AllowedRoots</c> 白名单内</summary>
+    /// <summary>配了 <c>SmartAdmin:FilePath:AllowedRoots</c> 时,根路径不在这个白名单内</summary>
     [MsgKey("error.fileServer.rootNotAllowed")]
     FileServerRootNotAllowed = 44152,
 
@@ -498,6 +498,10 @@ public enum ErrorCode
     /// <summary>修改时换了主机或账号(账号不为空),密码却留空:旧密码不能沿用,必须重新填写</summary>
     [MsgKey("error.fileServer.passwordRequired")]
     FileServerPasswordRequired = 44157,
+
+    /// <summary>没配 <c>SmartAdmin:FilePath:AllowedRoots</c> 时,根路径不是绝对路径,或者等于、落在、包含程序目录或分片暂存目录</summary>
+    [MsgKey("error.fileServer.rootProtected")]
+    FileServerRootProtected = 44158,
 
     // ── 45xxx 消息通知 ───────────────────────────────────────────────
 

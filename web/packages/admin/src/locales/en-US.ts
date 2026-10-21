@@ -2048,6 +2048,8 @@ export default {
       inUse: 'This file server is still used by file paths and cannot be deleted',
       dataProtectionKeyMissing: 'The data protection key is unavailable, cannot save the password',
       passwordRequired: 'The host or account changed, the password must be entered again',
+      rootProtected:
+        'The root path must be absolute and must not be, contain, or sit inside the application directory or the chunk staging directory',
     },
     reason: {
       accessDenied: 'Access denied',
@@ -2075,8 +2077,6 @@ export default {
 
   // File path settings page (File paths and File servers tabs)
   filePath: {
-    rootsEmpty:
-      'Configure root directories in SmartAdmin:FilePath:AllowedRoots in appsettings first',
     tabs: { path: 'File paths', server: 'File servers' },
     saved: 'Saved',
     deleted: 'Deleted',

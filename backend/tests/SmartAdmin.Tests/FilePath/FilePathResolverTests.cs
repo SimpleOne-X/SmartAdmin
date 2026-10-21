@@ -103,6 +103,23 @@ public class FilePathResolverTests
     }
 
     [Fact]
+    public async Task Without_allowed_roots_saved_rows_resolve_and_are_rechecked_on_read()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var options = env.Service<AdminFilePathOptions>();
+        options.AllowedRoots = [];
+        var serverId = await env.AddServerAsync();
+        var (_, code) = await AddPathAsync(env, serverId);
+        var resolver = env.Service<IFilePathResolver>();
+        await resolver.ResolveAsync(code);
+
+        // 暂存目录后来挪进了根路径之下:读取时同样复检
+        options.StagingPath = Path.Combine(env.Root, "staging");
+
+        Assert.Equal(ErrorCode.FileServerRootProtected, (await Rejected(resolver.ResolveAsync(code))).Code);
+    }
+
+    [Fact]
     public async Task Resolve_calls_connector_before_access()
     {
         await using var env = FilePathTestEnv.Create();

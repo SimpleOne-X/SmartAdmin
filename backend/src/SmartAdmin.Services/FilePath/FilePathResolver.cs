@@ -35,8 +35,8 @@ public class FilePathResolver(
     {
         var rule = await GetRuleAsync(code, ct);
 
-        // 白名单可能在保存之后改小,所以读取时再判一次;不能依赖保存时的结果
-        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rule.Server.RootPath, options.AllowedRoots), ErrorCode.FileServerRootNotAllowed);
+        // 白名单可能在保存之后改小、暂存目录可能挪动,所以读取时再判一次;不能依赖保存时的结果
+        AdminException.ThrowIf(!FilePathRules.IsAllowedRoot(rule.Server.RootPath, options), FilePathRules.RootRejection(options));
 
         // 服务器刚出过网络类失败就直接报,不再去连:连一次要卡到 SMB 超时
         circuit.ThrowIfOpen(rule.Server.Id);

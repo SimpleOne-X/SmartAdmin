@@ -192,6 +192,25 @@ public class FileServerServiceTests
     }
 
     [Fact]
+    public async Task Without_allowed_roots_any_root_is_accepted_except_program_and_staging()
+    {
+        await using var env = FilePathTestEnv.Create();
+        env.Service<AdminFilePathOptions>().AllowedRoots = [];
+        var service = env.Service<IFileServerService>();
+
+        await service.AddAsync(Input(NewName(), Path.Combine(Path.GetTempPath(), $"smart-fp-other-{Guid.NewGuid():N}")));
+
+        foreach (var root in new[] { AppContext.BaseDirectory, env.Staging, "relative/dir", "", env.Root + "\0" })
+        {
+            var add = await Rejected(service.AddAsync(Input(NewName(), root)));
+            Assert.True(add.Code == ErrorCode.FileServerRootProtected, $"根路径 '{root}' 应被拒绝,实际 {add.Code}");
+        }
+        var test = await Rejected(service.TestAsync(new FileServerTestInput(null, AppContext.BaseDirectory, null, null)));
+        Assert.Equal(ErrorCode.FileServerRootProtected, test.Code);
+        Assert.Empty(env.Connector.Calls);
+    }
+
+    [Fact]
     public async Task Root_with_control_characters_is_rejected()
     {
         await using var env = FilePathTestEnv.Create();

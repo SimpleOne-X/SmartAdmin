@@ -32,7 +32,7 @@ public interface IFilePathConfigService
     /// <summary>
     /// 测试连接,测的是弹窗里当前填的内容,不要求先保存、也不落库。连接器忽略此前记下的失败重新连一次;
     /// 可写的行在文件夹里写入、读回、删除一个 <c>.smartadmin-probe-{GUID}</c> 文件(文件夹不存在时先创建),只读的行只检查文件夹存在。
-    /// 子文件夹不合法、文件服务器不存在或根路径不在白名单内抛 <see cref="AdminException"/>;其余失败(含 5 秒超时)放进结果的原因码,不抛异常。
+    /// 子文件夹不合法、文件服务器不存在或根路径不可用抛 <see cref="AdminException"/>;其余失败(含 5 秒超时)放进结果的原因码,不抛异常。
     /// </summary>
     Task<FileAccessTestResult> TestAsync(FilePathTestInput input, CancellationToken ct = default);
 
