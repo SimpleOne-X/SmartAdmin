@@ -35,6 +35,27 @@ public static class SmartAdminOptionsSetup
                 options.Upload.RootPath = Path.GetFullPath(Path.Combine(env.ContentRootPath, options.Upload.RootPath));
             return options.Upload;
         });
+
+        // 白名单与有效期是安全边界/调度参数,写错了宁可启动就炸,不要带着一个永远校验不过的功能上线
+        foreach (var root in options.FilePath.AllowedRoots)
+            if (!Path.IsPathFullyQualified(root))
+                throw new InvalidOperationException($"SmartAdmin:FilePath:AllowedRoots 必须是绝对路径:{root}");
+        if (options.FilePath.LinkTtlMinutes <= 0)
+            throw new InvalidOperationException("SmartAdmin:FilePath:LinkTtlMinutes 必须大于 0。");
+        if (options.FilePath.StagingTtlHours <= 0)
+            throw new InvalidOperationException("SmartAdmin:FilePath:StagingTtlHours 必须大于 0。");
+        // 暂存目录与上传根同一基准(ContentRoot),不随进程 CWD 漂移,免得暂存和数据卷悄悄分家。
+        // 解析成绝对路径之后才能和白名单比,所以这条校验在这里:清扫器是后台任务,启动时就会解析它,违反照样起不来
+        services.TryAddSingleton(sp =>
+        {
+            if (sp.GetService<IHostEnvironment>() is { } env)
+                options.FilePath.StagingPath = Path.GetFullPath(Path.Combine(env.ContentRootPath, options.FilePath.StagingPath));
+            // 暂存目录落在某个文件服务器根路径之下,分片(0.part 之类,不以点开头)就能被有下载角色的人按路径下载
+            if (FilePathRules.IsUnderAnyRoot(options.FilePath.StagingPath, options.FilePath.AllowedRoots))
+                throw new InvalidOperationException(
+                    $"SmartAdmin:FilePath:StagingPath 不能位于 AllowedRoots 列出的目录之下:{options.FilePath.StagingPath}");
+            return options.FilePath;
+        });
         services.TryAddSingleton(options.Api);
         services.TryAddSingleton(options.Email);
         services.TryAddSingleton(options.ExternalAuth);

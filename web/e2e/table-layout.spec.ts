@@ -35,6 +35,7 @@ const PAGES: {
   { path: '/system/dict', name: '字典管理', icons: 2, business: /新增|Add/ },
   { path: '/system/notice', name: '消息通知(管理)' },
   { path: '/system/file', name: '文件管理' },
+  { path: '/system/file-path', name: '文件路径', business: /新增|Add/ },
   { path: '/system/recycle', name: '回收站' },
   { path: '/system/session', name: '在线会话' },
   { path: '/system/job', name: '定时任务', business: /新增|Add/ },

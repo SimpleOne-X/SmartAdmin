@@ -914,6 +914,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/file-path/download/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 下载文件(以附件返回,支持 Range)。`name` 可指定下载时给用户看的文件名,
+         *     后缀始终沿用实际文件的(见 string FilePathRules.DownloadName(string? requested, string actualFileName))。
+         */
+        get: operations["FilePathDownload_Download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/download/{code}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 签名直链(匿名)——给 `&lt;img src&gt;` 这类带不了 Authorization 头的场景用,链接由上传出参的 `viewUrl` 给出。
+         *     匿名是<b>刻意的</b>,但不可伪造:签名编的是编码、规范化后的路径和过期时刻(见 IFilePathLinkSigner),
+         *     拿得到链接才拿得到文件,签名本身就是授权,所以这里不做角色判断。
+         *     验签先于读文件:参数不全、签名不对、过期都是 403,不让人拿它探测"这个文件存不存在"。验过之后服务抛的业务错误走正常信封。
+         *     不信文件夹里文件的类型:匿名 + inline 若按文件自带的类型回吐,text/html / image/svg+xml 会被浏览器当脚本渲染,
+         *     与前端同源 → 存储型 XSS。因此按后缀在白名单里取服务端权威类型:是"可安全内联"的图片/PDF 才 inline,
+         *     其余一律 application/octet-stream + 强制另存,再叠一层 nosniff 禁嗅探。
+         */
+        get: operations["FilePathDownload_View"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/upload/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 上传单个文件,返回相对文件夹的路径(业务存它、之后凭它下载)。
+         *     大小只取 `file.Length`,不接受客户端另报。`subPath` 仅「业务指定路径」命名规则使用。
+         */
+        post: operations["FilePathUpload_Upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/upload/{code}/chunk/init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 分片上传-初始化:按声明的文件名、大小拦截规则,通过才建暂存会话,返回分片大小与片数 */
+        post: operations["FilePathUpload_ChunkInit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/upload/{code}/chunk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 分片上传-上传一个分片(multipart:uploadId + index + chunk 文件部件);分片长度由服务按应有长度核对 */
+        post: operations["FilePathUpload_Chunk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/upload/{code}/chunk/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 分片上传-完成:合并 + 按实际大小和当前规则再校验 + 哈希核对 + 写入,返回相对文件夹的路径 */
+        post: operations["FilePathUpload_ChunkComplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/job/page": {
         parameters: {
             query?: never;
@@ -2158,6 +2274,214 @@ export interface paths {
         put?: never;
         /** 分片上传-完成:合并 + 哈希校验 + 三道关 + 落库,返回文件记录 */
         post: operations["SysFile_ChunkComplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询文件路径 */
+        get: operations["SysFilePath_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 文件路径详情 */
+        get: operations["SysFilePath_Get"];
+        /** 更新文件路径(编码保存后不可改) */
+        put: operations["SysFilePath_Update"];
+        post?: never;
+        /** 软删除文件路径,编码随之释放 */
+        delete: operations["SysFilePath_Delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 批量在线状态:当前页各行文件夹能否访问;不存在的 Id 不出现在结果里 */
+        get: operations["SysFilePath_Status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/environment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 白名单根目录与当前平台是否支持账号连接,配置页用它给提示和候选 */
+        get: operations["SysFilePath_Environment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增文件路径,返回新 Id */
+        post: operations["SysFilePath_Add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-path/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 测试连接:测弹窗里当前填的服务器与子文件夹,不要求先保存;可写的行会在文件夹里写入并删除一个探针文件 */
+        post: operations["SysFilePath_Test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页查询文件服务器 */
+        get: operations["SysFileServer_Page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 文件服务器详情(不含密码,只有「是否已设置」标记) */
+        get: operations["SysFileServer_Get"];
+        /** 更新文件服务器(密码留空表示不改) */
+        put: operations["SysFileServer_Update"];
+        post?: never;
+        /** 软删除文件服务器(仍有文件路径引用时拒绝) */
+        delete: operations["SysFileServer_Delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 批量在线状态:当前页各行能否访问根路径;不存在的 Id 不出现在结果里 */
+        get: operations["SysFileServer_Status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 全部文件服务器(含停用的)的下拉选项,配置文件路径时选服务器用 */
+        get: operations["SysFileServer_Options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增文件服务器,返回新 Id */
+        post: operations["SysFileServer_Add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/file-server/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 测试连接:测弹窗里当前填的内容,不要求先保存;连不上的原因在返回体里,不抛异常 */
+        post: operations["SysFileServer_Test"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3432,6 +3756,171 @@ export interface components {
             displayName: string;
             icon?: null | string;
         };
+        /** @description 一行文件服务器或文件路径的在线状态。string? FileAccessStatus.Reason 同 string? FileAccessTestResult.Reason。 */
+        FileAccessStatus: {
+            /** Format: int64 */
+            id: number | string;
+            online: boolean;
+            reason: null | string;
+        };
+        /** @description 测试连接的结果。string? FileAccessTestResult.Reason 是 FileAccessFailure 的原因码(前端语言包 `error.reason.*`),成功时为 null。 */
+        FileAccessTestResult: {
+            ok: boolean;
+            reason: null | string;
+            /** Format: int32 */
+            latencyMs: number | string;
+        };
+        /** @description 文件路径新增入参。保存时的规范化与取舍规则见 FilePathConfigService。 */
+        FilePathAddInput: {
+            code: string;
+            name: string;
+            /** Format: int64 */
+            serverId: number | string;
+            folder: null | string;
+            namingRule: components["schemas"]["FilePathNamingRule"];
+            onConflict: components["schemas"]["FilePathConflictMode"];
+            readOnly: boolean;
+            allowedExtensions: null | string;
+            /** Format: int32 */
+            maxSizeMb: null | number | string;
+            uploadRoleIds: null | (number | string)[];
+            downloadRoleIds: null | (number | string)[];
+            enabled: boolean;
+            remark: null | string;
+        };
+        /** @description 分片上传合并入参。 */
+        FilePathChunkCompleteInput: {
+            uploadId: string;
+        };
+        /**
+         * @description 分片上传初始化入参。long FilePathChunkInitInput.Size 与 string FilePathChunkInitInput.Sha256 是整个文件的声明值:大小用来在上传前按规则拦截并算出分片数,
+         *     哈希在合并后核对。string FilePathChunkInitInput.Sha256 是 64 位十六进制,首尾空白与大小写忽略。string? FilePathChunkInitInput.SubPath 同 string? FilePathUploadInput.SubPath。
+         */
+        FilePathChunkInitInput: {
+            fileName: string;
+            /** Format: int64 */
+            size: number | string;
+            sha256: string;
+            subPath: null | string;
+        };
+        /** @description 分片上传初始化出参。分片大小由服务端定,客户端按 int FilePathChunkInitOutput.ChunkSize 切成 int FilePathChunkInitOutput.ChunkCount 片(编号从 0 起),最后一片可以短。 */
+        FilePathChunkInitOutput: {
+            uploadId: string;
+            /** Format: int32 */
+            chunkSize: number | string;
+            /** Format: int32 */
+            chunkCount: number | string;
+        };
+        /** @description 业务指定路径撞名时的处理方式(`sys_file_path.OnConflict`);其余命名规则不会撞名 */
+        FilePathConflictMode: number;
+        /** @description 配置页拿来给提示和候选的环境信息:白名单根目录,以及当前平台能不能用账号连接共享。 */
+        FilePathEnvironment: {
+            allowedRoots: string[];
+            supportsCredentials: boolean;
+        };
+        /** @description 文件落盘的命名规则(`sys_file_path.NamingRule`) */
+        FilePathNamingRule: number;
+        /** @description 文件路径测试连接入参:弹窗里当前填的服务器、子文件夹和读写方式,不要求先保存。 */
+        FilePathTestInput: {
+            /** Format: int64 */
+            serverId: number | string;
+            folder: null | string;
+            readOnly: boolean;
+        };
+        /** @description 文件路径编辑入参:与新增相同,只是没有 `Code`——编码是业务引用它的键,保存后不能改。 */
+        FilePathUpdateInput: {
+            name: string;
+            /** Format: int64 */
+            serverId: number | string;
+            folder: null | string;
+            namingRule: components["schemas"]["FilePathNamingRule"];
+            onConflict: components["schemas"]["FilePathConflictMode"];
+            readOnly: boolean;
+            allowedExtensions: null | string;
+            /** Format: int32 */
+            maxSizeMb: null | number | string;
+            uploadRoleIds: null | (number | string)[];
+            downloadRoleIds: null | (number | string)[];
+            enabled: boolean;
+            remark: null | string;
+        };
+        /**
+         * @description 上传出参。string FilePathUploadOutput.Path 是相对文件夹的路径(`/` 分隔),业务存它、之后凭它下载或删除;
+         *     string FilePathUploadOutput.Name 是清洗后的原始文件名;string? FilePathUploadOutput.ViewUrl 由 HTTP 入口按调用者的下载权限填写,服务本身不签发。
+         */
+        FilePathUploadOutput: {
+            path: string;
+            name: string;
+            /** Format: int64 */
+            size: number | string;
+            viewUrl?: null | string;
+        };
+        /** @description 文件路径出参。角色 Id 已拆成升序去重的列表,空列表 = 所有登录用户。 */
+        FilePathView: {
+            /** Format: int64 */
+            id: number | string;
+            code: string;
+            name: string;
+            /** Format: int64 */
+            serverId: number | string;
+            serverName: null | string;
+            folder: null | string;
+            namingRule: components["schemas"]["FilePathNamingRule"];
+            onConflict: components["schemas"]["FilePathConflictMode"];
+            readOnly: boolean;
+            allowedExtensions: null | string;
+            /** Format: int32 */
+            maxSizeMb: null | number | string;
+            uploadRoleIds: (number | string)[];
+            downloadRoleIds: (number | string)[];
+            enabled: boolean;
+            remark: null | string;
+        };
+        /** @description 文件服务器下拉选项(配置文件路径时选服务器用)。 */
+        FileServerOption: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
+            rootPath: string;
+            enabled: boolean;
+        };
+        /**
+         * @description 文件服务器新增/编辑入参。string? FileServerSaveInput.Password 为 `null`/空串表示不改动原有密码(新增时即不设密码);
+         *     string? FileServerSaveInput.UserName 为空时账号和密码一并清空。
+         */
+        FileServerSaveInput: {
+            name: string;
+            rootPath: string;
+            userName: null | string;
+            password: null | string;
+            enabled: boolean;
+            remark: null | string;
+        };
+        /**
+         * @description 文件服务器测试连接入参:弹窗里当前填的内容,不要求先保存。long? FileServerTestInput.Id 有值(编辑已有的行)且 string? FileServerTestInput.Password 为空时,
+         *     用库里已保存的密码。含明文密码,不要写日志。
+         */
+        FileServerTestInput: {
+            /** Format: int64 */
+            id: null | number | string;
+            rootPath: string;
+            userName: null | string;
+            password: null | string;
+        };
+        /**
+         * @description 文件服务器出参。<b>不含</b>密码和信封——只有 bool FileServerView.HasPassword 标记是否已设置,
+         *     密码明文只在保存那一次经过内存(见 FileServerService)。
+         */
+        FileServerView: {
+            /** Format: int64 */
+            id: number | string;
+            name: string;
+            rootPath: string;
+            userName: null | string;
+            hasPassword: boolean;
+            enabled: boolean;
+            remark: null | string;
+        };
         /** @description 上传出参:新文件 Id + 展示信息。 */
         FileUploadOutput: {
             /** Format: int64 */
@@ -4063,6 +4552,62 @@ export interface components {
             pages?: number | string;
             /** @description 当前页数据 */
             items?: components["schemas"]["AiProviderView"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
+        PagedListOfFilePathView: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["FilePathView"][];
+        };
+        /**
+         * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
+         *     SqlSugar 侧的 `ToPagedListAsync` 扩展负责把查询物化成它。
+         */
+        PagedListOfFileServerView: {
+            /**
+             * Format: int32
+             * @description 当前页码(从 1 起)
+             */
+            current?: number | string;
+            /**
+             * Format: int32
+             * @description 每页条数
+             */
+            size?: number | string;
+            /**
+             * Format: int32
+             * @description 总记录数
+             */
+            total?: number | string;
+            /**
+             * Format: int32
+             * @description 总页数(向上取整;Size 为 0 时为 0)
+             */
+            pages?: number | string;
+            /** @description 当前页数据 */
+            items?: components["schemas"]["FileServerView"][];
         };
         /**
          * @description 分页结果模型——所有分页查询的统一返回。ORM 中立(放 Core),
@@ -4952,6 +5497,132 @@ export interface components {
          *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
          *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
          */
+        ResultOfFileAccessTestResult: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FileAccessTestResult"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfFilePathChunkInitOutput: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FilePathChunkInitOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfFilePathEnvironment: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FilePathEnvironment"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfFilePathUploadOutput: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FilePathUploadOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfFilePathView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FilePathView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfFileServerView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["FileServerView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
         ResultOfFileUploadOutput: {
             /**
              * Format: int32
@@ -5208,6 +5879,50 @@ export interface components {
             message?: null | string;
             /** @description 业务数据载荷 */
             data?: null | components["schemas"]["ExternalProviderItem"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfFileAccessStatus: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["FileAccessStatus"][];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfIReadOnlyListOfFileServerOption: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            /** @description 业务数据载荷 */
+            data?: null | components["schemas"]["FileServerOption"][];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -5645,6 +6360,48 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["PagedListOfAiProviderView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfPagedListOfFilePathView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfFilePathView"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfPagedListOfFileServerView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["PagedListOfFileServerView"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -9425,6 +10182,181 @@ export interface operations {
             };
         };
     };
+    FilePathDownload_Download: {
+        parameters: {
+            query?: {
+                path?: string;
+                name?: string;
+            };
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilePathDownload_View: {
+        parameters: {
+            query?: {
+                path?: string;
+                exp?: number | string;
+                sig?: string;
+                name?: string;
+            };
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FilePathUpload_Upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    file?: components["schemas"]["IFormFile"];
+                } & {
+                    subPath?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFilePathUploadOutput"];
+                    "application/json": components["schemas"]["ResultOfFilePathUploadOutput"];
+                    "text/json": components["schemas"]["ResultOfFilePathUploadOutput"];
+                };
+            };
+        };
+    };
+    FilePathUpload_ChunkInit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePathChunkInitInput"];
+                "text/json": components["schemas"]["FilePathChunkInitInput"];
+                "application/*+json": components["schemas"]["FilePathChunkInitInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFilePathChunkInitOutput"];
+                    "application/json": components["schemas"]["ResultOfFilePathChunkInitOutput"];
+                    "text/json": components["schemas"]["ResultOfFilePathChunkInitOutput"];
+                };
+            };
+        };
+    };
+    FilePathUpload_Chunk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    uploadId?: string;
+                } & {
+                    /** Format: int32 */
+                    index?: number | string;
+                } & {
+                    chunk?: components["schemas"]["IFormFile"];
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    FilePathUpload_ChunkComplete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePathChunkCompleteInput"];
+                "text/json": components["schemas"]["FilePathChunkCompleteInput"];
+                "application/*+json": components["schemas"]["FilePathChunkCompleteInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFilePathUploadOutput"];
+                    "application/json": components["schemas"]["ResultOfFilePathUploadOutput"];
+                    "text/json": components["schemas"]["ResultOfFilePathUploadOutput"];
+                };
+            };
+        };
+    };
     Job_Page: {
         parameters: {
             query?: {
@@ -11548,6 +12480,430 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfFileUploadOutput"];
                     "application/json": components["schemas"]["ResultOfFileUploadOutput"];
                     "text/json": components["schemas"]["ResultOfFileUploadOutput"];
+                };
+            };
+        };
+    };
+    SysFilePath_Page: {
+        parameters: {
+            query?: {
+                /** @description 关键字(模糊匹配编码或名称,可选) */
+                Keyword?: string;
+                /** @description 文件服务器精确过滤(可选) */
+                ServerId?: number | string;
+                /** @description 启用状态精确过滤(可选) */
+                Enabled?: boolean;
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfFilePathView"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfFilePathView"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfFilePathView"];
+                };
+            };
+        };
+    };
+    SysFilePath_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFilePathView"];
+                    "application/json": components["schemas"]["ResultOfFilePathView"];
+                    "text/json": components["schemas"]["ResultOfFilePathView"];
+                };
+            };
+        };
+    };
+    SysFilePath_Update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePathUpdateInput"];
+                "text/json": components["schemas"]["FilePathUpdateInput"];
+                "application/*+json": components["schemas"]["FilePathUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    SysFilePath_Delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    SysFilePath_Status: {
+        parameters: {
+            query?: {
+                ids?: (number | string)[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                };
+            };
+        };
+    };
+    SysFilePath_Environment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFilePathEnvironment"];
+                    "application/json": components["schemas"]["ResultOfFilePathEnvironment"];
+                    "text/json": components["schemas"]["ResultOfFilePathEnvironment"];
+                };
+            };
+        };
+    };
+    SysFilePath_Add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePathAddInput"];
+                "text/json": components["schemas"]["FilePathAddInput"];
+                "application/*+json": components["schemas"]["FilePathAddInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOflong"];
+                    "application/json": components["schemas"]["ResultOflong"];
+                    "text/json": components["schemas"]["ResultOflong"];
+                };
+            };
+        };
+    };
+    SysFilePath_Test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePathTestInput"];
+                "text/json": components["schemas"]["FilePathTestInput"];
+                "application/*+json": components["schemas"]["FilePathTestInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFileAccessTestResult"];
+                    "application/json": components["schemas"]["ResultOfFileAccessTestResult"];
+                    "text/json": components["schemas"]["ResultOfFileAccessTestResult"];
+                };
+            };
+        };
+    };
+    SysFileServer_Page: {
+        parameters: {
+            query?: {
+                /** @description 关键字(模糊匹配名称或根路径,可选) */
+                Keyword?: string;
+                /** @description 启用状态精确过滤(可选) */
+                Enabled?: boolean;
+                Current?: number | string;
+                Size?: number | string;
+                SortField?: string;
+                SortOrder?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfPagedListOfFileServerView"];
+                    "application/json": components["schemas"]["ResultOfPagedListOfFileServerView"];
+                    "text/json": components["schemas"]["ResultOfPagedListOfFileServerView"];
+                };
+            };
+        };
+    };
+    SysFileServer_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFileServerView"];
+                    "application/json": components["schemas"]["ResultOfFileServerView"];
+                    "text/json": components["schemas"]["ResultOfFileServerView"];
+                };
+            };
+        };
+    };
+    SysFileServer_Update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileServerSaveInput"];
+                "text/json": components["schemas"]["FileServerSaveInput"];
+                "application/*+json": components["schemas"]["FileServerSaveInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    SysFileServer_Delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfboolean"];
+                    "application/json": components["schemas"]["ResultOfboolean"];
+                    "text/json": components["schemas"]["ResultOfboolean"];
+                };
+            };
+        };
+    };
+    SysFileServer_Status: {
+        parameters: {
+            query?: {
+                ids?: (number | string)[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfFileAccessStatus"];
+                };
+            };
+        };
+    };
+    SysFileServer_Options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfIReadOnlyListOfFileServerOption"];
+                    "application/json": components["schemas"]["ResultOfIReadOnlyListOfFileServerOption"];
+                    "text/json": components["schemas"]["ResultOfIReadOnlyListOfFileServerOption"];
+                };
+            };
+        };
+    };
+    SysFileServer_Add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileServerSaveInput"];
+                "text/json": components["schemas"]["FileServerSaveInput"];
+                "application/*+json": components["schemas"]["FileServerSaveInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOflong"];
+                    "application/json": components["schemas"]["ResultOflong"];
+                    "text/json": components["schemas"]["ResultOflong"];
+                };
+            };
+        };
+    };
+    SysFileServer_Test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileServerTestInput"];
+                "text/json": components["schemas"]["FileServerTestInput"];
+                "application/*+json": components["schemas"]["FileServerTestInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfFileAccessTestResult"];
+                    "application/json": components["schemas"]["ResultOfFileAccessTestResult"];
+                    "text/json": components["schemas"]["ResultOfFileAccessTestResult"];
                 };
             };
         };

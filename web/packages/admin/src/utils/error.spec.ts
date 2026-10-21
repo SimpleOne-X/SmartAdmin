@@ -21,6 +21,27 @@ describe('translateError', () => {
     expect(translateError(err)).toBe('账号或密码错误')
   })
 
+  // 「文件夹无法访问」的 reason 是后端的原因码(accessDenied 这类),界面上要看到的是翻译后的原因。
+  it('translates_reason_arg', () => {
+    const err = new ApiError(44114, 'error.filePath.folderUnavailable', { reason: 'accessDenied' })
+    const text = translateError(err)
+    expect(text).toContain('拒绝访问')
+    expect(text).not.toContain('accessDenied')
+  })
+
+  // 后端 AdminException 的 Args 默认是 null,信封里就是 "args": null;所有没带实参的业务错误都走这条,不能因此抛异常。
+  it('args 为 null(无实参的业务错误)→ 照常翻译,不抛', () => {
+    const withKey = new ApiError(40004, 'error.auth.passwordWrong', null as never)
+    expect(translateError(withKey)).toBe('账号或密码错误')
+    const codeOnly = new ApiError(44001, undefined, null as never)
+    expect(translateError(codeOnly)).toBe('文件为空')
+  })
+
+  it('未知的 reason 原样显示', () => {
+    const err = new ApiError(44114, 'error.filePath.folderUnavailable', { reason: 'somethingNew' })
+    expect(translateError(err)).toBe('文件夹无法访问:somethingNew')
+  })
+
   it('msgKey 未命中但有 message → message,普通 Error → message', () => {
     const withUnknownKey = new ApiError(
       99999,

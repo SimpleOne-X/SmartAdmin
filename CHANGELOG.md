@@ -14,6 +14,23 @@
 
 ## Unreleased
 
+### Added
+
+- **文件路径：管理员在后台登记文件服务器和文件夹，业务代码只认一个编码，就能把附件传到 NAS 或共享文件夹，再按编码下载。**
+  与原有的「文件管理」是两套独立的上传下载，接口和组件互不通用。
+  - 新接口，四个控制器，都挂在模块 `FilePath` 下，可经 `SmartAdmin:Api:DisabledModules` 一起关闭：
+    - 文件路径配置：`GET /api/v1/sys/file-path/page`、`GET /api/v1/sys/file-path/{id}`、`GET /api/v1/sys/file-path/status`、`GET /api/v1/sys/file-path/environment`、`POST /api/v1/sys/file-path/add`、`PUT /api/v1/sys/file-path/{id}`、`DELETE /api/v1/sys/file-path/{id}`、`POST /api/v1/sys/file-path/test`。
+    - 文件服务器配置：`GET /api/v1/sys/file-server/page`、`GET /api/v1/sys/file-server/{id}`、`GET /api/v1/sys/file-server/status`、`GET /api/v1/sys/file-server/options`、`POST /api/v1/sys/file-server/add`、`PUT /api/v1/sys/file-server/{id}`、`DELETE /api/v1/sys/file-server/{id}`、`POST /api/v1/sys/file-server/test`。
+    - 单文件与分片上传：`POST /api/v1/sys/file-path/upload/{code}`、`POST /api/v1/sys/file-path/upload/{code}/chunk/init`、`POST /api/v1/sys/file-path/upload/{code}/chunk`、`POST /api/v1/sys/file-path/upload/{code}/chunk/complete`。
+    - 下载：`GET /api/v1/sys/file-path/download/{code}`；匿名可读的签名直链是 `GET /api/v1/sys/file-path/download/{code}/view`。
+  - 新组件 `FilePathUpload`（`smart-admin-web`），自动分片；一并导出 `uploadToFilePath`、`filePathFileApi`。
+  - 后端新增 `IFilePathUploadService`、`IFilePathDownloadService`、`IFilePathLinkSigner`，供业务在后端写文件、取文件、签直链。
+  - 文件服务器出现网络类失败后，30 秒内对它的上传、下载、删除直接报 `44114`，不再卡到系统的网络超时；每台服务器同时最多 16 个文件操作，超出报「繁忙」。可经 `IFilePathCircuit` 替换。
+  - 新配置节 `SmartAdmin:FilePath`：`AllowedRoots`（根目录白名单，默认空：根路径直接在文件服务器页面填，只避开程序目录和分片暂存目录，碰到报 `44158`；配了则根路径必须落在其中）、`StagingPath`（不能位于 `AllowedRoots` 之下，否则启动失败）、`StagingTtlHours`、`LinkTtlMinutes`。
+  - 新错误码段 `44100`–`44199`（`44101`–`44117` 文件路径与上传下载，`44150`–`44158` 文件服务器）。
+  - 新菜单「文件管理 → 文件路径」，菜单 Id `620`–`629`，随种子进老库，但不会自动授给任何角色；超管直接可见，普通管理员要在角色授权页勾选。
+  - 新表 `sys_file_server`、`sys_file_path`。跳过建表的部署（生产环境且 `SmartAdmin:Database:EnableCodeFirstInProduction=false`，或 `EnableCodeFirst=false`）要先把这两张表建出来，再使用本功能。
+
 ## 10.26.0 - 2026-10-15
 
 ### 升级说明

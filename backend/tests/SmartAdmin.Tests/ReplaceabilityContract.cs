@@ -118,6 +118,17 @@ public static class ReplaceabilityContract
         (typeof(IAiChatClient), ServiceLifetime.Scoped),
         (typeof(IAiUsageService), ServiceLifetime.Scoped),
         (typeof(IAiProviderService), ServiceLifetime.Scoped),
+
+        // 文件路径
+        (typeof(IFileServerService), ServiceLifetime.Scoped),
+        (typeof(IFilePathConfigService), ServiceLifetime.Scoped),
+        (typeof(IFilePathResolver), ServiceLifetime.Scoped),
+        (typeof(IFilePathUploadService), ServiceLifetime.Scoped),
+        (typeof(IFilePathDownloadService), ServiceLifetime.Scoped),
+        (typeof(IFilePathLinkSigner), ServiceLifetime.Singleton),
+        (typeof(IFilePathAccessChecker), ServiceLifetime.Scoped),
+        (typeof(IFileServerConnector), ServiceLifetime.Singleton),
+        (typeof(IFilePathCircuit), ServiceLifetime.Singleton),
     ];
 
     /// <summary>用 <see cref="DispatchProxy"/> 现造一个接口的假实现:不必为 60 个接口各写一个 Fake 类。</summary>

@@ -31,6 +31,9 @@ public class SmartAdminOptions
     /// <summary>上传配置(存储根/大小上限/后缀白名单,见 <see cref="AdminUploadOptions"/>)</summary>
     public AdminUploadOptions Upload { get; set; } = new();
 
+    /// <summary>文件路径配置(根目录白名单/分片暂存/直链有效期,见 <see cref="AdminFilePathOptions"/>;对应 <c>SmartAdmin:FilePath</c>)</summary>
+    public AdminFilePathOptions FilePath { get; set; } = new();
+
     /// <summary>导入/导出配置(行数上限/文件大小,见 <see cref="AdminExcelOptions"/>;对应 <c>SmartAdmin:Excel</c>)</summary>
     public AdminExcelOptions Excel { get; set; } = new();
 

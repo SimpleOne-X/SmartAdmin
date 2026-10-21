@@ -37,6 +37,17 @@ function abortMsgKey(err: unknown): string | undefined {
 }
 
 /**
+ * args.reason 是后端的原因码(accessDenied 这类,文件服务器访问失败的原因),文案在 `error.reason.<码>`。
+ * 先换成翻译再填占位符;语言包里没有的码原样保留,总比丢掉原因强。
+ */
+function translatedArgs(args?: Record<string, unknown> | null): Record<string, unknown> {
+  // 后端无实参时信封里是 "args": null,默认参数只管 undefined,所以这里用 ?? 兜
+  const a = args ?? {}
+  const key = typeof a.reason === 'string' ? `error.reason.${a.reason}` : ''
+  return key && i18n.global.te(key) ? { ...a, reason: t(key) } : a
+}
+
+/**
  * 把任意错误翻成用户可读文案:
  *   - 数字 ErrorCode(CellError.code) → 按码查 i18n
  *   - 超时 / 主动取消 → 专门文案(否则用户看到浏览器的英文原话)
@@ -54,10 +65,10 @@ export function translateError(err: unknown): string {
   if (err instanceof ApiError) {
     // args 必须带上:后端 AdminException 的 args 就是文案占位符的实参(如 {max}),
     // 丢了它界面上会显示占位符原文,最该看到的那个数反而没了。无占位符的文案传 args 无害。
-    if (err.msgKey && i18n.global.te(err.msgKey)) return t(err.msgKey, err.args ?? {})
+    if (err.msgKey && i18n.global.te(err.msgKey)) return t(err.msgKey, translatedArgs(err.args))
     // 无 msgKey 时用数字码兜底(下载失败信封偶发只有 code)
     if (!err.msgKey && CODE_MSG_KEY[err.code] && i18n.global.te(CODE_MSG_KEY[err.code])) {
-      return t(CODE_MSG_KEY[err.code], err.args ?? {})
+      return t(CODE_MSG_KEY[err.code], translatedArgs(err.args))
     }
     if (err.message) return err.message
   }
