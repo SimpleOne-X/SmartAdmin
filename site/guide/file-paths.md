@@ -261,13 +261,14 @@ password=...
 
 `vers=3.1.1` is the SMB protocol version; write `vers=3.0` if the NAS doesn't support it. `uid` and `gid` must match the user the backend runs as inside the container: the `app` user in the official .NET images is 1654, and if you change images, confirm it with `docker exec <container> id` first.
 
-Then map the mount point into the container and put the mount root in the whitelist:
+Then map the mount point into the container. The whitelist is optional, and without it the root path is still entered on the settings page. For a boundary no back-office account can cross, also put the mount root in the whitelist:
 
 ```yaml
 services:
   app:
     volumes:
       - /mnt/nas01/files:/mnt/nas01/files
+    # Optional: put the mount root in the whitelist
     environment:
       SmartAdmin__FilePath__AllowedRoots__0: /mnt/nas01
 ```

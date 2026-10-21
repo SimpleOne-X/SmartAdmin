@@ -261,13 +261,14 @@ password=...
 
 `vers=3.1.1` 是 SMB 协议版本，NAS 不支持时写 `vers=3.0`。`uid`、`gid` 要和容器里运行后端的用户一致：官方 .NET 镜像里的 `app` 用户是 1654，换了镜像先用 `docker exec <容器> id` 确认。
 
-再把挂载点映射进容器，白名单填挂载根目录：
+再把挂载点映射进容器。白名单可以不配，根路径照样在配置页里填。要一道后台账号越不过去的边界，再把挂载根目录写进白名单：
 
 ```yaml
 services:
   app:
     volumes:
       - /mnt/nas01/files:/mnt/nas01/files
+    # 可选：把挂载根目录写进白名单
     environment:
       SmartAdmin__FilePath__AllowedRoots__0: /mnt/nas01
 ```
