@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.27.0 - 2026-10-21
+
 ### Added
 
 - **文件路径：管理员在后台登记文件服务器和文件夹，业务代码只认一个编码，就能把附件传到 NAS 或共享文件夹，再按编码下载。**
@@ -30,6 +32,10 @@
   - 新错误码段 `44100`–`44199`（`44101`–`44117` 文件路径与上传下载，`44150`–`44158` 文件服务器）。
   - 新菜单「文件管理 → 文件路径」，菜单 Id `620`–`629`，随种子进老库，但不会自动授给任何角色；超管直接可见，普通管理员要在角色授权页勾选。
   - 新表 `sys_file_server`、`sys_file_path`。跳过建表的部署（生产环境且 `SmartAdmin:Database:EnableCodeFirstInProduction=false`，或 `EnableCodeFirst=false`）要先把这两张表建出来，再使用本功能。
+
+### Security
+
+- 仓库锁文件里 `md-editor-v3` 间接依赖的 `markdown-it` 从 14.3.2 升到 14.3.3，修复两条拒绝服务公告（GHSA-vfgh-jcmw-g37q、GHSA-gfr2-rv44-r23c）。`smart-admin-web` 的依赖范围没变，已有应用在自己的 `web/` 下运行 `npm update markdown-it` 即可拿到修复。
 
 ## 10.26.0 - 2026-10-15
 
