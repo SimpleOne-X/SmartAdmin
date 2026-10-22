@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.28.0 - 2026-10-22
+
 ### 升级说明
 
 - **「文件管理」目录下两个页面的菜单编号对调：「文件路径」改为 `610`–`619`，「文件管理」改为 `620`–`625`。已经在用内核的库，升级前要先跑一遍迁移脚本 [`scripts/upgrade/renumber-file-menus.sql`](https://github.com/SimpleOne-X/SmartAdmin/blob/main/scripts/upgrade/renumber-file-menus.sql)。**
