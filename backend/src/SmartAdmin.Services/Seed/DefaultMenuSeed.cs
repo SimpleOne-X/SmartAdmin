@@ -234,25 +234,25 @@ public class DefaultMenuSeed : ISeedData<SysMenu>
         // ═══ 6xx 文件管理 ═══════════════════════════════════════════
         new SysMenu { Id = 600, ParentId = 0, Type = MenuType.Catalog, Title = "文件管理", Permission = "", Icon = "ph:folder-duotone", Sort = 5, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },
 
-        // 文件管理页(SysFileController)。上传含分片三步(init 秒传探测 + chunk 传片 + complete 合并落库)。
-        new SysMenu { Id = 610, ParentId = 600, Type = MenuType.Menu, Title = "文件管理", Permission = "", Path = "/system/file", Component = "system/file/index", Icon = "ph:files-duotone", Sort = 1, Enabled = true, Visible = true },
-        new SysMenu { Id = 611, ParentId = 610, Type = MenuType.Button, Title = "文件-查询", Permission = "GET:/api/v1/sys/file/page", Sort = 1, Enabled = true },
-        new SysMenu { Id = 612, ParentId = 610, Type = MenuType.Button, Title = "文件-上传", Permission = Codes("POST:/api/v1/sys/file/upload", "POST:/api/v1/sys/file/chunk/init", "POST:/api/v1/sys/file/chunk", "POST:/api/v1/sys/file/chunk/complete"), Sort = 2, Enabled = true },
-        new SysMenu { Id = 614, ParentId = 610, Type = MenuType.Button, Title = "文件-删除", Permission = Codes("DELETE:/api/v1/sys/file/{id}", "POST:/api/v1/sys/file/batch-delete"), Sort = 4, Enabled = true },
-        new SysMenu { Id = 615, ParentId = 610, Type = MenuType.Button, Title = "文件-下载", Permission = "GET:/api/v1/sys/file/{id}/download", Sort = 3, Enabled = true },
-
         // 文件路径页(SysFilePathController + SysFileServerController):文件路径与它引用的文件服务器在同一页维护,
         // 所以服务器的接口也挂在本页的按钮下。上传、下载端点只要求登录(角色在文件路径上配),不在这里授权。
-        new SysMenu { Id = 620, ParentId = 600, Type = MenuType.Menu, Title = "文件路径", Permission = "", Path = "/system/file-path", Component = "system/file-path/index", Icon = "ph:hard-drives-duotone", Sort = 2, Enabled = true, Visible = true },
-        new SysMenu { Id = 621, ParentId = 620, Type = MenuType.Button, Title = "文件路径-查询", Permission = Codes("GET:/api/v1/sys/file-path/page", "GET:/api/v1/sys/file-path/{id}", "GET:/api/v1/sys/file-path/status", "GET:/api/v1/sys/file-path/environment", "GET:/api/v1/sys/file-server/options"), Sort = 1, Enabled = true },
-        new SysMenu { Id = 622, ParentId = 620, Type = MenuType.Button, Title = "文件路径-新增", Permission = "POST:/api/v1/sys/file-path/add", Sort = 2, Enabled = true },
-        new SysMenu { Id = 623, ParentId = 620, Type = MenuType.Button, Title = "文件路径-更新", Permission = "PUT:/api/v1/sys/file-path/{id}", Sort = 3, Enabled = true },
-        new SysMenu { Id = 624, ParentId = 620, Type = MenuType.Button, Title = "文件路径-删除", Permission = "DELETE:/api/v1/sys/file-path/{id}", Sort = 4, Enabled = true },
-        new SysMenu { Id = 625, ParentId = 620, Type = MenuType.Button, Title = "文件路径-测试连接", Permission = Codes("POST:/api/v1/sys/file-path/test", "POST:/api/v1/sys/file-server/test"), Sort = 5, Enabled = true },
-        new SysMenu { Id = 626, ParentId = 620, Type = MenuType.Button, Title = "文件服务器-查询", Permission = Codes("GET:/api/v1/sys/file-server/page", "GET:/api/v1/sys/file-server/{id}", "GET:/api/v1/sys/file-server/status"), Sort = 6, Enabled = true },
-        new SysMenu { Id = 627, ParentId = 620, Type = MenuType.Button, Title = "文件服务器-新增", Permission = "POST:/api/v1/sys/file-server/add", Sort = 7, Enabled = true },
-        new SysMenu { Id = 628, ParentId = 620, Type = MenuType.Button, Title = "文件服务器-更新", Permission = "PUT:/api/v1/sys/file-server/{id}", Sort = 8, Enabled = true },
-        new SysMenu { Id = 629, ParentId = 620, Type = MenuType.Button, Title = "文件服务器-删除", Permission = "DELETE:/api/v1/sys/file-server/{id}", Sort = 9, Enabled = true },
+        new SysMenu { Id = 610, ParentId = 600, Type = MenuType.Menu, Title = "文件路径", Permission = "", Path = "/system/file-path", Component = "system/file-path/index", Icon = "ph:hard-drives-duotone", Sort = 1, Enabled = true, Visible = true },
+        new SysMenu { Id = 611, ParentId = 610, Type = MenuType.Button, Title = "文件路径-查询", Permission = Codes("GET:/api/v1/sys/file-path/page", "GET:/api/v1/sys/file-path/{id}", "GET:/api/v1/sys/file-path/status", "GET:/api/v1/sys/file-path/environment", "GET:/api/v1/sys/file-server/options"), Sort = 1, Enabled = true },
+        new SysMenu { Id = 612, ParentId = 610, Type = MenuType.Button, Title = "文件路径-新增", Permission = "POST:/api/v1/sys/file-path/add", Sort = 2, Enabled = true },
+        new SysMenu { Id = 613, ParentId = 610, Type = MenuType.Button, Title = "文件路径-更新", Permission = "PUT:/api/v1/sys/file-path/{id}", Sort = 3, Enabled = true },
+        new SysMenu { Id = 614, ParentId = 610, Type = MenuType.Button, Title = "文件路径-删除", Permission = "DELETE:/api/v1/sys/file-path/{id}", Sort = 4, Enabled = true },
+        new SysMenu { Id = 615, ParentId = 610, Type = MenuType.Button, Title = "文件路径-测试连接", Permission = Codes("POST:/api/v1/sys/file-path/test", "POST:/api/v1/sys/file-server/test"), Sort = 5, Enabled = true },
+        new SysMenu { Id = 616, ParentId = 610, Type = MenuType.Button, Title = "文件服务器-查询", Permission = Codes("GET:/api/v1/sys/file-server/page", "GET:/api/v1/sys/file-server/{id}", "GET:/api/v1/sys/file-server/status"), Sort = 6, Enabled = true },
+        new SysMenu { Id = 617, ParentId = 610, Type = MenuType.Button, Title = "文件服务器-新增", Permission = "POST:/api/v1/sys/file-server/add", Sort = 7, Enabled = true },
+        new SysMenu { Id = 618, ParentId = 610, Type = MenuType.Button, Title = "文件服务器-更新", Permission = "PUT:/api/v1/sys/file-server/{id}", Sort = 8, Enabled = true },
+        new SysMenu { Id = 619, ParentId = 610, Type = MenuType.Button, Title = "文件服务器-删除", Permission = "DELETE:/api/v1/sys/file-server/{id}", Sort = 9, Enabled = true },
+
+        // 文件管理页(SysFileController)。上传含分片三步(init 秒传探测 + chunk 传片 + complete 合并落库)。
+        new SysMenu { Id = 620, ParentId = 600, Type = MenuType.Menu, Title = "文件管理", Permission = "", Path = "/system/file", Component = "system/file/index", Icon = "ph:files-duotone", Sort = 2, Enabled = true, Visible = true },
+        new SysMenu { Id = 621, ParentId = 620, Type = MenuType.Button, Title = "文件-查询", Permission = "GET:/api/v1/sys/file/page", Sort = 1, Enabled = true },
+        new SysMenu { Id = 622, ParentId = 620, Type = MenuType.Button, Title = "文件-上传", Permission = Codes("POST:/api/v1/sys/file/upload", "POST:/api/v1/sys/file/chunk/init", "POST:/api/v1/sys/file/chunk", "POST:/api/v1/sys/file/chunk/complete"), Sort = 2, Enabled = true },
+        new SysMenu { Id = 624, ParentId = 620, Type = MenuType.Button, Title = "文件-删除", Permission = Codes("DELETE:/api/v1/sys/file/{id}", "POST:/api/v1/sys/file/batch-delete"), Sort = 4, Enabled = true },
+        new SysMenu { Id = 625, ParentId = 620, Type = MenuType.Button, Title = "文件-下载", Permission = "GET:/api/v1/sys/file/{id}/download", Sort = 3, Enabled = true },
 
         // ═══ 7xx AI 网关管理 ═══════════════════════════════════════════
         new SysMenu { Id = 700, ParentId = 0,   Type = MenuType.Catalog, Title = "AI 网关管理",  Permission = "", Icon = "ph:sparkle-duotone", Sort = 6, Enabled = true, ModuleId = DefaultModuleSeed.BUILTIN_MODULE_ID },

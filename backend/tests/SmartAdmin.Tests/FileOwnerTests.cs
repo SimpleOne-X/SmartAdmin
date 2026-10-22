@@ -14,8 +14,8 @@ namespace SmartAdmin.Tests;
 /// </summary>
 public class FileOwnerTests
 {
-    /// <summary>文件模块的种子按钮:31 上传 / 32 分页 / 79 下载 / 80 删除。</summary>
-    private static readonly long[] FILE_MENU_IDS = [611, 612, 614, 615];
+    /// <summary>文件管理页的种子按钮:621 查询 / 622 上传 / 624 删除 / 625 下载。</summary>
+    private static readonly long[] FILE_MENU_IDS = [621, 622, 624, 625];
 
     private static async Task<HttpClient> SuperAdmin(AdminAppFactory f)
     {
