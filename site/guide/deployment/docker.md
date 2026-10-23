@@ -15,7 +15,7 @@ Copy the environment-variable template first and fill in the three required valu
 ```bash
 cp .env.example .env
 # edit .env: fill in SMART_JWT_SECRET, SMART_DB_PASSWORD, SMART_ADMIN_PASSWORD
-docker compose up -d --build
+SMART_DB_CODEFIRST=true docker compose up -d --build   # empty database: open the schema gate for this one run
 ```
 
 This one command brings up four services (defined in the repo-root `docker-compose.yml`): `db` (MySQL 8.0), `redis` (Redis 7), `app` (the backend), and `web` (Caddy, serving the frontend's static build and reverse-proxying `/api`). Once it's up:
@@ -26,7 +26,9 @@ curl http://127.0.0.1:8081/health/ready    # Backend debug port, loopback-only �
 docker compose logs app                    # First-startup info
 ```
 
-`app` runs `ASPNETCORE_ENVIRONMENT=Production`, and that is deliberate. Production has three hard gates: the JWT secret must be given explicitly (leave it out and you're in dev-key mode, each replica signing its own, giving random 401s); a first production deploy against an empty database must explicitly permit table creation (a production database isn't ALTERed automatically); and the upload root must be moved out of `wwwroot`. `docker-compose.yml` writes all three as environment variables — copy them and swap in your own values; miss one and you get a readable startup error naming the config item, far easier to debug than "the process comes up fine and only blows up at the driver layer on the first write." These three gates, plus the table-creation / column-adding details on upgrade, are covered in full in the [Deployment Overview](/guide/deployment/).
+The `SMART_DB_CODEFIRST=true` in front applies to that one run only. The schema gate in compose is off by default, so an empty database needs it to create the tables and write the seed data. Once the stack is up, run `docker compose up -d` again without it: `app` is recreated with the gate closed, and from then on restarts never touch the schema. When you later upgrade to a version with schema changes, add it for that one run as well. Forgetting it doesn't damage the database; `app` fails to start, and the error names the missing table and `EnableCodeFirstInProduction`, which is the setting `SMART_DB_CODEFIRST` feeds.
+
+`app` runs `ASPNETCORE_ENVIRONMENT=Production`, and that is deliberate. Production has three hard gates: the JWT secret must be given explicitly (leave it out and you're in dev-key mode, each replica signing its own, giving random 401s); a first deploy against an empty database must explicitly permit table creation (the kernel only creates tables on its own in Development); and the upload root must be moved out of `wwwroot`. `docker-compose.yml` writes all three as environment variables — copy them and swap in your own values; miss one and you get a readable startup error naming the config item, far easier to debug than "the process comes up fine and only blows up at the driver layer on the first write." These three gates, plus the table-creation / column-adding details on upgrade, are covered in full in the [Deployment Overview](/guide/deployment/).
 
 The first-login super-admin account is `superAdmin`, and the password is whatever you set `SMART_ADMIN_PASSWORD` to in `.env`. This line in compose has no default:
 

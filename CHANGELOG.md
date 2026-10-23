@@ -14,6 +14,27 @@
 
 ## Unreleased
 
+## 10.29.0 - 2026-10-23
+
+### 升级说明
+
+- **建表闸门改为只放行 `Development`：用 `Staging`、`UAT` 等环境名部署、又靠应用自动建表或补列的项目，空库首启和内核加列的那次启动会被拦下。**
+  以前只有 `Production` 默认不建表，其余环境名照常自动建表改表；现在 Development 以外的环境一律视同部署。被拦时启动错误会点名缺的表和列，按提示在那次启动配上 `SmartAdmin:Database:EnableCodeFirstInProduction=true`，或由 DBA 先建好表再启动。表结构已经齐全的日常启动不受影响。
+- **照仓库自带 `docker-compose.yml` 部署的，空库首启和带表结构变更的升级要多带一个变量。** compose 里的建表闸门从常开改为默认关，那一次用 `SMART_DB_CODEFIRST=true docker compose up -d --build` 打开，起来后再跑一次不带它的 `docker compose up -d` 关回去。
+
+### Changed
+
+- **CodeFirst 自动建表只在 `Development` 环境默认开启。** `SmartAdmin:Database:EnableCodeFirstInProduction` 的含义随之变为「Development 以外的环境是否允许建表改表」，配置键名不变。
+- **仓库自带的 `docker-compose.yml` 不再每次启动都跑 CodeFirst。** 建表闸门改由 `SMART_DB_CODEFIRST` 控制，默认 `false`；建表改表是部署时做一次的事，日常启动不该带着改表的权限。
+
+### Fixed
+
+- **数据库账号只有增删改查权限时，应用在 SQL Server 上起不来。** 建表闸门关着也没用：雪花 WorkerId 租约守卫启动时会自己对 `sys_worker_lease` 跑一遍 CodeFirst，SQL Server 上这一步要删改表注释，需要 ALTER 权限。守卫不再建表改表；闸门关着且库里缺这张表时，启动错误点名缺表并给出两条出路。日常运行的账号在 SQL Server 上给 `db_datareader` 加 `db_datawriter` 就够。
+
+### Security
+
+- **启动日志「数据库就绪」一行不再打印完整连接串。** 以前整条连接串原样写进 Information 日志，口令是明文；现在只留服务器、端口、库名和 SQLite 文件路径，其余键一律不打。日志已经落盘或进了日志平台的，建议轮换数据库口令。
+
 ## 10.28.0 - 2026-10-22
 
 ### 升级说明

@@ -66,9 +66,9 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 完整的配置、挂载和排错步骤见[文件路径](/zh/guide/file-paths)。
 
-## 生产建表闸门：首次建表与升级补列
+## 建表闸门：首次建表与升级补列
 
-生产环境有一道建表安全闸门。只要 `ASPNETCORE_ENVIRONMENT=Production`，哪怕 `EnableCodeFirst=true`（默认就是 true），也不会自动建表或改表。生产库通常由 DBA 手工维护，应用不该擅自 `ALTER`。想放行，显式打开这一项：
+只有 `Development` 环境会自动建表、改表。`Production`、`Staging`、`UAT` 或任何自定义环境名都算部署，哪怕 `EnableCodeFirst=true`（默认就是 true）也不碰表结构。部署的库通常由 DBA 手工维护，应用不该擅自 `ALTER`。想放行，显式打开这一项：
 
 ```json
 { "SmartAdmin": { "Database": { "EnableCodeFirstInProduction": true } } }
@@ -76,8 +76,12 @@ SmartAdmin__Upload__RootPath='/data/upload'
 
 它默认 false，管两件事：
 
-- **空库首次上生产**：表还没建，种子无处可写。这时候两条路二选一。要么临时打开这项，让它自己建表、写种子，建完可以再关掉。要么让 DBA 照启动错误里点名的表先建好，再启动。
+- **空库首次部署**：表还没建，种子无处可写。这时候两条路二选一。要么临时打开这项，让它自己建表、写种子，建完可以再关掉。要么让 DBA 照启动错误里点名的表先建好，再启动。
 - **升级内核版本补列**：新版内核可能给自己的表加列。加字段是常态，删列或改窄内核不会做。同样两条路：本次启动打开这项，让它自己补列；或者让 DBA 照错误里点名的表和列，手工 `ALTER TABLE ... ADD COLUMN`。
+
+名字里虽然写着 Production，闸门认的却是 Development。部署时为了加载 `appsettings.Staging.json` 换个环境名很常见，按「不是 Production 就建表」判的话，换个名字闸门就失效了。
+
+数据库账号也照这两种时刻分开给。日常运行只要增删改查，SQL Server 上是这个库的 `db_datareader` 加 `db_datawriter`。打开闸门的那次启动要能建表改表，给这个库的 `db_owner` 就够，用不着 `sa`。开发环境同样要建表改表的权限。没配 `CodeFirstVersion` 时它每次启动都扫一遍，SQL Server 上这一遍即使表结构没变，也会重写每张表的表注释。
 
 ### 破坏性变更闸门：`AllowDestructiveSchemaChange`
 

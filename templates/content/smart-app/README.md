@@ -9,7 +9,7 @@ dotnet run
 ```
 
 - 零配置默认用 SQLite(相对路径落在 ContentRoot),自动建表 + 种子。
-- `Properties/launchSettings.json` 把 `ASPNETCORE_ENVIRONMENT` 钉成 `Development` —— **别删**:落到 `Production` 时 CodeFirst 自动建表默认关闭(生产不该自动改表),首启会因为「种子要写的表不存在」直接启动失败。生产建表走 `SmartAdmin:Database:EnableCodeFirstInProduction` 或由 DBA 预建,见[部署指南](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
+- `Properties/launchSettings.json` 把 `ASPNETCORE_ENVIRONMENT` 钉成 `Development` —— **别删**:落到 `Development` 以外的环境时 CodeFirst 自动建表默认关闭(部署环境不该自动改表),首启会因为「种子要写的表不存在」直接启动失败。生产建表走 `SmartAdmin:Database:EnableCodeFirstInProduction` 或由 DBA 预建,见[部署指南](https://simpleone-x.github.io/SmartAdmin/zh/guide/deployment/)。
 - **首次启动控制台会打印随机超管密码**,用它登录。
 - 换数据库:改 `appsettings.json` 的 `SmartAdmin:Database` 节(DbType + 连接串),支持 SQLite / MySQL / SqlServer / PostgreSQL。
 - 健康检查 `/health`、`/health/ready`;开发期 OpenAPI 契约 `/openapi/v1.json`。

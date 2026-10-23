@@ -197,8 +197,8 @@ builder.Services.AddSmartAdmin(builder.Configuration, options =>
     "Database": {
       "DbType": "Sqlite",              // Sqlite | MySql | SqlServer | PostgreSQL(四种都在 CI 矩阵里跑)
       "ConnectionString": "Data Source=./data/SmartAdmin.db",
-      "EnableCodeFirst": true,          // 首启自动建表(生产默认禁,见下)
-      "EnableCodeFirstInProduction": false, // 生产必须显式开启才允许自动改表(§12 建表安全)
+      "EnableCodeFirst": true,          // 首启自动建表(非 Development 默认禁,见下)
+      "EnableCodeFirstInProduction": false, // 非 Development 环境必须显式开启才允许自动改表(§12 建表安全)
       "CodeFirstVersion": null,         // 可选:配了就只在它变化时跑 CodeFirst 扫描(记进 sys_schema_version Id=2),实体改了就改号
       "EnableSeed": true                // 首启自动种子(幂等)
     },
@@ -715,7 +715,7 @@ web/
 | **CORS / 上传限制 / 请求体大小** | CORS 走 `Api:Cors`(命名策略 + `IStartupFilter` 挂载,默认收紧);上传走 `Upload:MaxSizeMb` + 后缀白名单 | AspNetCore |
 | **在线用户 / 站内通知** | 在线用户 = 令牌信息本就存缓存,直接列举/强退,无需长连接。实时性:默认 **HTTP 轮询**(前端定时拉未读/在线,`If-None-Match`/ETag 省流);需要低延迟就开内置的 **SignalR 推送**(`Realtime:Enabled`,默认关);MQTT 留给规划中的可选包 `SmartAdmin.Mqtt`。**没有 `Notify` 配置节**,别照它写配置 | AspNetCore(轮询)/ 可选包(MQTT,规划中) |
 | **配置热更新** | 服务读配置用 `IOptionsMonitor<T>`,改 json / 环境不必重启 | 全局约定 |
-| **生产建表安全 / DB 策略** | Dev 默认允许 CodeFirst 建表+加列;**生产默认禁**,显式 `Database:EnableCodeFirstInProduction` 才开;内置表用 `sys_schema_version` 记版本;**不做破坏性迁移**(不自动删表/删列/改窄字段);发布说明列出每版表结构变更 | SqlSugar |
+| **生产建表安全 / DB 策略** | 只有 Development 默认允许 CodeFirst 建表+加列;**其余环境(Production/Staging/自定义环境名)默认禁**,显式 `Database:EnableCodeFirstInProduction` 才开;内置表用 `sys_schema_version` 记版本;**不做破坏性迁移**(不自动删表/删列/改窄字段);发布说明列出每版表结构变更 | SqlSugar |
 | **种子幂等** | `ISeedData` 以主键/唯一键判存,重复启动不重复插入 | SqlSugar |
 | **可观测性** | 默认只用内置 `ILogger`;OpenTelemetry(logs/metrics/traces)做 **可选包** `SmartAdmin.Observability` | 可选包(规划中) |
 | **统一时间/ID** | 时间用 `TimeProvider`(.NET 内置,可测试);ID 用自写雪花(`IIdGenerator`) | Core |

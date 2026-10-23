@@ -7,7 +7,7 @@ using SmartAdmin.SqlSugar;
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 生产建表闸门的启动契约。闸门只挡建表,种子仍要跑——这中间的空档一旦不慎,会让"空库首次上生产"
+/// 建表闸门的启动契约(Development 以外的环境默认关)。闸门只挡建表,种子仍要跑——这中间的空档一旦不慎,会让"空库首次上生产"
 /// 崩在驱动层的 no such table 上。两个用例锁住契约的两半:
 /// <list type="bullet">
 /// <item>表不存在 → 抛出**可行动**的错误(点名缺表 + 给出两条出路),而不是驱动层错误。</item>
@@ -27,6 +27,39 @@ public class ProductionBootstrapTests
         // 断消息内容而非仅异常类型:别的启动前置(如 JWT 密钥缺失)也抛同类异常,只断类型会误判为通过
         Assert.Contains("sys_schema_version", ex.Message);                 // 点名到底缺哪张表
         Assert.Contains("EnableCodeFirstInProduction", ex.Message);        // 给出出路
+    }
+
+    /// <summary>
+    /// 闸门只放行 Development:部署时为了加载 appsettings.{环境}.json 设成 Staging / UAT 等环境名,
+    /// 一样不能擅自建表改表——与 Production 同一套报错与出路。
+    /// </summary>
+    [Theory]
+    [InlineData("Staging")]
+    [InlineData("UAT")]
+    public void Non_development_environment_with_empty_db_and_gate_off_fails_with_actionable_message(string environment)
+    {
+        using var f = new AdminAppFactory { EnvironmentName = environment, FreshDatabase = true };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => f.CreateClient());
+
+        Assert.Contains("sys_schema_version", ex.Message);
+        Assert.Contains("EnableCodeFirstInProduction", ex.Message);
+    }
+
+    /// <summary>非 Development 环境的空库首启:显式开闸门照样建表播种。</summary>
+    [Fact]
+    public async Task Non_development_environment_with_gate_on_creates_schema_and_seeds()
+    {
+        using var f = new AdminAppFactory
+        {
+            EnvironmentName = "Staging",
+            FreshDatabase = true,
+            Settings = new Dictionary<string, string?> { ["SmartAdmin:Database:EnableCodeFirstInProduction"] = "true" },
+        };
+        using var scope = f.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IRepository<SysUser>>();
+
+        Assert.True(await users.AnyAsync(u => u.IsSuperAdmin));
     }
 
     [Fact]

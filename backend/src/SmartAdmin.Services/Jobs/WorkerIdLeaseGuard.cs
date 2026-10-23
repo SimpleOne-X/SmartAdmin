@@ -72,7 +72,7 @@ public sealed class WorkerIdLeaseGuard(
         _stableName = $"{_identity.MachineName}#{_workerId}";
         _nodeName = $"{_stableName}@{_instanceToken}";
 
-        db.CodeFirst.InitTables<SysWorkerLease>();
+        EnsureLeaseTableExists();
         await AcquireAsync();
 
         logger.LogInformation("WorkerId {WorkerId} 租约已获取(node={Node}, pid={Pid}, ttl={Ttl}s)。",
@@ -83,6 +83,25 @@ public sealed class WorkerIdLeaseGuard(
         // 链到它的 CTS 已被 Dispose,CancelAsync 会抛 ObjectDisposedException,拖垮整批 WebApplicationFactory 测试。
         _cts = new CancellationTokenSource();
         _heartbeatTask = HeartbeatLoopAsync(_cts.Token);
+    }
+
+    /// <summary>
+    /// 租约表必须已在库里。守卫不建表也不改表:建表归 DatabaseInitializer 和它的建表闸门管
+    /// (<c>sys_worker_lease</c> 是普通实体,闸门开时已随其它表建好)。守卫自己跑 CodeFirst 会绕过闸门,
+    /// 而且 SQL Server 上 CodeFirst 每次都对已有表删改表注释,只有增删改查权限的运行账号就起不来。
+    /// 缺表时点名拦下,不让它炸在驱动层的"对象名无效"上。
+    /// </summary>
+    private void EnsureLeaseTableExists()
+    {
+        var table = db.EntityMaintenance.GetTableName<SysWorkerLease>();
+        if (db.DbMaintenance.IsAnyTable(table, false)) return;
+
+        throw new InvalidOperationException(
+            $"SmartAdmin 启动失败:库里缺少表 {table}(雪花 WorkerId 租约,启动时要靠它防止两个实例用同一个机器号)。" +
+            "CodeFirst 自动建表已跳过,没人替库建这张表。二选一:" +
+            "(1) 本次启动配置 SmartAdmin:Database:EnableCodeFirstInProduction=true,由应用建表补列" +
+            "(会丢数据的变更另有一道闸门默认拒绝,不会顺手执行);" +
+            "(2) 由 DBA 先建好这张表再启动,表结构可在预发库上开闸门启动一次后从 SQL 日志照抄。详见文档站「部署」一节。");
     }
 
     /// <summary>

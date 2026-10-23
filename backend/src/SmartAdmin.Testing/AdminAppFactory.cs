@@ -9,7 +9,7 @@ namespace SmartAdmin.Testing;
 /// 集成测试宿主工厂:用你的应用(<typeparamref name="TEntryPoint"/> 通常是 <c>Program</c>)做被测宿主,
 /// 每个实例一个独立的库(默认 SQLite 文件;按 <see cref="TestDb"/> 的环境变量切到 MySQL / SqlServer / PostgreSQL),
 /// 固定超管密码与 JWT 密钥,环境钉在 <c>Development</c>(<c>WebApplicationFactory</c> 不读 launchSettings,
-/// 落到 Production 时 CodeFirst 自动建表默认关闭,种子会因为表不存在而启动失败)。
+/// 落到 Development 以外的环境时 CodeFirst 自动建表默认关闭,种子会因为表不存在而启动失败)。
 /// <para>最省的用法:<c>public sealed class AppFactory : AdminAppFactory&lt;Program&gt; { }</c>,
 /// 然后 <c>IClassFixture&lt;AppFactory&gt;</c> 或每个用例 <c>using var f = new AppFactory();</c>。
 /// 要改默认(禁用模块、额外配置、替换服务)用对象初始化器,要改工厂本身覆写 <see cref="ConfigureWebHost"/>。</para>
@@ -34,7 +34,7 @@ public class AdminAppFactory<TEntryPoint> : WebApplicationFactory<TEntryPoint> w
     /// <summary>额外的配置项覆盖(在 AddSmartAdmin 绑定前生效,如 CORS 源、会话模式等)。</summary>
     public IReadOnlyDictionary<string, string?>? Settings { get; init; }
 
-    /// <summary>宿主环境名(默认 Development;生产建表闸门用例传 "Production")。</summary>
+    /// <summary>宿主环境名(默认 Development;建表闸门用例传 "Production" 等非开发环境名)。</summary>
     public string EnvironmentName { get; init; } = "Development";
 
     /// <summary>超管密码。</summary>

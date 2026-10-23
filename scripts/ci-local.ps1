@@ -375,6 +375,8 @@ function Gate-DockerSmoke {
     $env:SMART_JWT_SECRET = 'ci-local-signing-key-please-keep-32plus-bytes'
     $env:SMART_DB_PASSWORD = 'ci-local-db'
     $env:SMART_ADMIN_PASSWORD = 'Smart@123456'
+    # 每次都是空库首启,要验的正是建表 + 种子;compose 里建表闸门默认关
+    $env:SMART_DB_CODEFIRST = 'true'
     try {
         Invoke-Native 'docker' @('compose', 'up', '-d', '--build')
         $ok = $false

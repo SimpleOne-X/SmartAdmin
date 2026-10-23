@@ -40,6 +40,8 @@ env:
   SMART_JWT_SECRET: docker-smoke-ci-signing-key-please-keep-32plus-bytes
   SMART_DB_PASSWORD: docker-smoke-ci-db
   SMART_ADMIN_PASSWORD: Smart@123456
+  # 每次都是空库首启，要验的正是建表加种子；compose 里建表闸门默认关
+  SMART_DB_CODEFIRST: 'true'
   TRIVY_CACHE_DIR: /tmp/trivy-cache
 
 concurrency:

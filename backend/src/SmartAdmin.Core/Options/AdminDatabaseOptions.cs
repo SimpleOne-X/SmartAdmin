@@ -17,9 +17,11 @@ public class AdminDatabaseOptions
     public bool EnableCodeFirst { get; set; } = true;
 
     /// <summary>
-    /// 生产环境是否允许 CodeFirst 自动建表/改表(建表安全闸门)。
-    /// <b>默认 false</b>:生产库通常由 DBA 手工维护,应用不应擅自 ALTER 表结构。即使 <see cref="EnableCodeFirst"/> 为 true,
-    /// 生产环境(<c>IHostEnvironment.IsProduction()</c>)也需本项显式为 true 才建表;非生产环境不受此约束。
+    /// 非开发环境是否允许 CodeFirst 自动建表/改表(建表安全闸门)。
+    /// <b>默认 false</b>:部署的库通常由 DBA 手工维护,应用不应擅自 ALTER 表结构。即使 <see cref="EnableCodeFirst"/> 为 true,
+    /// Development 以外的环境(Production、Staging 及任何自定义环境名)也需本项显式为 true 才建表;
+    /// 只有 Development(<c>IHostEnvironment.IsDevelopment()</c>)不受此约束。
+    /// <para>通常只在空库首次部署、内核升级需要补列时开一次,建完关掉。名字里的 Production 泛指所有部署环境。</para>
     /// </summary>
     public bool EnableCodeFirstInProduction { get; set; }
 

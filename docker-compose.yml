@@ -6,7 +6,7 @@
 # 这同时也是**生产首次启动路径的实测**。应用刻意使用 ASPNETCORE_ENVIRONMENT=Production 运行，
 # 因此以下条件必须同时满足才能启动——缺少任何一个都会报可读的错误，这正是要验证的：
 #   · Jwt:SecretKey 必须显式设置（生产环境不允许自动生成的开发密钥，否则每个副本用自己的密钥签名 → 随机 401）
-#   · 空数据库首次启动时必须显式允许建表（生产环境默认不自动 ALTER 数据库）
+#   · 空数据库首次启动时必须显式允许建表（只有 Development 自动建表；这里是 SMART_DB_CODEFIRST，默认关，见 app 段）
 #   · 上传根目录必须在 wwwroot 外部（否则添加 UseStaticFiles() 会导致上传目录被匿名访问）
 #
 # 演示用的密钥/密码写在下面的默认值中——**正式生产部署时，请通过环境变量注入**
@@ -57,9 +57,12 @@ services:
       SmartAdmin__Jwt__SecretKey: ${SMART_JWT_SECRET:?请先按 .env.example 建一份 .env,或在环境里给出 SMART_JWT_SECRET(≥32 字节随机串)}
       SmartAdmin__Database__DbType: MySql
       SmartAdmin__Database__ConnectionString: Server=db;Port=3306;Database=smart;User ID=root;Password=${SMART_DB_PASSWORD:?请先按 .env.example 建一份 .env,或在环境里给出 SMART_DB_PASSWORD};AllowPublicKeyRetrieval=true;SSL Mode=None;
-      # 空数据库首次启动：允许应用自动建表并写入种子数据。当生产数据库由 DBA 维护时，
-      # 将此项设为 false 并在启动前手动建表。
-      SmartAdmin__Database__EnableCodeFirstInProduction: "true"
+      # 建表闸门默认关：建表改表是一次部署动作，不该每次启动都跑，日常也不该拿着能改表的权限。
+      # 空库首次部署、或升级到有表结构变更的版本时，只这一次带上它：
+      #   SMART_DB_CODEFIRST=true docker compose up -d --build
+      # 起来之后再跑一次不带它的 `docker compose up -d`，app 会按关着的闸门重建。
+      # 忘了带也不会坏库：空库报缺表、老库报缺列，启动直接失败，报错里写明该开哪个开关。
+      SmartAdmin__Database__EnableCodeFirstInProduction: ${SMART_DB_CODEFIRST:-false}
       # 上传根目录：必须在 wwwroot 外部（见文件头注释），且使用独立于 /app/data 的卷
       SmartAdmin__Upload__RootPath: /data/upload
       # 首次启动的超级管理员密码。如未指定，将随机生成并输出到控制台

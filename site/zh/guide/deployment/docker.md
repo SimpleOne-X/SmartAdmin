@@ -15,7 +15,7 @@
 ```bash
 cp .env.example .env
 # 编辑 .env,填好 SMART_JWT_SECRET、SMART_DB_PASSWORD、SMART_ADMIN_PASSWORD 三项
-docker compose up -d --build
+SMART_DB_CODEFIRST=true docker compose up -d --build   # 空库首启,只这一次打开建表闸门
 ```
 
 这一条命令拉起四个服务，定义在仓库根 `docker-compose.yml` 里：`db`（MySQL 8.0）、`redis`（Redis 7）、`app`（后端）、`web`（Caddy，托管前端静态产物并反代 `/api`）。起来后：
@@ -26,7 +26,9 @@ curl http://127.0.0.1:8081/health/ready    # 后端调试口,只绑回环,原因
 docker compose logs app                    # 首启信息
 ```
 
-`app` 跑的是 `ASPNETCORE_ENVIRONMENT=Production`，这是刻意的。生产有三道硬门槛。JWT 密钥必须显式给，不给就落进开发密钥模式，每个副本各签各的，随机 401。空库首次上生产必须显式允许建表，因为内核默认不自动 ALTER 生产库。上传根必须挪出 `wwwroot`。`docker-compose.yml` 把这三项都写成了环境变量，照抄改成你自己的值就行。少配一条会怎样？你会拿到一条点名到配置项的启动错误，读得懂。这比「进程照常起、直到第一次写库才炸在驱动层」好排查得多。这三道门槛，连同升级时的建表、补列细节，[部署概览](/zh/guide/deployment/)里讲全。
+命令前面的 `SMART_DB_CODEFIRST=true` 只管这一次。compose 里建表闸门默认关，空库首启得靠它建表、写种子。起来之后再跑一遍不带它的 `docker compose up -d`，`app` 会按关着的闸门重建，此后每次重启都不再碰表结构。以后升级到有表结构变更的版本，也只在那一次带上它。忘了带不会坏库，`app` 会启动失败，报错里点名缺的表和要开的 `EnableCodeFirstInProduction`，`SMART_DB_CODEFIRST` 设的就是它。
+
+`app` 跑的是 `ASPNETCORE_ENVIRONMENT=Production`，这是刻意的。生产有三道硬门槛。JWT 密钥必须显式给，不给就落进开发密钥模式，每个副本各签各的，随机 401。空库首次部署必须显式允许建表，因为内核只在 Development 环境自动建表。上传根必须挪出 `wwwroot`。`docker-compose.yml` 把这三项都写成了环境变量，照抄改成你自己的值就行。少配一条会怎样？你会拿到一条点名到配置项的启动错误，读得懂。这比「进程照常起、直到第一次写库才炸在驱动层」好排查得多。这三道门槛，连同升级时的建表、补列细节，[部署概览](/zh/guide/deployment/)里讲全。
 
 首次登录的超管账号是 `superAdmin`，密码就是你在 `.env` 里填的 `SMART_ADMIN_PASSWORD`。compose 里这一行没有默认值：
 
