@@ -38,18 +38,27 @@ If file logging is on at the same time, set `Color` to `false` explicitly, or es
 
 ```text
 info: SmartAdmin.Sql[0]
-      ┌ SQL #1 查询 [SmartAdmin] 3.4 ms
-      │ SELECT COUNT(1) FROM "sys_user" WHERE ( "IsDelete" = 0 ) AND ( "OrgId" IN (100,101) )
+      ┌ SQL 10:21:33.402 查询 3.4 ms [SmartAdmin] #1
+      │ SELECT COUNT(1) FROM "sys_user" WHERE ("IsDelete" = 0) AND ("OrgId" IN (100, 101))
       └ 参数 2 个(已内联)
 info: SmartAdmin.Sql[0]
-      ┌ SQL #2 查询 [SmartAdmin] 11.8 ms
-      │ SELECT "Id","Account","RealName","OrgId" FROM "sys_user" WHERE ( "IsDelete" = 0 ) AND ( "OrgId" IN (100,101) ) ORDER BY "Id" DESC LIMIT 10 OFFSET 0
+      ┌ SQL 10:21:33.415 查询 11.8 ms [SmartAdmin] #2
+      │ SELECT "Id", "Account", "RealName", "OrgId"
+      │ FROM "sys_user"
+      │ WHERE ("IsDelete" = 0)
+      │   AND ("OrgId" IN (100, 101))
+      │ ORDER BY "Id" DESC
+      │ LIMIT 10 OFFSET 0
       └ 参数 2 个(已内联)
 ```
 
-The block header carries, in order: sequence number, statement kind, `ConfigId`, elapsed time. The sequence number matches the "slowest was #n" in the summary line. Kind is decided by the leading keyword, and a CTE query starting with `WITH` still counts as a query. `ConfigId` is fixed at `SmartAdmin` for the main database and is whatever name you gave the connection under `AdditionalDatabases` otherwise, so you can see at a glance which database a statement hit.
+The block header carries, in order: execution time, statement kind, elapsed time, `ConfigId`, sequence number. .NET's default console format has no timestamp, so the millisecond-precision time in the header is what you line a statement up against a frontend request or another log with. Kind is decided by the leading keyword, and a CTE query starting with `WITH` still counts as a query. `ConfigId` is fixed at `SmartAdmin` for the main database and is whatever name you gave the connection under `AdditionalDatabases` otherwise, so you can see at a glance which database a statement hit. The sequence number matches the "slowest was #n" in the summary line; statements that run outside an HTTP request (reading table schemas at startup, scheduled jobs) have none.
 
-Color lands in two places. Kind is colored by category: query green, insert yellow, update blue, delete red, DDL magenta, other gray. Elapsed time is bucketed against the slow-SQL threshold: over the line red, past halfway yellow, everything else green.
+A statement of 100 characters or fewer stays on one line; only longer ones get laid out. Each clause starts its own line. Top-level `AND` and `OR` inside `WHERE`, `HAVING` and `JOIN … ON` each start a line, except the `AND` that belongs to a `BETWEEN`. When a `SELECT` column list, `SET` assignments, `VALUES` rows, `GROUP BY` or `ORDER BY` don't fit on one line, the keyword gets a line to itself and each item follows on its own indented line. A subquery that doesn't fit is expanded and indented one level.
+
+Layout only touches the whitespace between tokens and the case of keywords. Strings and quoted identifiers are left exactly as they are, so the result still pastes into a client and runs. The one exception is line comments, which are rewritten as `/* … */`: once several lines are joined into one, a `--` would swallow every statement after it. Statements over 20,000 characters (mostly batch inserts) are printed on one line as they are. Nobody reads a thousand lines of them, while the cost of laying them out grows with their length. A typical statement takes a few to a few dozen microseconds to lay out.
+
+Color lands in three places. The statement kind and the keywords inside the statement are colored by category: query green, insert yellow, update cyan, delete red, DDL magenta, other gray, with values left in the default color. Elapsed time is bucketed against the slow-SQL threshold: over the line red, past halfway yellow, everything else green. The execution time is gray.
 
 Parameters are not listed on a separate line; they're inlined into the statement. What you want while debugging is one SQL statement you can paste into a client and run, not "statement here, parameters there" to be reassembled by hand. Booleans render uniformly as `1` or `0`, which runs as-is on SQLite, MySQL and SqlServer; on PostgreSQL you have to adjust it yourself.
 
@@ -74,8 +83,8 @@ Only HTTP requests get a summary. A request that ran no statements at all (stati
 Any parameter whose name matches `password`, `pwd`, `secret`, `token`, `credential`, `header`, `authorization`, `apikey`, `api_key` or `cookie` has its value rendered as `'***'`. Matching is by substring, so `newPassword` and `access_token` count too.
 
 ```text
-      ┌ SQL #4 修改 [SmartAdmin] 2.1 ms
-      │ UPDATE "sys_user" SET "Password"='***' , "UpdateTime"='2026-09-06 10:21:33.417' WHERE "Id"=1
+      ┌ SQL 10:21:33.419 修改 2.1 ms [SmartAdmin] #4
+      │ UPDATE "sys_user" SET "Password"='***', "UpdateTime"='2026-09-06 10:21:33.417' WHERE "Id"=1
       └ 参数 3 个(已内联)
 ```
 
@@ -92,8 +101,8 @@ The test is whether the parameter's name looks like a credential, not what its v
 Statement blocks and summary lines both leave through this log category rather than going straight to the console. As a result:
 
 - File logging (`Logging:File`) picks them up as well, so you don't have to sit watching a terminal.
-- The level is tunable on its own. Set `Logging:LogLevel:SmartAdmin.Sql` to `Warning` and ordinary statement blocks (`Information`) go quiet while the ones over the slow-SQL threshold (`Warning`) stay.
-- A structured sink receives the template plus its arguments, with sequence number, kind, `ConfigId` and elapsed time each as its own field.
+- The level is tunable on its own. Set `Logging:LogLevel:SmartAdmin.Sql` to `Warning` and ordinary statement blocks (`Information`) go quiet while the ones over the slow-SQL threshold (`Warning`) stay. A block filtered out by level skips parameter inlining and layout entirely.
+- A structured sink receives the template plus its arguments, with execution time, kind, elapsed time, `ConfigId` and sequence number each as its own field. The statement field is laid-out multi-line text, with the frame prefix on each continuation line.
 
 ## Don't turn it on in production
 

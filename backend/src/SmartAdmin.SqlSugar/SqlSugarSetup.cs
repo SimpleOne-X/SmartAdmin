@@ -224,13 +224,18 @@ public static class SqlSugarSetup
                         // 统计始终累加(只要开了控制台日志):汇总行要数出 N+1,而 N+1 的每一条都不慢
                         var index = sqlLogOptions.Enabled ? SqlLogScope.Current?.Record(millis) : null;
 
+                        var level = slow ? LogLevel.Warning : LogLevel.Information;
                         if (sqlLogOptions.Enabled && millis >= sqlLogOptions.MinMillis)
                         {
-                            sqlLog.Log(slow ? LogLevel.Warning : LogLevel.Information,
-                                SqlLogFormatter.BLOCK_TEMPLATE,
-                                SqlLogFormatter.BlockArgs(
-                                    index, sql, pars, millis, configId,
-                                    sqlLogOptions.MaxSqlChars, sqlLogColor, threshold));
+                            // 级别被滤掉(如 SmartAdmin.Sql 调成 Warning)就不拼参数:内联与排版都按语句长度计费,打不出来白算
+                            if (sqlLog.IsEnabled(level))
+                            {
+                                sqlLog.Log(level,
+                                    SqlLogFormatter.BLOCK_TEMPLATE,
+                                    SqlLogFormatter.BlockArgs(
+                                        index, sql, pars, millis, configId,
+                                        sqlLogOptions.MaxSqlChars, sqlLogColor, threshold, time.GetLocalNow()));
+                            }
                             return;   // 已经打过了,别再走下面那条慢 SQL 单行
                         }
 
