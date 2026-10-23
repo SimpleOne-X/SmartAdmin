@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.30.0 - 2026-10-23
+
 ### 升级说明
 
 - **直接调用 `SqlLogFormatter` 的，语句块参数的顺序和个数变了。** 块头加了执行时刻，`BlockArgs` 返回七个值，依次是时刻、类型、耗时、`ConfigId`、序号、语句、截断提示；按下标取值的代码要跟着改。`BLOCK_TEMPLATE` 由 `const` 改为 `static readonly`（换行取 `Environment.NewLine`），用在 `const` 或特性参数里的编译不过。只经 `SmartAdmin:Database:SqlLog` 开关使用的不受影响。
