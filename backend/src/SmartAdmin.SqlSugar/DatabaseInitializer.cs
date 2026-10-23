@@ -121,7 +121,8 @@ internal sealed class DatabaseInitializer(
         foreach (var hook in readyScope.ServiceProvider.GetServices<IDatabaseReadyHook>())
             await hook.OnDatabaseReadyAsync(context, cancellationToken);
 
-        logger.LogInformation("SmartAdmin 数据库就绪:{DbType} / {Conn}", options.DbType, options.ConnectionString);
+        logger.LogInformation("SmartAdmin 数据库就绪:{DbType} / {Conn}", options.DbType,
+            SqlSugarSetup.DescribeConnectionForLog(options.ConnectionString));
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

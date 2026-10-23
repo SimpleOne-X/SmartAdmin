@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
@@ -391,6 +392,25 @@ public static class SqlSugarSetup
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
     }
+
+    /// <summary>
+    /// 启动日志用的连接串摘要:只留服务器、端口、库名、SQLite 文件这几项,用户名、口令等其余键一律不打。
+    /// 按白名单留而不是按黑名单遮:口令键名各家驱动不统一,未加引号的值里带 <c>;</c> 时后半截还会被解析成独立的键。
+    /// </summary>
+    internal static string DescribeConnectionForLog(string conn)
+    {
+        DbConnectionStringBuilder parsed;
+        try { parsed = new DbConnectionStringBuilder { ConnectionString = conn }; }
+        catch (ArgumentException) { return "(连接串无法解析,不打印)"; }
+
+        var shown = new DbConnectionStringBuilder();
+        foreach (string key in parsed.Keys)
+            if (LogSafeConnectionKeys.Contains(key)) shown[key] = parsed[key];
+        return shown.ConnectionString;
+    }
+
+    private static readonly HashSet<string> LogSafeConnectionKeys = new(StringComparer.OrdinalIgnoreCase)
+        { "server", "data source", "host", "address", "addr", "network address", "port", "database", "initial catalog" };
 
     /// <summary>单条连接的钩子策略(主库全开 / 副库按 Options)。</summary>
     private readonly record struct HookPolicy(
