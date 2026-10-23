@@ -14,7 +14,8 @@ namespace SmartAdmin.Tests;
 /// </summary>
 public class WorkerIdLeaseGuardTests
 {
-    private static (ServiceProvider Sp, string DbFile) BuildProvider()
+    /// <param name="createLeaseTable">建好 sys_worker_lease。宿主里由 DatabaseInitializer 建表,这里没有它,自己建。</param>
+    private static (ServiceProvider Sp, string DbFile) BuildProvider(bool createLeaseTable = true)
     {
         var id = $"wlg-{Guid.NewGuid():N}";
         var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
@@ -28,7 +29,9 @@ public class WorkerIdLeaseGuardTests
             DbType = TestDb.DbType,
             ConnectionString = TestDb.ConnectionString(id, dbFile),
         });
-        return (services.BuildServiceProvider(), dbFile);
+        var sp = services.BuildServiceProvider();
+        if (createLeaseTable) sp.GetRequiredService<ISqlSugarClient>().CodeFirst.InitTables<SysWorkerLease>();
+        return (sp, dbFile);
     }
 
     /// <param name="alive">"库里那行租约的 pid 还活着吗"的回答。</param>
@@ -136,6 +139,30 @@ public class WorkerIdLeaseGuardTests
 
             await guard2.StopAsync(CancellationToken.None);
             guard2.Dispose();
+        }
+
+        TestDb.Cleanup(dbFile, dbFile);
+    }
+
+    /// <summary>
+    /// 守卫不建表也不改表:建表归 DatabaseInitializer 和它的闸门管。守卫自己跑 CodeFirst 会绕过闸门,
+    /// 而且 SQL Server 上每次启动都对已有表删改表注释,只有增删改查权限的账号起不来。缺表时点名报错。
+    /// </summary>
+    [Fact]
+    public async Task Missing_lease_table_fails_with_actionable_message_instead_of_creating_it()
+    {
+        var (sp, dbFile) = BuildProvider(createLeaseTable: false);
+        await using (sp)
+        {
+            var db = sp.GetRequiredService<ISqlSugarClient>();
+            var guard = NewGuard(sp, db, "host-a", 100);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => guard.StartAsync(CancellationToken.None));
+
+            Assert.Contains("sys_worker_lease", ex.Message);
+            Assert.Contains("EnableCodeFirstInProduction", ex.Message);
+            Assert.False(db.DbMaintenance.IsAnyTable("sys_worker_lease", false));
+            guard.Dispose();
         }
 
         TestDb.Cleanup(dbFile, dbFile);

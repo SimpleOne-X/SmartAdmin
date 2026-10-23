@@ -15,7 +15,7 @@ namespace SmartAdmin.SqlSugar;
 /// 删掉实体没声明的列、按实体 ALTER 长度与可空性,所以执行前先过一道破坏性变更闸门
 /// (<see cref="SchemaChangeDetector"/>,默认拒绝,<see cref="AdminDatabaseOptions.AllowDestructiveSchemaChange"/> 放行);
 /// 种子按主键判存只插缺失行(见 <see cref="ISeedData{TEntity}"/>)。
-/// 生产环境的建表开关见 <see cref="AdminDatabaseOptions.EnableCodeFirstInProduction"/>(默认关,需显式开启)。</para>
+/// 只有 Development 环境自动建表,其余环境的建表开关见 <see cref="AdminDatabaseOptions.EnableCodeFirstInProduction"/>(默认关,需显式开启)。</para>
 /// </summary>
 internal sealed class DatabaseInitializer(
     ISqlSugarClient db,
@@ -30,12 +30,15 @@ internal sealed class DatabaseInitializer(
     {
         SqlSugarSetup.EnsureSqliteDirectory(options.DbType, options.ConnectionString);
 
-        // 生产建表安全闸门:生产环境即便 EnableCodeFirst=true,也需显式 EnableCodeFirstInProduction 才建表——
-        // 生产库通常 DBA 手工维护,应用不应擅自 ALTER。非生产环境不受此约束。
+        // 建表安全闸门:只有 Development 自动建表。其余环境(Production、Staging、UAT……都是部署)即便 EnableCodeFirst=true,
+        // 也需显式 EnableCodeFirstInProduction 才建表——部署的库通常 DBA 手工维护,应用不应擅自 ALTER,
+        // 运行账号也往往只有增删改查权限。只认 Development 而不是排除 Production:部署时常为了加载
+        // appsettings.{环境}.json 换个环境名,按"不是 Production 就建表"判,换个名字闸门就失效了。
         var codeFirstAllowed = options.EnableCodeFirst
-            && (!env.IsProduction() || options.EnableCodeFirstInProduction);
+            && (env.IsDevelopment() || options.EnableCodeFirstInProduction);
         if (options.EnableCodeFirst && !codeFirstAllowed)
-            logger.LogWarning("SmartAdmin: 生产环境未显式开启 EnableCodeFirstInProduction,已跳过 CodeFirst 自动建表。");
+            logger.LogWarning("SmartAdmin: 当前环境 {Env} 不是 Development,且未显式开启 EnableCodeFirstInProduction,已跳过 CodeFirst 自动建表。",
+                env.EnvironmentName);
 
         // 扫描所有登记程序集中带 [SugarTable] 的非抽象类 —— 实体清单唯一来源
         var entityTypes = sources.Assemblies
@@ -258,7 +261,7 @@ internal sealed class DatabaseInitializer(
     }
 
     /// <summary>
-    /// 建表被跳过(生产闸门关 / EnableCodeFirst=false)时的启动前置检查:种子要写的表必须已存在。
+    /// 建表被跳过(非开发环境闸门关 / EnableCodeFirst=false)时的启动前置检查:种子要写的表必须已存在。
     /// 缺表就抛出可行动的错误,而不是让种子去撞驱动层的"表不存在"。
     /// <para>只探种子涉及的表,不探全部实体:全量探测会让今天能正常启动的配置(消费者自管部分表等)
     /// 变成起不来 —— 那是新的失败面,而种子表恰好覆盖了真正会崩的那条路径。</para>
@@ -287,7 +290,7 @@ internal sealed class DatabaseInitializer(
 
     /// <summary>
     /// 建表被跳过时的<b>升级</b>前置检查:已存在的表必须具备实体映射的全部列。
-    /// <para>种子探表守卫 <see cref="EnsureSeedTablesExist"/> 只看<b>表在不在</b>。而生产按 deployment.md 是关着建表闸门的,
+    /// <para>种子探表守卫 <see cref="EnsureSeedTablesExist"/> 只看<b>表在不在</b>。而部署环境按 deployment.md 是关着建表闸门的,
     /// 于是内核某个版本给已有表加了一列时:表在 → 探表守卫放行 → <b>启动成功</b> → 第一次查到那张表才炸在
     /// 驱动层的 "no such column" 上。没有表名、没有列名、没人知道该 ALTER 什么;
     /// <b>内核每加一列都会这样咬到所有关闸门的用户</b>。本检查把它变成一条点名到列的启动错误。</para>

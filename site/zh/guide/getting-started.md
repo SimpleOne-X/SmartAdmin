@@ -173,8 +173,8 @@ SmartAdmin__Database__ConnectionString='Server=db;Port=3306;Database=smart;User 
 
 「换方言」仍是**一条**连接。若还要同进程挂日志库、遗留库，见[配置多数据库](/zh/guide/multi-database)。
 
-::: warning 生产不会自动建表
-`ASPNETCORE_ENVIRONMENT=Production` 时，即便开了 CodeFirst 也**不会**自动建表。这道安全闸门防的是线上误改表结构。空库首次上生产，要么临时打开 `EnableCodeFirstInProduction: true` 让它自己建一次，要么让 DBA 手工建。详见[部署指南](/zh/guide/deployment/)。
+::: warning 部署环境不会自动建表
+只有 `ASPNETCORE_ENVIRONMENT=Development` 才自动建表。`Production`、`Staging` 等其余环境即便开了 CodeFirst 也**不会**，这道安全闸门防的是线上误改表结构。空库首次部署，要么临时打开 `EnableCodeFirstInProduction: true` 让它自己建一次，要么让 DBA 手工建。详见[部署指南](/zh/guide/deployment/)。
 :::
 
 内核跑通、库也换好之后，下一站是在它上面端到端加一个自己的业务模块，见[新建业务模块](/zh/guide/business-module)。

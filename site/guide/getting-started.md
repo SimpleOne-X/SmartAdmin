@@ -173,8 +173,8 @@ SmartAdmin__Database__ConnectionString='Server=db;Port=3306;Database=smart;User 
 
 Switching dialect is still **one** connection. To attach a log or legacy database in the same process, see [Configure Multiple Databases](/guide/multi-database).
 
-::: warning Production won't auto-create tables
-When `ASPNETCORE_ENVIRONMENT=Production`, tables are **not** auto-created even with CodeFirst enabled — this is a safety gate against altering the schema by accident in production. For the first deploy against an empty database, either turn on `EnableCodeFirstInProduction: true` temporarily to let it build the schema once, or have a DBA create it by hand. See the [Deployment guide](/guide/deployment/) for details.
+::: warning Deployed environments won't auto-create tables
+Only `ASPNETCORE_ENVIRONMENT=Development` creates tables automatically. `Production`, `Staging` and every other environment do **not**, even with CodeFirst enabled — this is a safety gate against altering the schema by accident in production. For the first deploy against an empty database, either turn on `EnableCodeFirstInProduction: true` temporarily to let it build the schema once, or have a DBA create it by hand. See the [Deployment guide](/guide/deployment/) for details.
 :::
 
 With the kernel running and the database swapped, the next stop is adding your own business module on top of it, end to end — see [Add a Business Module](/guide/business-module).

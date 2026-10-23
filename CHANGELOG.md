@@ -14,6 +14,17 @@
 
 ## Unreleased
 
+### 升级说明
+
+- **建表闸门改为只放行 `Development`：用 `Staging`、`UAT` 等环境名部署、又靠应用自动建表或补列的项目，空库首启和内核加列的那次启动会被拦下。**
+  以前只有 `Production` 默认不建表，其余环境名照常自动建表改表；现在 Development 以外的环境一律视同部署。被拦时启动错误会点名缺的表和列，按提示在那次启动配上 `SmartAdmin:Database:EnableCodeFirstInProduction=true`，或由 DBA 先建好表再启动。表结构已经齐全的日常启动不受影响。
+### Changed
+
+- **CodeFirst 自动建表只在 `Development` 环境默认开启。** `SmartAdmin:Database:EnableCodeFirstInProduction` 的含义随之变为「Development 以外的环境是否允许建表改表」，配置键名不变。
+### Fixed
+
+- **数据库账号只有增删改查权限时，应用在 SQL Server 上起不来。** 建表闸门关着也没用：雪花 WorkerId 租约守卫启动时会自己对 `sys_worker_lease` 跑一遍 CodeFirst，SQL Server 上这一步要删改表注释，需要 ALTER 权限。守卫不再建表改表；闸门关着且库里缺这张表时，启动错误点名缺表并给出两条出路。日常运行的账号在 SQL Server 上给 `db_datareader` 加 `db_datawriter` 就够。
+
 ## 10.28.0 - 2026-10-22
 
 ### 升级说明

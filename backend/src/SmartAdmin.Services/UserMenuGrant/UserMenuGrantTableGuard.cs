@@ -4,7 +4,7 @@ using SmartAdmin.SqlSugar;
 namespace SmartAdmin.Services;
 
 /// <summary>
-/// 建表被跳过时(生产闸门关 / EnableCodeFirst=false)确认 <c>sys_user_menu</c> 在库里。
+/// 建表被跳过时(非开发环境闸门关 / EnableCodeFirst=false)确认 <c>sys_user_menu</c> 在库里。
 /// <para>启动时的缺列检查只看已存在的表,缺整张表它不报;这张表又在每个非超管请求的鉴权路径上,
 /// 缺了它进程照样起得来,随后每个非超管请求都炸在驱动层的「表不存在」上。所以库就绪时点名拦下。</para>
 /// </summary>

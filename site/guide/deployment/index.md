@@ -66,9 +66,9 @@ Three things to watch when deploying:
 
 For the full configuration, mount and troubleshooting steps, see [File Paths](/guide/file-paths).
 
-## The production table-creation gate: first-time creation and upgrade columns
+## The table-creation gate: first-time creation and upgrade columns
 
-Production has a table-creation safety gate: when `ASPNETCORE_ENVIRONMENT=Production`, tables aren't created or altered automatically even with `EnableCodeFirst=true` (true by default) — a production database is usually maintained by hand by a DBA, and the app shouldn't `ALTER` it on its own. To let it through, turn this on explicitly:
+Only the `Development` environment creates and alters tables automatically. `Production`, `Staging`, `UAT` or any custom environment name counts as a deployment and leaves the schema alone, even with `EnableCodeFirst=true` (true by default). A deployed database is usually maintained by hand by a DBA, and the app shouldn't `ALTER` it on its own. To let it through, turn this on explicitly:
 
 ```json
 { "SmartAdmin": { "Database": { "EnableCodeFirstInProduction": true } } }
@@ -76,8 +76,12 @@ Production has a table-creation safety gate: when `ASPNETCORE_ENVIRONMENT=Produc
 
 It defaults to false and governs two things:
 
-- **First deploy to production against an empty database**: the tables don't exist yet, so the seed has nowhere to write. Either turn this on temporarily to let it create the tables and write the seed (you can turn it off again once created), or have a DBA create the tables named in the startup error first, then start.
+- **First deploy against an empty database**: the tables don't exist yet, so the seed has nowhere to write. Either turn this on temporarily to let it create the tables and write the seed (you can turn it off again once created), or have a DBA create the tables named in the startup error first, then start.
 - **Adding columns on a kernel-version upgrade**: a new kernel version may add columns to its own tables (adding fields is routine; the kernel never drops or narrows columns). Either turn this on for this startup to let it fill them in, or have a DBA `ALTER TABLE ... ADD COLUMN` by hand for the tables and columns named in the error.
+
+The name says Production, but the gate checks for Development. Renaming the environment to load `appsettings.Staging.json` is common in deployments, and a "create tables unless it's Production" rule would quietly open the gate under any other name.
+
+Give the database account permissions to match those two moments. Day-to-day running needs only create, read, update and delete: on SQL Server, `db_datareader` plus `db_datawriter` on the database. The startup that opens the gate needs to create and alter tables, and `db_owner` on the database is enough; `sa` isn't required. Development needs the same create-and-alter rights. Without `CodeFirstVersion` it scans on every startup, and on SQL Server that scan rewrites every table's description even when the schema hasn't changed.
 
 ### The destructive-change gate: `AllowDestructiveSchemaChange`
 
