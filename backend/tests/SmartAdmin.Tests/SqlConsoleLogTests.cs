@@ -132,7 +132,7 @@ public class SqlConsoleLogTests
         var args = SqlLogFormatter.BlockArgs(
             1, "SELECT * FROM sys_user WHERE Name=@name AND Password=@password", pars,
             1.0, "main", maxSqlChars: 4000, color: false, slowMillis: 1000);
-        var sql = args[4]!.ToString()!;
+        var sql = args[5]!.ToString()!;
 
         Assert.Contains("'张三'", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("super-secret-value", sql, StringComparison.Ordinal);
@@ -154,7 +154,7 @@ public class SqlConsoleLogTests
             1, "SELECT * FROM t WHERE a=@p1 AND b=@p10", pars,
             1.0, "main", maxSqlChars: 4000, color: false, slowMillis: 1000);
 
-        Assert.Equal("SELECT * FROM t WHERE a=1 AND b=10", args[4]);
+        Assert.Equal("SELECT * FROM t WHERE a=1 AND b=10", args[5]);
     }
 
     [Fact]
@@ -165,8 +165,53 @@ public class SqlConsoleLogTests
         var args = SqlLogFormatter.BlockArgs(
             1, longSql, null, 1.0, "main", maxSqlChars: 100, color: false, slowMillis: 1000);
 
-        Assert.True(args[4]!.ToString()!.Length < longSql.Length);
-        Assert.Contains("已截断", args[5]!.ToString()!, StringComparison.Ordinal);
+        Assert.True(args[5]!.ToString()!.Length < longSql.Length);
+        Assert.Contains("已截断", args[6]!.ToString()!, StringComparison.Ordinal);
+    }
+
+    /// <summary>默认控制台格式没有时间戳,块头自己带一个,对得上是哪一刻跑的。</summary>
+    [Fact]
+    public void 块头带执行时刻()
+    {
+        var at = new DateTimeOffset(2026, 10, 23, 9, 5, 7, 42, TimeSpan.FromHours(8));
+
+        var args = SqlLogFormatter.BlockArgs(
+            1, "SELECT 1", null, 1.0, "main", maxSqlChars: 4000, color: false, slowMillis: 1000, at);
+
+        Assert.Equal("09:05:07.042", args[0]);
+    }
+
+    /// <summary>
+    /// 续行要接在框线后面,换行用 <see cref="Environment.NewLine"/>:控制台格式化器只在它后面补缩进,
+    /// Windows 上写死 \n 的话框线顶格、和首行错开六格。
+    /// </summary>
+    [Fact]
+    public void 多行语句每行都在框线里()
+    {
+        var sql = "SELECT [Id],[Account],[RealName],[OrgId],[Phone],[Email],[CreateTime] FROM [sys_user] "
+                  + "WHERE ( [IsDelete] = 0 ) AND ( [OrgId] IN (100,101) ) ORDER BY [Id] DESC";
+
+        var args = SqlLogFormatter.BlockArgs(
+            1, sql, null, 1.0, "main", maxSqlChars: 4000, color: false, slowMillis: 1000);
+        var lines = args[5]!.ToString()!.Split(Environment.NewLine);
+
+        Assert.True(lines.Length > 1);
+        Assert.All(lines.Skip(1), l => Assert.StartsWith("│ ", l, StringComparison.Ordinal));
+        Assert.Contains(Environment.NewLine + "│ {Sql}" + Environment.NewLine, SqlLogFormatter.BLOCK_TEMPLATE, StringComparison.Ordinal);
+    }
+
+    /// <summary>关键字按语句类型上色,值不上色:分得出类型,值也读得清。</summary>
+    [Fact]
+    public void 开了颜色关键字按语句类型上色()
+    {
+        var select = SqlLogFormatter.BlockArgs(
+            1, "SELECT a FROM t WHERE b = 'from'", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[5]!.ToString()!;
+        var delete = SqlLogFormatter.BlockArgs(
+            1, "DELETE FROM t WHERE b = 1", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[5]!.ToString()!;
+
+        Assert.Contains("\u001b[92mSELECT\u001b[0m", select, StringComparison.Ordinal);
+        Assert.Contains("'from'", select, StringComparison.Ordinal);   // 字符串里的同名词不是关键字
+        Assert.Contains("\u001b[91mDELETE\u001b[0m", delete, StringComparison.Ordinal);
     }
 
     [Fact]

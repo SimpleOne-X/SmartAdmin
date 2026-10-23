@@ -12,13 +12,24 @@ namespace SmartAdmin.SqlSugar;
 /// 这里按参数名过 <see cref="SensitiveKeys"/>,命中的只打 <c>'***'</c>。</para>
 /// <para>颜色用 ANSI 码嵌进消息串,<b>不用 <c>Console.ForegroundColor</c></b>:那是进程级状态,
 /// 多线程并发写日志时颜色会串到别的行上。</para>
+/// <para>语句经 <see cref="SqlPrettyPrinter"/> 排版成多行,关键字按语句类型上色,一眼分得出查询、新增、修改、删除。</para>
 /// </summary>
 public static class SqlLogFormatter
 {
     private const string RESET = "\u001b[0m";
+    private const string GRAY = "\u001b[90m";
 
-    /// <summary>语句块的消息模板。字面部分(框线)在模板里,颜色随参数值走,结构化 sink 仍拿得到各字段。</summary>
-    public const string BLOCK_TEMPLATE = "┌ SQL {Index} {Kind} [{ConfigId}] {Elapsed}\n│ {Sql}\n└ {Params}";
+    /// <summary>
+    /// 语句块的消息模板。字面部分(框线)在模板里,颜色随参数值走,结构化 sink 仍拿得到各字段。
+    /// <para>换行必须是 <see cref="Environment.NewLine"/>:控制台格式化器只在它后面给续行补缩进,写死 <c>\n</c> 在 Windows 上框线会顶格。</para>
+    /// </summary>
+    public static readonly string BLOCK_TEMPLATE =
+        "┌ SQL {Time} {Kind} {Elapsed} [{ConfigId}] {Index}" + Environment.NewLine
+        + "│ {Sql}" + Environment.NewLine
+        + "└ {Params}";
+
+    /// <summary>语句排成多行时,续行接在框线后面。</summary>
+    private static readonly string SQL_LINE_BREAK = Environment.NewLine + "│ ";
 
     /// <summary>汇总行模板。</summary>
     public const string SUMMARY_TEMPLATE = "└ SQL 汇总 {Label} → {Count} 条 / {Total} / 最慢 {Slowest}{Hint}";
@@ -31,9 +42,10 @@ public static class SqlLogFormatter
         ?? (!Console.IsOutputRedirected
             && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR")));
 
-    /// <summary>语句块的六个参数值(按 <see cref="BLOCK_TEMPLATE"/> 的顺序)。</summary>
+    /// <summary>语句块的七个参数值(按 <see cref="BLOCK_TEMPLATE"/> 的顺序)。<paramref name="at"/> 不传取当前时间。</summary>
     public static object?[] BlockArgs(
-        int? index, string sql, object? parameters, double millis, string configId, int maxSqlChars, bool color, int slowMillis)
+        int? index, string sql, object? parameters, double millis, string configId, int maxSqlChars, bool color, int slowMillis,
+        DateTimeOffset? at = null)
     {
         var (kind, kindColor) = Classify(sql);
         var inlined = Inline(sql, parameters, maxSqlChars, out var paramCount, out var truncated);
@@ -43,13 +55,26 @@ public static class SqlLogFormatter
 
         return
         [
-            index is null ? "" : "#" + index.Value.ToString(CultureInfo.InvariantCulture),
+            Paint((at ?? DateTimeOffset.Now).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture), GRAY, color),
             Paint(kind, kindColor, color),
-            configId,
             Paint(millis.ToString("F1", CultureInfo.InvariantCulture) + " ms", ElapsedColor(millis, slowMillis), color),
-            inlined,
+            configId,
+            index is null ? "" : "#" + index.Value.ToString(CultureInfo.InvariantCulture),
+            Pretty(inlined, color ? kindColor : null),
             note,
         ];
+    }
+
+    private static string Pretty(string sql, string? keywordColor)
+    {
+        try
+        {
+            return SqlPrettyPrinter.Format(sql, keywordColor, SQL_LINE_BREAK);
+        }
+        catch (Exception)   // 排版只为好看:它在执行 SQL 的钩子里,出了岔子退回原文,不能连累查询本身
+        {
+            return sql;
+        }
     }
 
     /// <summary>汇总行的五个参数值(按 <see cref="SUMMARY_TEMPLATE"/> 的顺序)。</summary>
@@ -68,18 +93,18 @@ public static class SqlLogFormatter
         ];
     }
 
-    /// <summary>按首个关键字分类,顺带给一个颜色。</summary>
+    /// <summary>按首个关键字分类,顺带给一个颜色。用亮色:深色终端上普通蓝几乎看不清。</summary>
     private static (string Kind, string Color) Classify(string sql)
     {
         var head = sql.AsSpan().TrimStart();
         // 带 CTE 的查询以 WITH 开头,别归到"其它"里去
-        if (StartsWith(head, "SELECT") || StartsWith(head, "WITH")) return ("查询", "\u001b[32m");
-        if (StartsWith(head, "INSERT")) return ("新增", "\u001b[33m");
-        if (StartsWith(head, "UPDATE")) return ("修改", "\u001b[34m");
-        if (StartsWith(head, "DELETE")) return ("删除", "\u001b[31m");
+        if (StartsWith(head, "SELECT") || StartsWith(head, "WITH")) return ("查询", "\u001b[92m");
+        if (StartsWith(head, "INSERT")) return ("新增", "\u001b[93m");
+        if (StartsWith(head, "UPDATE")) return ("修改", "\u001b[96m");
+        if (StartsWith(head, "DELETE")) return ("删除", "\u001b[91m");
         if (StartsWith(head, "CREATE") || StartsWith(head, "ALTER")
-            || StartsWith(head, "DROP") || StartsWith(head, "TRUNCATE")) return ("建表", "\u001b[35m");
-        return ("其它", "\u001b[90m");
+            || StartsWith(head, "DROP") || StartsWith(head, "TRUNCATE")) return ("建表", "\u001b[95m");
+        return ("其它", GRAY);
     }
 
     private static bool StartsWith(ReadOnlySpan<char> text, string word) =>
@@ -89,8 +114,8 @@ public static class SqlLogFormatter
     private static string ElapsedColor(double millis, int slowMillis)
     {
         var slow = slowMillis > 0 ? slowMillis : 1000;
-        if (millis >= slow) return "\u001b[31m";
-        return millis >= slow / 2.0 ? "\u001b[33m" : "\u001b[32m";
+        if (millis >= slow) return "\u001b[91m";
+        return millis >= slow / 2.0 ? "\u001b[93m" : "\u001b[92m";
     }
 
     private static string Paint(string text, string color, bool enabled) =>
