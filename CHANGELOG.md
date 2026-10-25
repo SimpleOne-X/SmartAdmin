@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.30.2 - 2026-10-25
+
 ### Changed
 
 - **控制台上每条日志后面跟一条灰色分割线。** 所有级别、所有类别都画，不加空行，多行的 SQL 块和带堆栈的异常挨在一起也分得清。只在上色时画，判断和 `simple` 自己是否上色相同：看 `Logging:Console:FormatterOptions:ColorBehavior`，没配就看输出有没有被重定向，所以容器日志、写文件里不会出现。只在内核接管控制台格式（`smartadmin`）时生效；不想要的话配 `Logging:Console:FormatterName=simple`，代价是 `SmartAdmin.Sql[0]` 回到单独一行。
