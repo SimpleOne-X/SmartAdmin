@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -139,6 +140,18 @@ public static class SmartAdminSetup
                     sp.GetRequiredService<TimeProvider>());
             }));
         }
+
+        // ── 控制台:SQL 日志的类别标签并进头行(见 SqlLogConsoleFormatter)──
+        //   只接管没指定格式的情况;宿主显式配了 Logging:Console:FormatterName(json、systemd,或写明 simple 退回默认两行)就不碰。
+        //   过时的 Logging:Console:IncludeScopes / TimestampFormat / DisableColors / Format 只在 FormatterName 为空时生效,配了任何一项也不接管,免得它们悄悄失效。
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ConsoleFormatter, SqlLogConsoleFormatter>());
+#pragma warning disable CS0618
+        services.PostConfigure<ConsoleLoggerOptions>(o =>
+        {
+            if (o is { FormatterName: null, Format: ConsoleLoggerFormat.Default, IncludeScopes: false, DisableColors: false, TimestampFormat: null, UseUtcTimestamp: false })
+                o.FormatterName = SqlLogConsoleFormatter.NAME;
+        });
+#pragma warning restore CS0618
 
         // ── 当前用户 + 数据范围环境:HTTP 侧实现在此先注册,压过 SqlSugar 层的 AsyncLocal 兜底 ──
         services.AddHttpContextAccessor();

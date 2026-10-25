@@ -28,7 +28,7 @@ public class SqlPrettyPrinterTests
             SELECT [Id], [Account], [RealName], [OrgId], [Phone], [Email], [CreateTime]
             FROM [sys_user]
             WHERE ([IsDelete] = 0)
-              AND ([OrgId] IN (100, 101))
+            AND ([OrgId] IN (100, 101))
             ORDER BY [Id] DESC
             """.ReplaceLineEndings("\n"),
             Format(sql));
@@ -45,7 +45,7 @@ public class SqlPrettyPrinterTests
             SELECT "Id", "Account", "RealName", "OrgId"
             FROM "sys_user"
             WHERE ("IsDelete" = 0)
-              AND ("OrgId" IN (100, 101))
+            AND ("OrgId" IN (100, 101))
             ORDER BY "Id" DESC
             LIMIT 10 OFFSET 0
             """.ReplaceLineEndings("\n"),
@@ -85,10 +85,10 @@ public class SqlPrettyPrinterTests
             SELECT a
             FROM t
             WHERE name = 'x from y and z'
-              AND [order by] = 1
-              AND d BETWEEN 1 AND 9
-              AND e = 2
-              OR f = 3 /* note */
+            AND [order by] = 1
+            AND d BETWEEN 1 AND 9
+            AND e = 2
+            OR f = 3 /* note */
             """.ReplaceLineEndings("\n"),
             Format(sql));
     }
@@ -106,7 +106,7 @@ public class SqlPrettyPrinterTests
               SELECT [Id], [Account], [RealName]
               FROM [sys_user]
               WHERE ([IsDelete] = 0)
-                AND ([OrgId] IN (100, 101))
+              AND ([OrgId] IN (100, 101))
             ) CountTable
             """.ReplaceLineEndings("\n"),
             Format(sql));
@@ -123,7 +123,7 @@ public class SqlPrettyPrinterTests
             SELECT u.[Id], r.[Name]
             FROM [sys_user] u
             LEFT OUTER JOIN [sys_user_role] ur ON ur.[UserId] = u.[Id]
-              AND ur.[IsDelete] = 0
+            AND ur.[IsDelete] = 0
             INNER JOIN [sys_role] r ON r.[Id] = ur.[RoleId]
             """.ReplaceLineEndings("\n"),
             Format(sql));

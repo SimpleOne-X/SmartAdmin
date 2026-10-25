@@ -15,7 +15,7 @@ internal sealed class SqlLogRequestMiddleware(
     AdminDatabaseOptions db,
     ILoggerFactory loggerFactory)
 {
-    private readonly ILogger _logger = loggerFactory.CreateLogger("SmartAdmin.Sql");
+    private readonly ILogger _logger = loggerFactory.CreateLogger(SqlLogFormatter.CATEGORY);
     private readonly bool _color = SqlLogFormatter.ShouldColor(db.SqlLog.Color);
 
     public async Task InvokeAsync(HttpContext context)
