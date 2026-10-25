@@ -14,6 +14,18 @@
 
 ## Unreleased
 
+### 升级说明
+
+- **直接调用 `SqlLogFormatter` 的，语句块的模板和参数顺序又变了。** `BLOCK_TEMPLATE` 改成头行加语句两段，`BlockArgs` 仍返回七个值，依次是类型、时刻、耗时、参数说明、`ConfigId`、序号、语句；序号带前导空格（` #3`），没有序号时是空串。`BlockArgs` 末尾新增可选参数 `dbType` 和 `failed`。主库的 `ConfigId` 一栏是空串，副库是 ` [库名]`。`SUMMARY_TEMPLATE` 开头由 `└ SQL 汇总` 改为 `【汇总】`。日志类别名有了常量 `SqlLogFormatter.CATEGORY`（`SmartAdmin.Sql`）。按 `┌ SQL`、`SQL 汇总` 检索日志的脚本和告警规则要跟着改。
+- **慢 SQL、失败 SQL 的日志换成了语句块格式，按旧文本检索的告警规则要改。** 以前是一行 `慢 SQL[SmartAdmin](1268ms ≥ 1000ms): … | 参数: …` 和 `SQL 执行失败[SmartAdmin]: … | 参数: …`，现在和控制台日志同一种块：参数内联进语句，头行在参数说明后面标 `· 慢 SQL(≥ 1000 ms)` 或 `· 执行失败`。级别没变（慢 SQL 是 `Warning`，失败是 `Error`），类别仍是 `SmartAdmin.Sql`。
+- **控制台上 `SmartAdmin.Sql[0]` 不再单独占一行，并到了头行末尾。** 内核注册了名为 `smartadmin` 的控制台格式化器，只在宿主没配 `Logging:Console:FormatterName`、也没用过时的 `Logging:Console:IncludeScopes` 这类顶层开关时接管，其余类别照 `simple` 原样输出。想要回默认的两行，配 `Logging:Console:FormatterName=simple`。
+
+### Changed
+
+- **SQL 控制台日志去掉框线，打出来的语句框选下来就能贴进客户端跑。** 头行改为 `info: 【查询】时间 18:40:56.360 耗时 390.9 ms 参数 2 个(已内联) #1 SmartAdmin.Sql[0]`，主库不再标 `[SmartAdmin]`，副库的语句仍标库名；语句从下一行起，每行不带前缀；汇总行改为 `【汇总】…`。条件里顶层的 `AND`、`OR` 与 `WHERE` 对齐，不再缩进。
+- **内联参数按方言写字面量。** PostgreSQL 上布尔写成 `true`、`false`，以前的 `0`、`1` 贴过去会报 `boolean = integer`；SqlServer 上含非 ASCII 字符的字符串带 `N` 前缀。
+- **慢 SQL、失败 SQL 也按语句块打，能直接贴进客户端重放。** 没开 `Database:SqlLog` 时不截断、不上色，生产上拿到的是完整语句。
+
 ## 10.30.0 - 2026-10-23
 
 ### 升级说明

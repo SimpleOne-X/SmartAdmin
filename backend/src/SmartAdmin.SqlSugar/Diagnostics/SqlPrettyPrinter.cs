@@ -232,7 +232,7 @@ internal static class SqlPrettyPrinter
     }
 
     /// <summary>
-    /// 顺序写出,不切子句。条件子句里顶层的 AND / OR 各起一行;BETWEEN 自带的那个 AND 和 CASE 里的不算。
+    /// 顺序写出,不切子句。条件子句里顶层的 AND / OR 各起一行、与子句关键字对齐;BETWEEN 自带的那个 AND 和 CASE 里的不算。
     /// </summary>
     private static void WriteInline(Writer w, List<Node> nodes, int from, int to, int indent, bool condition)
     {
@@ -247,7 +247,7 @@ internal static class SqlPrettyPrinter
                 case "END" when caseDepth > 0: caseDepth--; break;
                 case "BETWEEN": between = true; break;
                 case "AND" when between: between = false; break;
-                case "AND" or "OR" when condition && caseDepth == 0 && i > from: w.Break(indent + INDENT); break;
+                case "AND" or "OR" when condition && caseDepth == 0 && i > from: w.Break(indent); break;
             }
             Write(w, node);
         }

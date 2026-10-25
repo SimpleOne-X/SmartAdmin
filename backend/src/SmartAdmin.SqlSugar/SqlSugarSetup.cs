@@ -108,7 +108,7 @@ public static class SqlSugarSetup
             // SQL 诊断日志。类别名固定,便于消费者单独调级别(Logging:LogLevel:SmartAdmin.Sql)。
             // GetService 而非 GetRequiredService:本方法是公开装配入口,允许在裸容器上单独调用(测试与只要数据层的消费者
             // 都这么用),不能凭空多出一个必需依赖 —— 没有日志就静默不打,不该因此起不来。
-            var sqlLog = (sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance).CreateLogger("SmartAdmin.Sql");
+            var sqlLog = (sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance).CreateLogger(SqlLogFormatter.CATEGORY);
             // 控制台 SQL 日志:主库副库同一个开关(排查时要看的是"这次请求打了哪些库",按库分别开没有用),
             // 块头里的 ConfigId 区分是谁。颜色只判一次:每条语句都去探一遍终端是白费。
             var sqlLogOptions = db.SqlLog;
@@ -188,7 +188,11 @@ public static class SqlSugarSetup
                 // 输出只走 ILogger。**绝不能把这两条写进 SysOpLog**:那条 INSERT 自己又会触发一次
                 // OnLogExecuted / 可能再失败触发 OnError —— 直接递归。日志的归日志(诊断),审计的归审计(sys_op_log)。
 
+                // 控制台日志、慢 SQL、失败 SQL 都按 SqlLogFormatter 打成同一种语句块:参数内联、能直接贴进客户端跑
                 var threshold = policy.SlowSqlMillis;
+                var dbType = client.CurrentConnectionConfig?.DbType;   // 内联参数按方言写字面量
+                // 开了控制台日志才按 MaxSqlChars 截断;只有慢 SQL、失败 SQL 时照旧打全文,排查要的就是那条完整语句
+                var maxSqlChars = sqlLogOptions.Enabled ? sqlLogOptions.MaxSqlChars : int.MaxValue;
 
                 // 失败的 SQL:没有这一条,线上查询一炸就只剩驱动层异常 —— 没有语句、没有参数,复现无从谈起。
                 // 不给关的开关:失败却打不出 SQL,等于没有可运维性。主库与副库一律挂上。
@@ -202,13 +206,10 @@ public static class SqlSugarSetup
                 client.Aop.OnError = ex =>
                 {
                     var millis = client.Ado.SqlExecutionTime.TotalMilliseconds;
-                    var slow = threshold > 0 && millis >= threshold;
-                    if (slow)
-                        sqlLog.LogError(ex, "慢 SQL(执行失败)[{ConfigId}]({Elapsed}ms ≥ {Threshold}ms): {Sql} | 参数: {Parameters}",
-                            configId, (long)millis, threshold, ex.Sql, FormatSqlParameters(ex.Parametres));
-                    else
-                        sqlLog.LogError(ex, "SQL 执行失败[{ConfigId}]: {Sql} | 参数: {Parameters}",
-                            configId, ex.Sql, FormatSqlParameters(ex.Parametres));
+                    sqlLog.Log(LogLevel.Error, ex, SqlLogFormatter.BLOCK_TEMPLATE,
+                        SqlLogFormatter.BlockArgs(
+                            null, ex.Sql ?? "", ex.Parametres, millis, configId,
+                            maxSqlChars, sqlLogColor, threshold, time.GetLocalNow(), dbType, failed: true));
                 };
 
                 // 执行完成:慢 SQL 告警(生产)与控制台全量日志(开发)共用这一个钩子。
@@ -224,26 +225,18 @@ public static class SqlSugarSetup
                         // 统计始终累加(只要开了控制台日志):汇总行要数出 N+1,而 N+1 的每一条都不慢
                         var index = sqlLogOptions.Enabled ? SqlLogScope.Current?.Record(millis) : null;
 
-                        var level = slow ? LogLevel.Warning : LogLevel.Information;
-                        if (sqlLogOptions.Enabled && millis >= sqlLogOptions.MinMillis)
-                        {
-                            // 级别被滤掉(如 SmartAdmin.Sql 调成 Warning)就不拼参数:内联与排版都按语句长度计费,打不出来白算
-                            if (sqlLog.IsEnabled(level))
-                            {
-                                sqlLog.Log(level,
-                                    SqlLogFormatter.BLOCK_TEMPLATE,
-                                    SqlLogFormatter.BlockArgs(
-                                        index, sql, pars, millis, configId,
-                                        sqlLogOptions.MaxSqlChars, sqlLogColor, threshold, time.GetLocalNow()));
-                            }
-                            return;   // 已经打过了,别再走下面那条慢 SQL 单行
-                        }
+                        // 控制台日志要打的、或越过慢 SQL 阈值的,打一次;同一条语句不出两个块
+                        if (!slow && !(sqlLogOptions.Enabled && millis >= sqlLogOptions.MinMillis)) return;
 
-                        if (slow)
-                        {
-                            sqlLog.LogWarning("慢 SQL[{ConfigId}]({Elapsed}ms ≥ {Threshold}ms): {Sql} | 参数: {Parameters}",
-                                configId, (long)millis, threshold, sql, FormatSqlParameters(pars));
-                        }
+                        // 级别被滤掉(如 SmartAdmin.Sql 调成 Warning)就不拼参数:内联与排版都按语句长度计费,打不出来白算
+                        var level = slow ? LogLevel.Warning : LogLevel.Information;
+                        if (!sqlLog.IsEnabled(level)) return;
+
+                        sqlLog.Log(level,
+                            SqlLogFormatter.BLOCK_TEMPLATE,
+                            SqlLogFormatter.BlockArgs(
+                                index, sql, pars, millis, configId,
+                                maxSqlChars, sqlLogColor, threshold, time.GetLocalNow(), dbType));
                     };
                 }
             }
@@ -352,19 +345,6 @@ public static class SqlSugarSetup
             // StaticConfig.CodeFirst_BigString(SqlServer 上解析为 nvarchar(max);见 SysJobLog.ErrorText)。
             MoreSettings = new ConnMoreSettings { SqlServerCodeFirstNvarchar = true },
         };
-
-    /// <summary>
-    /// SQL 参数渲染成 <c>@p0=1, @name=张三</c>;<b>名字像口令/密钥/令牌的参数只打 <c>***</c></b>。
-    /// <para>没有参数值,同一条失败的 SQL 就复现不出来 —— 只有语句是不够的。但值里可能有口令哈希、
-    /// TOTP 恢复码、消费者业务表的敏感列,而失败 SQL 的日志是关不掉的,慢 SQL 阈值调低时更是每条都打。
-    /// 名单与操作日志入参脱敏共用 <see cref="SensitiveKeys"/>。</para>
-    /// </summary>
-    private static string FormatSqlParameters(object? parameters) => parameters switch
-    {
-        SugarParameter[] ps when ps.Length > 0 => string.Join(", ",
-            ps.Select(p => $"{p.ParameterName}={(SensitiveKeys.IsSensitive(p.ParameterName) ? "***" : p.Value)}")),
-        _ => "(无)",
-    };
 
     /// <summary>
     /// SQLite 连接串里的相对 <c>Data Source</c> 规整为相对 <paramref name="contentRoot"/> 的绝对路径。

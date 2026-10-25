@@ -31,8 +31,8 @@ public class SqlLoggingTests
 
         var entry = log.Entries.Single(e => e.Level == LogLevel.Error && e.Text.Contains("smart_no_such_table", StringComparison.Ordinal));
         Assert.DoesNotContain("super-secret-value", entry.Text, StringComparison.Ordinal);
-        Assert.Contains("@password=***", entry.Text, StringComparison.Ordinal);
-        Assert.Contains("@name=张三", entry.Text, StringComparison.Ordinal);   // 普通参数保持可见,否则无法据日志定位问题
+        Assert.Contains("Password='***'", entry.Text, StringComparison.Ordinal);
+        Assert.Contains("Name='张三'", entry.Text, StringComparison.Ordinal);   // 普通参数保持可见,否则无法据日志定位问题
     }
 
     [Fact]
@@ -62,8 +62,12 @@ public class SqlLoggingTests
             "SELECT 1 FROM smart_no_such_table WHERE Id = @probe",
             new SugarParameter("@probe", 424242)));
 
-        // 没有参数值,无法重放同一条 SQL —— 只有语句是不够的
-        Assert.Contains(log.Entries, e => e.Level == LogLevel.Error && e.Text.Contains("424242", StringComparison.Ordinal));
+        // 没有参数值,无法重放同一条 SQL —— 只有语句是不够的。和控制台日志同一种块:参数内联,头行标「执行失败」
+        var entry = log.Entries.Single(e => e.Level == LogLevel.Error && e.Text.Contains("smart_no_such_table", StringComparison.Ordinal));
+        var lines = entry.Text.Split(Environment.NewLine);
+        Assert.StartsWith("【查询】", lines[0], StringComparison.Ordinal);
+        Assert.Contains("执行失败", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("SELECT 1 FROM smart_no_such_table WHERE Id = 424242", lines[1], StringComparison.Ordinal);   // 后面接着异常文本
     }
 
     [Fact]
