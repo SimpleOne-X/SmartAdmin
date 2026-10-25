@@ -39,6 +39,7 @@ If file logging is on at the same time, set `Color` to `false` explicitly, or es
 ```text
 info: 【查询】时间 10:21:33.402 耗时 3.4 ms 参数 2 个(已内联) #1 SmartAdmin.Sql[0]
       SELECT COUNT(1) FROM "sys_user" WHERE ("IsDelete" = false) AND ("OrgId" IN (100, 101))
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
 info: 【查询】时间 10:21:33.415 耗时 11.8 ms 参数 2 个(已内联) #2 SmartAdmin.Sql[0]
       SELECT "Id", "Account", "RealName", "OrgId"
       FROM "sys_user"
@@ -46,9 +47,10 @@ info: 【查询】时间 10:21:33.415 耗时 11.8 ms 参数 2 个(已内联) #2 
       AND ("OrgId" IN (100, 101))
       ORDER BY "Id" DESC
       LIMIT 10 OFFSET 0
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
 
-Everything below the header line is the statement itself, with no frame or other prefix on any line, so you can select it and paste it straight into a client.
+Everything below the header line is the statement itself, with no frame or other prefix on any line, so you can select it and paste it straight into a client. The gray rule under the block is not part of the statement; stop the selection at the statement's last line and it stays out.
 
 The header line carries, in order: statement kind, execution time, elapsed time, parameter count, sequence number, and it ends with the log category `SmartAdmin.Sql[0]`. .NET's default console format has no timestamp, so the millisecond-precision time in the header is what you line a statement up against a frontend request or another log with. Kind is decided by the leading keyword, and a CTE query starting with `WITH` still counts as a query. Statements on the main database carry no database name; those on an extra connection get a `[Report]` before the sequence number, where the bracket holds the `ConfigId` you gave it under `AdditionalDatabases`, so you can see at a glance which database a statement hit. The sequence number matches the "slowest was #n" in the summary line; statements that run outside an HTTP request (reading table schemas at startup, scheduled jobs) have none.
 
@@ -101,6 +103,8 @@ Statement blocks and summary lines both leave through this log category rather t
 
 .NET's default console format (`simple`) puts `SmartAdmin.Sql[0]` on a line of its own, which adds a line to every block and separates the header from the statement. So the kernel registers a console formatter named `smartadmin` that moves the tag to the end of the header line for this category only. Every other category, along with timestamps, level colors and exceptions, comes out exactly as `simple` writes it.
 
+The formatter also draws a gray rule after every log entry, at every level and for every category, with no blank line. When multi-line statement blocks and exceptions with stack traces sit next to each other, you can't tell where one entry ends and the next begins. The rule is only drawn when the output is colored, decided the same way `simple` decides its own colors: by `Logging:Console:FormatterOptions:ColorBehavior`, or, when that isn't set, by whether the output is redirected. Container logs and log files are collected line by line, and every extra rule would turn into an empty event.
+
 If the host sets `Logging:Console:FormatterName` explicitly (`json`, `systemd`, or `simple` spelled out to get the default two lines back), the kernel leaves the console alone. It also stays out when the host still uses the obsolete top-level switches `Logging:Console:IncludeScopes`, `TimestampFormat` or `DisableColors`: those only apply when no formatter is named, so taking over would silently switch them off. With scopes on (`FormatterOptions:IncludeScopes`), the line under the tag is the scope line, and those blocks keep the default two-line shape too.
 
 ## Slow and failed SQL are the same block
@@ -112,9 +116,11 @@ warn: 【查询】时间 10:21:34.020 耗时 1268.4 ms 参数 1 个(已内联) �
       SELECT "Id", "OrderNo", "Amount"
       FROM "sys_order"
       WHERE ("CustomerName" LIKE '%张%')
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
 fail: 【查询】时间 10:21:34.311 耗时 2.3 ms 参数 1 个(已内联) · 执行失败 SmartAdmin.Sql[0]
       SELECT 1 FROM "sys_ordr" WHERE ("Id" = 42)
       SqlSugar.SqlSugarException: 42P01: relation "sys_ordr" does not exist
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
 
 Log platforms search for the two terms 慢 SQL (slow SQL) and 执行失败 (execution failed). With `SqlLog` on, a statement over the line still gets just this one block, raised to `Warning`, and no second entry. Truncation follows `SqlLog`: with it on, statements are cut at `MaxSqlChars`; with it off, they print in full, because the complete statement is what a production investigation needs. Color works the same way and appears only while `SqlLog` is on.

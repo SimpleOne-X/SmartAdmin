@@ -393,6 +393,22 @@ public class SqlConsoleLogTests
         Assert.Equal("info: Demo.Other[0]" + nl + "      hello" + nl, WriteConsole(f, "Demo.Other", "hello"));
     }
 
+    /// <summary>上色时每条日志(SQL 与其余类别一样)写完跟一条灰色分割线;不上色的情形见上面两条,一行都不多。</summary>
+    [Fact]
+    public void 上色时每条日志后跟一条分割线()
+    {
+        using var f = Factory(new CaptureLoggerProvider(), ("Logging:Console:FormatterOptions:ColorBehavior", "Enabled"));
+        var rule = "\u001b[90m" + new string('─', 106) + "\u001b[0m" + Environment.NewLine;
+
+        var sql = WriteConsole(f, SqlLogFormatter.CATEGORY, "【查询】时间 18:40:56.360 耗时 1.0 ms 无参数" + Environment.NewLine + "SELECT 1");
+        var other = WriteConsole(f, "Demo.Other", "hello");
+
+        Assert.EndsWith("      SELECT 1" + Environment.NewLine + rule, sql, StringComparison.Ordinal);
+        Assert.Contains("无参数 SmartAdmin.Sql[0]", sql, StringComparison.Ordinal);   // 标签照样并进头行
+        Assert.EndsWith("      hello" + Environment.NewLine + rule, other, StringComparison.Ordinal);
+        Assert.Equal(other.Length - rule.Length, other.IndexOf(rule, StringComparison.Ordinal));   // 只在末尾一条
+    }
+
     /// <summary>宿主写明了格式、或还在用过时的顶层开关(它们只在没指定格式时生效)就不接管。</summary>
     [Theory]
     [InlineData(null, null, "smartadmin")]

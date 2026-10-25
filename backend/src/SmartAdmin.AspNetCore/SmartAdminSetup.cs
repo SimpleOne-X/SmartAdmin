@@ -141,7 +141,7 @@ public static class SmartAdminSetup
             }));
         }
 
-        // ── 控制台:SQL 日志的类别标签并进头行(见 SqlLogConsoleFormatter)──
+        // ── 控制台:SQL 日志的类别标签并进头行、每条日志后跟分割线(见 SqlLogConsoleFormatter)──
         //   只接管没指定格式的情况;宿主显式配了 Logging:Console:FormatterName(json、systemd,或写明 simple 退回默认两行)就不碰。
         //   过时的 Logging:Console:IncludeScopes / TimestampFormat / DisableColors / Format 只在 FormatterName 为空时生效,配了任何一项也不接管,免得它们悄悄失效。
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ConsoleFormatter, SqlLogConsoleFormatter>());
