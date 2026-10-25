@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.30.1 - 2026-10-25
+
 ### 升级说明
 
 - **直接调用 `SqlLogFormatter` 的，语句块的模板和参数顺序又变了。** `BLOCK_TEMPLATE` 改成头行加语句两段，`BlockArgs` 仍返回七个值，依次是类型、时刻、耗时、参数说明、`ConfigId`、序号、语句；序号带前导空格（` #3`），没有序号时是空串。`BlockArgs` 末尾新增可选参数 `dbType` 和 `failed`。主库的 `ConfigId` 一栏是空串，副库是 ` [库名]`。`SUMMARY_TEMPLATE` 开头由 `└ SQL 汇总` 改为 `【汇总】`。日志类别名有了常量 `SqlLogFormatter.CATEGORY`（`SmartAdmin.Sql`）。按 `┌ SQL`、`SQL 汇总` 检索日志的脚本和告警规则要跟着改。
