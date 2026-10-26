@@ -150,6 +150,23 @@ public class SqlConsoleLogTests
         Assert.DoesNotContain(args, a => a?.ToString()?.Contains('\u001b') == true);
     }
 
+    /// <summary>
+    /// 颜色只进控制台:同一条日志还会发给 VS 输出窗口(Debug)、文件、事件日志,它们不认 ANSI 码,
+    /// 开着颜色交给它们的也得是纯文本。
+    /// </summary>
+    [Fact]
+    public async Task 开了颜色控制台以外的日志也不带转义序列()
+    {
+        var log = new CaptureLoggerProvider();
+        using var f = Factory(log, On, ("SmartAdmin:Database:SqlLog:Color", "true"));
+        var c = await SuperAdminClient(f);
+
+        await c.GetAsync("/api/v1/sys/user/page?Current=1&Size=10");
+
+        Assert.Contains(log.Entries, e => IsBlock(e.Text));
+        Assert.DoesNotContain(log.Entries, e => e.Text.Contains('\u001b'));
+    }
+
     /// <summary>参数内联进语句,但口令这类名字只出现 ***:这份日志会被贴进工单和聊天窗。</summary>
     [Fact]
     public void 参数内联且敏感值打码()
@@ -320,18 +337,19 @@ public class SqlConsoleLogTests
         Assert.Equal("SELECT 1 WHERE a=N'张三' AND b='admin'", sql);
     }
 
-    /// <summary>关键字按语句类型上色,值不上色:分得出类型,值也读得清。</summary>
+    /// <summary>关键字按语句类型上色,值不上色:分得出类型,值也读得清。上色版只给控制台,ToString 是纯文本。</summary>
     [Fact]
     public void 开了颜色关键字按语句类型上色()
     {
-        var select = SqlLogFormatter.BlockArgs(
-            1, "SELECT a FROM t WHERE b = 'from'", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[6]!.ToString()!;
-        var delete = SqlLogFormatter.BlockArgs(
-            1, "DELETE FROM t WHERE b = 1", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[6]!.ToString()!;
+        var select = Assert.IsType<ColoredText>(SqlLogFormatter.BlockArgs(
+            1, "SELECT a FROM t WHERE b = 'from'", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[6]);
+        var delete = Assert.IsType<ColoredText>(SqlLogFormatter.BlockArgs(
+            1, "DELETE FROM t WHERE b = 1", null, 1.0, "main", maxSqlChars: 4000, color: true, slowMillis: 1000)[6]);
 
-        Assert.Contains("\u001b[92mSELECT\u001b[0m", select, StringComparison.Ordinal);
-        Assert.Contains("'from'", select, StringComparison.Ordinal);   // 字符串里的同名词不是关键字
-        Assert.Contains("\u001b[91mDELETE\u001b[0m", delete, StringComparison.Ordinal);
+        Assert.Contains("\u001b[92mSELECT\u001b[0m", select.Ansi, StringComparison.Ordinal);
+        Assert.Contains("'from'", select.Ansi, StringComparison.Ordinal);   // 字符串里的同名词不是关键字
+        Assert.Contains("\u001b[91mDELETE\u001b[0m", delete.Ansi, StringComparison.Ordinal);
+        Assert.DoesNotContain('\u001b', select.ToString());
     }
 
     [Fact]
@@ -361,14 +379,53 @@ public class SqlConsoleLogTests
 
     private static (string, string) NoConsoleColor => ("Logging:Console:FormatterOptions:ColorBehavior", "Disabled");
 
+    private static ConsoleFormatter HostConsoleFormatter(AdminAppFactory f)
+    {
+        var name = f.Services.GetRequiredService<IOptionsMonitor<ConsoleLoggerOptions>>().CurrentValue.FormatterName;
+        return f.Services.GetServices<ConsoleFormatter>().Single(x => x.Name == name);
+    }
+
     /// <summary>经宿主注册好的控制台格式化器写一条,拿到的就是控制台上那几行。</summary>
     private static string WriteConsole(AdminAppFactory f, string category, string message)
     {
-        var name = f.Services.GetRequiredService<IOptionsMonitor<ConsoleLoggerOptions>>().CurrentValue.FormatterName;
-        var formatter = f.Services.GetServices<ConsoleFormatter>().Single(x => x.Name == name);
         using var writer = new StringWriter();
-        formatter.Write(new LogEntry<string>(LogLevel.Information, category, new EventId(0), message, null, (s, _) => s), null, writer);
+        HostConsoleFormatter(f).Write(new LogEntry<string>(LogLevel.Information, category, new EventId(0), message, null, (s, _) => s), null, writer);
         return writer.ToString();
+    }
+
+    /// <summary>经 ILogger 的模板 API 打一条 SQL 日志再交给控制台格式化器:状态与内核打日志时同形(带 {OriginalFormat} 的参数表)。</summary>
+    private static string WriteConsole(AdminAppFactory f, string template, object?[] args)
+    {
+        using var writer = new StringWriter();
+        new FormatterLogger(HostConsoleFormatter(f), writer).LogInformation(template, args);
+        return writer.ToString();
+    }
+
+    private sealed class FormatterLogger(ConsoleFormatter formatter, TextWriter writer) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? ex, Func<TState, Exception?, string> format)
+            => formatter.Write(new LogEntry<TState>(level, SqlLogFormatter.CATEGORY, id, state, ex, format), null, writer);
+    }
+
+    /// <summary>控制台那一路照样上色:类型、时刻、耗时、关键字带颜色,参数说明不上色,类别标签照样并进头行。</summary>
+    [Fact]
+    public void 控制台上SQL块照样上色()
+    {
+        using var f = Factory(new CaptureLoggerProvider(), NoConsoleColor);
+        var at = new DateTimeOffset(2026, 10, 26, 8, 1, 2, 345, TimeSpan.Zero);
+        var args = SqlLogFormatter.BlockArgs(
+            1, "SELECT a FROM t", null, 1.0, SqlSugarSetup.MainConfigId, maxSqlChars: 4000, color: true, slowMillis: 1000, at);
+
+        var text = WriteConsole(f, SqlLogFormatter.BLOCK_TEMPLATE, args);
+
+        Assert.StartsWith(
+            "info: 【\u001b[92m查询\u001b[0m】时间 \u001b[90m08:01:02.345\u001b[0m 耗时 \u001b[92m1.0 ms\u001b[0m 无参数 #1 SmartAdmin.Sql[0]"
+            + Environment.NewLine + "      \u001b[92mSELECT\u001b[0m",
+            text, StringComparison.Ordinal);
     }
 
     /// <summary>默认 simple 格式让 SmartAdmin.Sql[0] 单独占一行;并进头行末尾,语句续行照旧缩进对齐。</summary>

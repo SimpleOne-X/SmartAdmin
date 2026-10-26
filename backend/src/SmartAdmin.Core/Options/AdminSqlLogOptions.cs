@@ -25,8 +25,8 @@ public class AdminSqlLogOptions
     public bool RequestSummary { get; set; } = true;
 
     /// <summary>
-    /// 是否加 ANSI 颜色。<b>null = 自动</b>:stdout 是终端且未设 <c>NO_COLOR</c> 才加。
-    /// 同时开着文件日志时建议显式 false,否则文件里会混进转义序列。
+    /// 控制台上是否加 ANSI 颜色。<b>null = 自动</b>:stdout 是终端且未设 <c>NO_COLOR</c> 才加。
+    /// 颜色由内核的控制台格式化器上,VS 输出窗口、文件、事件日志这些提供程序拿到的始终是纯文本。
     /// </summary>
     public bool? Color { get; set; }
 }

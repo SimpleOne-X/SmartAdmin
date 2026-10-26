@@ -14,6 +14,12 @@
 
 ## Unreleased
 
+## 10.30.3 - 2026-10-26
+
+### Fixed
+
+- **SQL 日志的颜色不再漏进 VS 输出窗口、文件和事件日志。** 以前 ANSI 码直接嵌在日志参数里，在 Visual Studio 里调试时控制台是彩色的，输出窗口却满屏 `[90m`、`[92m`；同时开着文件日志或 Seq 的话，里面也混进了转义序列。现在交给所有日志提供程序的都是纯文本，颜色只由内核的控制台格式化器（`smartadmin`）在写控制台时加上，控制台上看到的和以前一样。宿主自己配了 `Logging:Console:FormatterName` 的，控制台上的 SQL 不再带颜色。直接调用 `SqlLogFormatter.BlockArgs`、`SummaryArgs` 并传 `color: true` 的，上色的那几个值现在是 `ColoredText`：`ToString()` 是纯文本，上色版在 `Ansi` 属性上。
+
 ## 10.30.2 - 2026-10-25
 
 ### Changed

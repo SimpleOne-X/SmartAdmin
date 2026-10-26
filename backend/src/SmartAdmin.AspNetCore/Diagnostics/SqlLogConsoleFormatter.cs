@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,10 +18,12 @@ namespace SmartAdmin.AspNetCore;
 /// 分不清一条在哪结束、下一条从哪开始。只在上色时画:输出被重定向(容器日志、写文件)时按行采集,
 /// 多出的横线每条都会变成一条无用事件。</item>
 /// </list>
+/// <para>SQL 日志的颜色也在这里上:参数值是 <see cref="ColoredText"/> 时按消息模板重拼一遍,换成上色版。
+/// 消息串本身是纯文本,发给 VS 输出窗口、文件的那几路因此不带转义序列。</para>
 /// <para>自己不渲染:整条交给内置 simple 格式写,时间戳、级别配色、作用域、异常都照旧;
 /// 标签认不出预期的形状(SingleLine 模式、将来 simple 改了排版)就原样输出,最坏退回默认的两行。</para>
 /// </summary>
-internal sealed class SqlLogConsoleFormatter(IServiceProvider services, IOptionsMonitor<SimpleConsoleFormatterOptions> simpleOptions)
+internal sealed partial class SqlLogConsoleFormatter(IServiceProvider services, IOptionsMonitor<SimpleConsoleFormatterOptions> simpleOptions)
     : ConsoleFormatter(NAME)
 {
     public const string NAME = "smartadmin";
@@ -47,13 +51,36 @@ internal sealed class SqlLogConsoleFormatter(IServiceProvider services, IOptions
     public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider? scopeProvider, TextWriter textWriter)
     {
         using var buffer = new StringWriter();
-        Simple.Write(logEntry, scopeProvider, buffer);
+        if (logEntry.Category == SqlLogFormatter.CATEGORY && AnsiMessage(logEntry.State) is { } ansi)
+            Simple.Write(new LogEntry<TState>(logEntry.LogLevel, logEntry.Category, logEntry.EventId, logEntry.State, logEntry.Exception, (_, _) => ansi), scopeProvider, buffer);
+        else
+            Simple.Write(logEntry, scopeProvider, buffer);
         var text = buffer.ToString();
         if (text.Length == 0) return;   // simple 对没有消息也没有异常的条目什么都不写,也就不画线
 
         if (logEntry.Category == SqlLogFormatter.CATEGORY) text = MoveTag(text, $"{logEntry.Category}[{logEntry.EventId.Id}]");
         textWriter.Write(Colored ? text + Rule : text);
     }
+
+    /// <summary>
+    /// 按 <c>{OriginalFormat}</c> 把占位符换回参数值,<see cref="ColoredText"/> 取上色版;没有这种参数就返回 null,照常格式化。
+    /// 只认 <c>{Name}</c> 形式的占位符:带颜色参数的只有 <see cref="SqlLogFormatter"/> 的两个模板,都不带格式串和花括号转义。
+    /// </summary>
+    private static string? AnsiMessage<TState>(TState state)
+    {
+        if (state is not IReadOnlyList<KeyValuePair<string, object?>> values
+            || !values.Any(v => v.Value is ColoredText)
+            || values.FirstOrDefault(v => v.Key == "{OriginalFormat}").Value is not string template) return null;
+
+        return Hole().Replace(template, m => values.FirstOrDefault(v => v.Key == m.Groups[1].Value).Value switch
+        {
+            ColoredText t => t.Ansi,
+            var v => Convert.ToString(v, CultureInfo.InvariantCulture) ?? "",
+        });
+    }
+
+    [GeneratedRegex(@"\{(\w+)\}")]
+    private static partial Regex Hole();
 
     private static string MoveTag(string text, string tag)
     {

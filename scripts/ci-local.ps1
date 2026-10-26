@@ -196,6 +196,9 @@ function Get-FreePort([int]$Preferred, [string]$Label) {
 function Start-Container {
     param([string]$Name, [string[]]$RunArgs)
     docker rm -f $Name *> $null
+    # 本机没缓存镜像时 docker run 先往 stderr 写一行 Unable to find image 再去拉。
+    # 5.1 在 Stop 下把 2>&1 接住的 stderr 当终止错误抛,镜像还没拉就判红;成败只看退出码。
+    $ErrorActionPreference = 'Continue'
     # docker run 把容器 ID 打到 stdout。不接住的话它会顺着函数返回值冒到调用方,
     # 而 Start-DbContainer 是要返回端口号的——那样 $port 会变成一个数组。
     $out = & docker @RunArgs 2>&1
@@ -214,6 +217,8 @@ function Wait-Healthy {
         if ($s -eq 'healthy') { Write-Host "   $Name 就绪" -ForegroundColor DarkGray; return }
         Start-Sleep -Seconds 5
     }
+    # 同上:容器日志里的 stderr 行不能抢在下面这句之前抛出来
+    $ErrorActionPreference = 'Continue'
     docker logs $Name 2>&1 | Select-Object -Last 40
     throw "$Name 容器没能变healthy"
 }
