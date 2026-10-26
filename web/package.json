@@ -1,6 +1,6 @@
 {
   "name": "smart-admin-workspace",
-  "version": "10.30.3",
+  "version": "10.30.4",
   "private": true,
   "type": "module",
   "engines": {
