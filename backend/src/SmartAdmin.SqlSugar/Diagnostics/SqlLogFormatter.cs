@@ -10,8 +10,9 @@ namespace SmartAdmin.SqlSugar;
 /// 而不是"语句在这里、参数在那里"再人肉拼。
 /// <para>不用 SqlSugar 自带的 <c>UtilMethods.GetSqlString</c>:它会把口令哈希、TOTP 种子这类值原样吐出来。
 /// 这里按参数名过 <see cref="SensitiveKeys"/>,命中的只打 <c>'***'</c>。</para>
-/// <para>颜色用 ANSI 码嵌进消息串,<b>不用 <c>Console.ForegroundColor</c></b>:那是进程级状态,
-/// 多线程并发写日志时颜色会串到别的行上。</para>
+/// <para>颜色用 ANSI 码,<b>不用 <c>Console.ForegroundColor</c></b>:那是进程级状态,多线程并发写日志时颜色会串到别的行上。
+/// 上色的参数值是 <see cref="ColoredText"/>:消息串本身是纯文本,只有内核的控制台格式化器换成上色版,
+/// VS 输出窗口、文件这些不认 ANSI 码的地方拿不到转义序列。</para>
 /// <para>语句经 <see cref="SqlPrettyPrinter"/> 排版成多行,关键字按语句类型上色,一眼分得出查询、新增、修改、删除。</para>
 /// </summary>
 public static class SqlLogFormatter
@@ -37,7 +38,7 @@ public static class SqlLogFormatter
     /// <summary>一个请求里超过这么多条语句就提示疑似 N+1。</summary>
     private const int N_PLUS_ONE_HINT = 20;
 
-    /// <summary>是否加颜色:显式配了就听配置,没配则 stdout 是终端且未设 NO_COLOR 才加。</summary>
+    /// <summary>控制台上是否加颜色:显式配了就听配置,没配则 stdout 是终端且未设 NO_COLOR 才加。</summary>
     public static bool ShouldColor(bool? configured) => configured
         ?? (!Console.IsOutputRedirected
             && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR")));
@@ -68,8 +69,14 @@ public static class SqlLogFormatter
             note,
             configId == SqlSugarSetup.MainConfigId ? "" : $" [{configId}]",
             index is null ? "" : " #" + index.Value.ToString(CultureInfo.InvariantCulture),
-            Pretty(inlined, color ? kindColor : null),
+            PrettySql(inlined, kindColor, color),
         ];
+    }
+
+    private static object PrettySql(string sql, string kindColor, bool color)
+    {
+        var plain = Pretty(sql, null);
+        return color ? new ColoredText(plain, () => Pretty(sql, kindColor)) : plain;
     }
 
     private static string Pretty(string sql, string? keywordColor)
@@ -125,8 +132,8 @@ public static class SqlLogFormatter
         return millis >= slow / 2.0 ? "\u001b[93m" : "\u001b[92m";
     }
 
-    private static string Paint(string text, string color, bool enabled) =>
-        enabled ? color + text + RESET : text;
+    private static object Paint(string text, string color, bool enabled) =>
+        enabled ? new ColoredText(text, () => color + text + RESET) : text;
 
     /// <summary>
     /// 把参数值替换进语句。按参数名<b>从长到短</b>替换:否则 <c>@p1</c> 会先把 <c>@p10</c> 咬掉半截。

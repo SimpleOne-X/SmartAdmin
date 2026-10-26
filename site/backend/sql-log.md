@@ -28,9 +28,9 @@ The slow-SQL threshold `Database:SlowSqlMillis` and the failed-SQL log are a dif
 | `MinMillis` | `0` | Only print statements taking at least this long (ms); `0` prints all |
 | `MaxSqlChars` | `4000` | Print limit for one statement; longer ones are truncated with a note. A batch insert can run to hundreds of thousands of characters |
 | `RequestSummary` | `true` | Whether to add a summary line when the request ends |
-| `Color` | auto | ANSI color. Left unset, colors appear only when stdout is a terminal and `NO_COLOR` is not set |
+| `Color` | auto | ANSI color on the console. Left unset, colors appear only when stdout is a terminal and `NO_COLOR` is not set |
 
-If file logging is on at the same time, set `Color` to `false` explicitly, or escape sequences end up mixed into the files.
+Color only reaches the console. The same entry also goes to the Visual Studio Output window, log files and the Windows Event Log. None of them understand ANSI codes, so they always get plain text, and leaving `Color` on doesn't put escape sequences into them.
 
 `MinMillis` gates the statement blocks only, not the statistics: statements it filters out still count toward the summary's total count and total elapsed time. No single query in an N+1 is slow, so if filtering by duration also shrank the count, the switch would have defeated its own purpose.
 
@@ -102,6 +102,8 @@ Statement blocks and summary lines both leave through this log category rather t
 - A structured sink receives the template plus its arguments, with kind, execution time, elapsed time, parameter count, `ConfigId` and sequence number each as its own field. The statement field is laid-out multi-line text with no prefix on its continuation lines. On the main database the `ConfigId` field is an empty string.
 
 .NET's default console format (`simple`) puts `SmartAdmin.Sql[0]` on a line of its own, which adds a line to every block and separates the header from the statement. So the kernel registers a console formatter named `smartadmin` that moves the tag to the end of the header line for this category only. Every other category, along with timestamps, level colors and exceptions, comes out exactly as `simple` writes it.
+
+The SQL colors are applied here too. The message a statement block hands out is plain text, and only when writing to the console does the formatter swap in the colored kind, time, elapsed time and keywords. If the host names its own console format, SQL on the console comes out uncolored.
 
 The formatter also draws a gray rule after every log entry, at every level and for every category, with no blank line. When multi-line statement blocks and exceptions with stack traces sit next to each other, you can't tell where one entry ends and the next begins. The rule is only drawn when the output is colored, decided the same way `simple` decides its own colors: by `Logging:Console:FormatterOptions:ColorBehavior`, or, when that isn't set, by whether the output is redirected. Container logs and log files are collected line by line, and every extra rule would turn into an empty event.
 
