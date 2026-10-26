@@ -221,6 +221,12 @@ a {
   -webkit-backdrop-filter: blur(40px) saturate(170%);
 }
 
+/* 弹窗卡带 backdrop-filter 时,Chrome 在 125% 等缩放下遇到表格外框落在整数设备像素上,表头 / 表体会盖住 1px 的左边框;
+   外框容器单独合成一层就不再被盖(去圆角、isolation、overflow: clip 都不管用)。 */
+.n-card.n-modal .n-data-table-wrapper {
+  transform: translateZ(0);
+}
+
 /* 不支持 backdrop-filter 的浏览器:浮层退回近乎不透明的实底,别让半透明底直接叠在内容上 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .n-popover:not(.n-tooltip),
