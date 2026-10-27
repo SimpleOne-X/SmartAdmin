@@ -29,6 +29,7 @@ internal sealed class DatabaseInitializer(
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         SqlSugarSetup.EnsureSqliteDirectory(options.DbType, options.ConnectionString);
+        WarmUpConnection();
 
         // 建表安全闸门:只有 Development 自动建表。其余环境(Production、Staging、UAT……都是部署)即便 EnableCodeFirst=true,
         // 也需显式 EnableCodeFirstInProduction 才建表——部署的库通常 DBA 手工维护,应用不应擅自 ALTER,
@@ -126,6 +127,18 @@ internal sealed class DatabaseInitializer(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// 先单独建好第一条物理连接:SQL 耗时从打开连接前算起,驱动冷启动加登录动辄近一秒,
+    /// 不先建好就全记在启动的第一条 SQL 头上,一条 1 ms 的探表语句会被慢 SQL 告警点名。
+    /// </summary>
+    private void WarmUpConnection()
+    {
+        var sw = Stopwatch.StartNew();
+        db.Ado.Open();
+        db.Ado.Close();
+        logger.LogInformation("SmartAdmin: 数据库首次建连 {Ms} ms", sw.ElapsedMilliseconds);
+    }
 
     /// <summary>CodeFirst 版本记录行(Id=1 是种子版本行,由 SchemaVersionSeed 维护)。</summary>
     private const long CodeFirstVersionRowId = 2;
@@ -303,14 +316,20 @@ internal sealed class DatabaseInitializer(
     private void EnsureExistingTablesHaveEntityColumns(Type[] entityTypes)
     {
         var drift = new List<string>();
+        var existing = db.DbMaintenance.GetTableInfoList(false)
+            .Select(t => t.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var type in entityTypes)
         {
             var table = db.EntityMaintenance.GetTableName(type);
-            if (!db.DbMaintenance.IsAnyTable(table, false)) continue;      // 缺表:另一条路径管
+            if (!existing.Contains(table)) continue;      // 缺表:另一条路径管
 
-            var actual = db.DbMaintenance.GetColumnInfosByTableName(table, false)
-                .Select(c => c.DbColumnName)
+            // 只要列名,读空结果集的表头就够。GetColumnInfosByTableName 在 SqlServer 上要联查索引、默认值与注释,
+            // 远端库上一张表几百毫秒,几十张表叠起来能把每次启动拖慢十几秒。
+            var actual = db.Queryable<object>().AS(table).Where("1=0").ToDataTable()
+                .Columns.Cast<System.Data.DataColumn>()
+                .Select(c => c.ColumnName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var missing = db.EntityMaintenance.GetEntityInfo(type).Columns
