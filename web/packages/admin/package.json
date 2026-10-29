@@ -83,7 +83,7 @@
     "@types/node": "^22.13.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vueuse/core": "^14.4.0",
-    "happy-dom": "^20.13.2",
+    "happy-dom": "^21.0.4",
     "naive-ui": "^2.45.3",
     "openapi-typescript": "^7.6.1",
     "pinia": "^4.0.3",
