@@ -948,7 +948,7 @@ export interface paths {
          *     验签先于读文件:参数不全、签名不对、过期都是 403,不让人拿它探测"这个文件存不存在"。验过之后服务抛的业务错误走正常信封。
          *     不信文件夹里文件的类型:匿名 + inline 若按文件自带的类型回吐,text/html / image/svg+xml 会被浏览器当脚本渲染,
          *     与前端同源 → 存储型 XSS。因此按后缀在白名单里取服务端权威类型:是"可安全内联"的图片/PDF 才 inline,
-         *     其余一律 application/octet-stream + 强制另存,再叠一层 nosniff 禁嗅探。
+         *     其余一律 application/octet-stream + 强制另存,再叠一层 nosniff 禁嗅探;内联的再加 Content-Security-Policy: sandbox。
          */
         get: operations["FilePathDownload_View"];
         put?: never;
@@ -3393,11 +3393,16 @@ export interface components {
             /** @description 验证码类型(char/path/math…);前端据此调整输入提示(如 math 提示“输入计算结果”)。 */
             type?: string;
         };
-        /** @description 单元格级错误。<b>只带码不带文案</b>:前端按 code 查 i18n 渲染。 */
+        /** @description 单元格级错误。<b>只带码不带文案</b>:前端按 msgKey 查 i18n 渲染,没有 msgKey 时按 code。 */
         CellError: {
             columnKey: string;
             code: components["schemas"]["ErrorCode"];
             args?: null | Record<string, never>;
+            /**
+             * @description 与统一信封同一套解析(ErrorCodeRegistry):消费者强转进来的业务码只要登记过,
+             *     这里就是它自己的 MsgKeyAttribute;前端只认数字码时,消费者的码全落到兜底文案。
+             */
+            msgKey?: null | string;
         };
         /** @description 改密码入参:须验旧密码(即便令牌未过期,也要证明你知道当前密码)。 */
         ChangePasswordInput: {
