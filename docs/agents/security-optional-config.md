@@ -41,7 +41,7 @@
 | `Session:ActivityThrottleSeconds` | int | `60` | 闲置跟踪时活动回写 DB 的节流秒数 |
 | `Session:IdleMinutesNormal` | int | `0` | 普通用户闲置超时（分）；**`0` = 不启用** |
 | `Session:IdleMinutesMfa` | int | `0` | 已开 TOTP 用户闲置（分）；`0` = 与 Normal 相同 |
-| `Session:AbsoluteHours` | int | `0` | 绝对会话最长小时；**`0` = 不额外限制**（仅随 refresh） |
+| `Session:AbsoluteHours` | int | `0` | 绝对会话最长小时，从登录时刻算；**`0` = 不另设上限**（连续 `refreshMinutes` 没续期后失效） |
 
 ### 1.3 相关的其他配置
 

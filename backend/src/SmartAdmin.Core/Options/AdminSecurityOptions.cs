@@ -107,7 +107,8 @@ public class AdminSessionOptions
     public int IdleMinutesMfa { get; set; }
 
     /// <summary>
-    /// 绝对会话最长寿命(小时)。0 = 不额外限制(默认,仅随 refresh 过期)。
+    /// 绝对会话最长寿命(小时),从登录时刻算,续期不能突破。
+    /// <b>0 = 不另设上限</b>(默认):会话在连续 <c>refreshMinutes</c> 没续期后才失效。
     /// 配置键:<c>SmartAdmin:Security:Session:AbsoluteHours</c>。
     /// </summary>
     public int AbsoluteHours { get; set; }

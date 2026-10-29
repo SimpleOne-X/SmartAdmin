@@ -9,7 +9,11 @@ public enum RefreshTokenStatus
     /// <summary>活跃:可用于换发</summary>
     Active = 1,
 
-    /// <summary>已轮换:换发新令牌后旧令牌置此。<b>再被出示 = 重放</b>,触发整会话吊销(复用检测)。</summary>
+    /// <summary>已轮换:换发新令牌后旧令牌置此。</summary>
+    /// <remarks>
+    /// 轮换后超出宽限窗再被出示 = 重放,触发整会话吊销(复用检测);宽限窗内只拒绝不吊销。
+    /// 本行 <c>UpdateTime</c> 是 UTC 轮换时刻(同表 <c>CreateTime</c> 是本地时间),宽限判定读它。
+    /// </remarks>
     Used = 2,
 
     /// <summary>已吊销:随会话登出/强退作废</summary>
@@ -18,7 +22,7 @@ public enum RefreshTokenStatus
 
 /// <summary>
 /// 刷新令牌——服务端只存<b>哈希</b>不存明文(高熵随机串,SHA-256 足够,无需 PBKDF2)。
-/// 轮换:每次换发把旧令牌置 <see cref="RefreshTokenStatus.Used"/> 并签发新令牌;旧令牌再现即判重放。
+/// 轮换:每次换发把旧令牌置 <see cref="RefreshTokenStatus.Used"/> 并签发新令牌;旧令牌在宽限窗外再现即判重放。
 /// </summary>
 [SugarTable("sys_refresh_token", TableDescription = "刷新令牌")]
 [SugarIndex("idx_sys_refresh_token_hash", nameof(TokenHash), OrderByType.Asc, IsUnique = true)]

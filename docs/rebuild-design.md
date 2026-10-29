@@ -796,7 +796,7 @@ web/packages/admin/src/locales/
 必须成型的安全项(多数为 .NET 内置能力):
 
 - **密码哈希**:PBKDF2(BCL `Rfc2898DeriveBytes`),存储格式含**算法版本 + 迭代次数 + 盐 + hash**,便于将来平滑升级算法。
-- **Refresh Token**:数据库/缓存持久化(**存 hash 不存明文**),支持**轮换、吊销、复用检测**(旧 refresh 被重放即判风险、吊销该会话)。
+- **Refresh Token**:数据库/缓存持久化(**存 hash 不存明文**),支持**轮换、吊销、复用检测**(旧 refresh 在轮换宽限窗外被重放即判风险、吊销该会话)。
 - **JWT**:生产**必须**配置 `SecretKey`;开发密钥只允许 Development 环境自动生成(带醒目警告)。
 - **登录防护**:验证码 + 登录失败锁定 + `RateLimiter`(登录接口更严)。
 - **文件上传**:后缀白名单 + 大小限制 + **文件名重写** + **路径穿越防护** + **不以 Content-Type 作为唯一依据**。
@@ -817,7 +817,7 @@ web/packages/admin/src/locales/
 - **单端模式**(`Session:Mode=Single`):新登录时吊销同用户其他 session。
 - **`MaxConcurrent`**:超过并发端数时,按最早登录时间吊销最旧 session。
 
-**实现要点**:RefreshToken 存 **SHA-256 十六进制**(高熵随机串,非密码,无需 PBKDF2);刷新用**条件更新**(仅当仍 Active 才置 Used)原子轮换,兼作并发双刷保护;**复用检测**:已 Used 的令牌再现即吊销**整个会话**(连坐刷新令牌 + 清缓存),攻击者与真用户一起下线(安全优先)。会话热路径:`ISessionService.IsActiveAsync` 先读 `smart:session:{sid}` 缓存(TTL=会话过期),未命中查库回填;`[RolePermission]` 管道对**超管与普通用户一律**校验会话状态(强退即 401)。刷新走**滑动续期**(会话过期跟到新刷新令牌过期)。审计字段 `CreateUserId/UpdateUserId` 由 SqlSugar AOP 从 `ICurrentUser` 自动填充(系统上下文留空)。
+**实现要点**:RefreshToken 存 **SHA-256 十六进制**(高熵随机串,非密码,无需 PBKDF2);刷新用**条件更新**(仅当仍 Active 才置 Used)原子轮换,兼作并发双刷保护;**复用检测**:已 Used 的令牌在宽限窗(`RotationGrace`,10 秒)外再现即吊销**整个会话**(连坐刷新令牌 + 清缓存),攻击者与真用户一起下线(安全优先);窗口内再现或并发轮换落败只拒绝(40037)不吊销,让同一浏览器多标签页同时续期时落败的一方改用另一处写下的新令牌。会话热路径:`ISessionService.IsActiveAsync` 先读 `smart:session:{sid}` 缓存(TTL=会话过期),未命中查库回填;`[RolePermission]` 管道对**超管与普通用户一律**校验会话状态(强退即 401)。刷新走**滑动续期**(会话过期跟到新刷新令牌过期)。审计字段 `CreateUserId/UpdateUserId` 由 SqlSugar AOP 从 `ICurrentUser` 自动填充(系统上下文留空)。
 
 **部署边界(单节点 vs 多实例,重要)**:强退/权限吊销/登录锁定/验证码一次性的**即时性均依赖共享缓存**。默认 `MemoryCacheProvider` 是**进程内**:多副本负载均衡下,节点 A 的强退/降权只清了 A 的缓存,路由到节点 B 的请求仍读旧缓存(会话 TTL 可达 RefreshExpire 天级、权限/数据范围 TTL 至 `PermissionMinutes`),这些安全动作在 B 上**不即时生效**(`PermissionMinutes=0` 永不过期时 B 上永久保留旧权限)。**故:多实例部署必须配置分布式 `ICacheProvider`(如 `SmartAdmin.Caching.Redis`),否则强退/权限即时性、登录锁定、验证码一次性都只在单节点内成立。** 当前限制:`IEventBus` 是进程内的,不会在副本间传播 session/perm/scope 失效,跨副本的即时性靠共享缓存本身。
 

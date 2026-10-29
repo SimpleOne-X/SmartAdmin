@@ -55,7 +55,7 @@ public enum ErrorCode
     [MsgKey("error.auth.tokenInvalid")]
     TokenInvalid = 40006,
 
-    /// <summary>刷新令牌无效 / 已轮换吊销 / 检测到重放</summary>
+    /// <summary>刷新令牌无效 / 已轮换吊销 / 检测到重放(已轮换令牌在宽限窗外再现,整会话吊销)</summary>
     [MsgKey("error.auth.refreshTokenInvalid")]
     RefreshTokenInvalid = 40007,
 
@@ -176,6 +176,10 @@ public enum ErrorCode
     /// <summary>OIDC Authority 被 SSRF 围栏拒绝(非 http/https / 不在白名单 / 命中 CIDR 黑名单);保存与测试都先过围栏</summary>
     [MsgKey("error.auth.externalAuthEndpointBlocked")]
     ExternalAuthEndpointBlocked = 40036,
+
+    /// <summary>刷新令牌刚被另一个请求轮换(宽限窗内的重放或并发落败):只拒绝、不吊销会话,调用方可能已有另一处写下的新令牌可用</summary>
+    [MsgKey("error.auth.refreshTokenSuperseded")]
+    RefreshTokenSuperseded = 40037,
 
     // ── 41xxx 权限与数据范围 ─────────────────────────────────────────
 

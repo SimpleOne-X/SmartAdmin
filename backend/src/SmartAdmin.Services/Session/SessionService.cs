@@ -7,7 +7,8 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// <see cref="ISessionService"/> 默认实现。会话落库(源) + 落缓存(热路径),
-/// 刷新令牌只存哈希;轮换用条件更新(仅当仍 Active 才置 Used)兼作并发保护,复用即整会话吊销。
+/// 刷新令牌只存哈希;轮换用条件更新(仅当仍 Active 才置 Used)兼作并发保护;
+/// 已轮换令牌在 <see cref="RotationGrace"/> 之外再现即判重放、整会话吊销,窗口内只拒绝不吊销。
 /// 时间统一走 UTC(<see cref="TimeProvider"/>),避免本地/UTC 混用导致过期判断错乱。
 /// <para><b>不需要进程内锁</b>:单端/限并发的名额收敛采「先插入、再收敛」(见 <see cref="EnforceConcurrencyAsync"/>)——
 /// 并发登录都落库后各自重读、各自算出同一个"保留最新 N"的答案,天然收敛,不靠锁串行化;
@@ -32,6 +33,13 @@ public class SessionService(
     IDataScopeGuard? scopeGuard = null) : ISessionService
 {
     private DateTime Now => time.GetUtcNow().UtcDateTime;
+
+    /// <summary>刚轮换的刷新令牌在此窗口内被再次出示,只拒绝、不吊销会话。</summary>
+    /// <remarks>
+    /// 同一浏览器的多个标签页几乎同时续期,10 秒足以覆盖这个时间差;窗口越长,被盗用的旧令牌越晚触发吊销,所以不放宽。
+    /// 窗口外的重放仍按盗用吊销整会话。
+    /// </remarks>
+    protected static readonly TimeSpan RotationGrace = TimeSpan.FromSeconds(10);
 
     /// <summary>高熵随机串的哈希:SHA-256 十六进制(不是密码,无需 PBKDF2)。</summary>
     private static string Sha256Hex(string input) =>
@@ -126,9 +134,12 @@ public class SessionService(
         var rt = await refreshTokens.GetFirstAsync(t => t.TokenHash == Sha256Hex(refreshToken));
         if (rt is null) throw new AdminException(ErrorCode.RefreshTokenInvalid);
 
-        // 复用检测:已轮换令牌再现 = 重放,吊销整会话(攻击者与真用户一起下线,安全优先)
+        // 复用检测:已轮换令牌再现 = 重放,吊销整会话(攻击者与真用户一起下线,安全优先)。
+        // 例外:刚轮换的宽限窗内只拒绝不吊销——同一浏览器的另一个标签页刚换发成功,调用方应改用它写下的新令牌
         if (rt.Status == RefreshTokenStatus.Used)
         {
+            if (rt.UpdateTime is { } usedAt && Now - usedAt <= RotationGrace)
+                throw new AdminException(ErrorCode.RefreshTokenSuperseded);
             await RevokeAsync(rt.SessionId);
             throw new AdminException(ErrorCode.RefreshTokenInvalid);
         }
@@ -147,16 +158,22 @@ public class SessionService(
         var absolute = session.AbsoluteExpiresAt == default ? session.ExpiresAt : session.AbsoluteExpiresAt;
         if (absolute <= Now) throw new AdminException(ErrorCode.RefreshTokenInvalid);
 
-        // 原子轮换:仅当仍 Active 才置 Used;rowsAffected==0 说明已被并发轮换,按无效处理
+        // 原子轮换:仅当仍 Active 才置 Used,并记下轮换时刻(UTC,与 Now 同基准,供宽限窗判定);
+        // rowsAffected==0 说明刚被并发轮换,按「被取代」处理(与宽限窗内的重放同一个码)
+        var rotatedAt = Now;
         var rotated = await refreshTokens.Db.Updateable<SysRefreshToken>()
             .SetColumns(t => t.Status == RefreshTokenStatus.Used)
+            .SetColumns(t => t.UpdateTime == rotatedAt)
             .Where(t => t.Id == rt.Id && t.Status == RefreshTokenStatus.Active)
             .ExecuteCommandAsync();
-        if (rotated == 0) throw new AdminException(ErrorCode.RefreshTokenInvalid);
+        if (rotated == 0) throw new AdminException(ErrorCode.RefreshTokenSuperseded);
 
         // 用同一 SessionId 签发新令牌对(会话延续,不新建);令牌时长运行时可配,且不得突破绝对窗
         var (accessMin, refreshMin) = await policy.GetSessionTtlAsync();
-        var maxRemain = absolute - Now;
+        var now = Now;
+        // 没开 AbsoluteHours 时不设上限:期限随每次续期顺延,会话只在连续 refreshMin 没续期后失效
+        if (!security.IsSessionAbsoluteEnabled) absolute = now.AddMinutes(refreshMin);
+        var maxRemain = absolute - now;
         if (maxRemain <= TimeSpan.Zero) throw new AdminException(ErrorCode.RefreshTokenInvalid);
 
         var accessTtl = TimeSpan.FromMinutes(accessMin);
@@ -183,6 +200,7 @@ public class SessionService(
         var lastAct = Now;
         await sessions.Db.Updateable<SysSession>()
             .SetColumns(s => s.ExpiresAt == expiresAt)
+            .SetColumns(s => s.AbsoluteExpiresAt == absolute)
             .SetColumns(s => s.LastActivityAt == lastAct)
             .Where(s => s.SessionId == rt.SessionId)
             .ExecuteCommandAsync();
