@@ -14,6 +14,10 @@
 
 ## Unreleased
 
+### Security
+
+- **前端容器镜像在运行层补装 Alpine 的安全更新。** `caddy:2-alpine` 发布之后 Alpine 才修的包（`brotli-libs` 的 CVE-2026-111497、`curl` 的 CVE-2026-92392）在基础镜像里还是旧版，镜像扫描的 CRITICAL 闸门判红。`web/Dockerfile` 在运行层加 `apk upgrade --no-cache`，构建时取到修复版。caddy 二进制里 Go 依赖的漏洞要等上游重建镜像。
+
 ## 10.31.0 - 2026-10-29
 
 ### 升级说明
