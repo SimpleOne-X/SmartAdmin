@@ -20,6 +20,7 @@ import { vAuth } from '#/directives/auth'
 import { setupIcons } from '#/lib/icons'
 import { reloadOnChunkError, reloadOnce } from '#/lib/chunkReload'
 import { runtime, type BrandOptions } from '#/lib/runtime'
+import { installSessionSync } from '#/stores/sessionSync'
 import { useSite } from '#/composables/useSite'
 import { flatFilterSerializer } from '#/utils/tableFilter'
 import { trimTrailingSlashes } from '#/utils/url'
@@ -126,6 +127,7 @@ export function createSmartAdmin(options: SmartAdminOptions = {}): SmartAdminApp
 
   const app = createApp(AppRoot)
   app.use(pinia) // 必须在 router 之前:守卫用到 store
+  installSessionSync() // 其它标签页续期 / 退出时本页会话跟上;处理时才取 store,此刻 pinia 已就位
   // 深浅色默认 themeScheme:'auto' → 首访自动跟随系统,用户手选 light/dark 后固定(见 stores/app.ts)。
   app.use(router)
   app.use(i18n)

@@ -5,8 +5,10 @@ import { useAuthStore } from '#/stores/auth'
 import { useTabsStore } from '#/stores/tabs'
 import { loadingBar } from '#/lib/loadingBar'
 import { reloadOnChunkError } from '#/lib/chunkReload'
-import { ensureAccessToken } from '#/api/client'
+import { refreshSession } from '#/api/client'
 import { isSessionDead } from './bootFailure'
+import { loginLocation, rememberLoginRedirect, takeLoginRedirect } from './loginRedirect'
+import { isFullscreenPath } from '#/utils/url'
 import type { PreloadablePage } from './namedPage'
 import { personalApi } from '#/api'
 
@@ -52,16 +54,24 @@ router.beforeEach(async to => {
   const auth = useAuthStore()
 
   // Cookie 会话:access 只在内存,F5 后靠 cookieSession 标记 + HttpOnly refresh 静默换发。
-  // 默认模式令牌已 localStorage 水合,ensureAccessToken 立即 true。
+  // 默认模式令牌已 localStorage 水合,这一步不会触发。
+  // 只有服务端明说会话失效才清;暂时失败(后端重启、网络抖动)保留会话,需要会话的页面停在可重试的错误页,
+  // 登录页和公开页本来就不需要会话,照常往下走(不转错误页,也不清会话)。
   if (!user.accessToken && (user.cookieSession || user.refreshToken)) {
-    const ok = await ensureAccessToken()
-    if (!ok) user.clear()
+    const outcome = await refreshSession()
+    if (outcome === 'dead') user.clear()
+    else if (outcome === 'transient' && to.name !== 'login' && !to.meta.public)
+      return to.name === 'boot-error'
+        ? true
+        : { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
   }
 
   // 登录页是唯一免认证页;已登录再访问则回首页。
   // 例外:SSO 未绑定 pendingLink / SSO 后 TOTP 挑战——必须停在登录页完成账密或二次验证。
   // 若仍带着残留会话进 /login,会误弹回首页,看起来像「解绑后 GitHub 仍直接登录」。
   if (to.name === 'login') {
+    // 登录会绕路(SSO、MFA 绑定页),query 带不到登录成功那一刻,先存下来
+    rememberLoginRedirect(to.query.redirect)
     const needReauth = !!(to.query.pendingLink || to.query.totpChallenge)
     if (needReauth) {
       if (user.accessToken || user.refreshToken || user.cookieSession) {
@@ -71,13 +81,16 @@ router.beforeEach(async to => {
       }
       return true
     }
-    return user.isLoggedIn ? { path: '/', replace: true } : true
+    if (!user.isLoggedIn) return true
+    // 回跳地址带查询串时不能直接塞进 path(`?` 会被当成路径字符),要先解析成 path / query / hash。
+    const { path, query, hash } = router.resolve(takeLoginRedirect() ?? '/')
+    return { path, query, hash, replace: true }
   }
 
   // 公开的 OAuth 回调和 MFA 绑定/恢复页不能被登录守卫送回登录页。
   if (to.meta.public) return true
 
-  if (!user.isLoggedIn) return { path: '/login', replace: true }
+  if (!user.isLoggedIn) return loginLocation(to.fullPath)
 
   // 强制改密守卫:管理员建号/重置后首登,未改密前只允许停留在改密页,阻断其它一切导航
   // (含应用选择/门户重建)。改密页是静态路由,无需动态路由就绪即可渲染,故放在 routesReady 重建之前,
@@ -96,7 +109,11 @@ router.beforeEach(async to => {
     try {
       const { useModule } = await import('#/composables/useModule')
       const res = await useModule().enterInitial()
-      if (res.chooser) return to.name === 'module' ? true : { path: '/module', replace: true }
+      // 整屏页(挂墙看板)是布局壳之外的静态路由,渲染不依赖应用选择;选应用页会把无人值守的大屏拦在半路。
+      if (res.chooser)
+        return to.name === 'module' || isFullscreenPath(to.path)
+          ? true
+          : { path: '/module', replace: true }
       // 选应用页放行:enterInitial 已填好 auth.modules,渲染所需数据齐备。
       // 不能弹回 '/' —— 那样默认应用一旦设定就再无入口改它(右上角九宫格正是导航到这里)。
       if (to.name === 'module') return true
@@ -110,7 +127,7 @@ router.beforeEach(async to => {
         resetRouter()
         auth.reset()
         user.clear()
-        return { path: '/login', replace: true }
+        return loginLocation(to.fullPath)
       }
       return { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
     }

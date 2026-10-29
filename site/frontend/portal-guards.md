@@ -50,11 +50,16 @@ router.beforeEach(async to => {
 
   // Cookie session: access lives only in memory; a silent HttpOnly-refresh exchange restores it after F5.
   if (!user.accessToken && (user.cookieSession || user.refreshToken)) {
-    const ok = await ensureAccessToken()
-    if (!ok) user.clear()
+    const outcome = await refreshSession()
+    if (outcome === 'dead') user.clear()
+    else if (outcome === 'transient' && to.name !== 'login' && !to.meta.public)
+      return to.name === 'boot-error'
+        ? true
+        : { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
   }
 
   if (to.name === 'login') {
+    rememberLoginRedirect(to.query.redirect)
     const needReauth = !!(to.query.pendingLink || to.query.totpChallenge)
     if (needReauth) {
       if (user.accessToken || user.refreshToken || user.cookieSession) {
@@ -64,13 +69,15 @@ router.beforeEach(async to => {
       }
       return true
     }
-    return user.isLoggedIn ? { path: '/', replace: true } : true
+    if (!user.isLoggedIn) return true
+    const { path, query, hash } = router.resolve(takeLoginRedirect() ?? '/')
+    return { path, query, hash, replace: true }
   }
 
   // Public OAuth-callback and MFA bind/recover pages must not be bounced to login.
   if (to.meta.public) return true
 
-  if (!user.isLoggedIn) return { path: '/login', replace: true }
+  if (!user.isLoggedIn) return loginLocation(to.fullPath)
 
   if (user.userInfo?.mustChangePassword) {
     return to.path === '/personal/password' ? true : { path: '/personal/password', replace: true }
@@ -84,7 +91,10 @@ router.beforeEach(async to => {
     try {
       const { useModule } = await import('#/composables/useModule')
       const res = await useModule().enterInitial()
-      if (res.chooser) return to.name === 'module' ? true : { path: '/module', replace: true }
+      if (res.chooser)
+        return to.name === 'module' || isFullscreenPath(to.path)
+          ? true
+          : { path: '/module', replace: true }
       if (to.name === 'module') return true
       if (to.path === '/') return { path: auth.homePath, replace: true }
       return to.fullPath
@@ -95,7 +105,7 @@ router.beforeEach(async to => {
         resetRouter()
         auth.reset()
         user.clear()
-        return { path: '/login', replace: true }
+        return loginLocation(to.fullPath)
       }
       return { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
     }
@@ -108,9 +118,11 @@ router.beforeEach(async to => {
 
 It handles these things, in order:
 
-**Silent token refresh for a Cookie session.** When there's no `accessToken` in memory but either a `cookieSession` flag or a `refreshToken` is still around, the guard first `await`s `ensureAccessToken()` for a silent refresh. In Cookie-session mode `accessToken` lives only in memory, so it's inevitably empty after an F5, and has to be restored via the HttpOnly refresh cookie; in the default mode the token is already hydrated from `localStorage`, so this resolves immediately and falls through. A failed refresh clears whatever login state is left locally.
+**Silent token refresh for a Cookie session.** When there's no `accessToken` in memory but either a `cookieSession` flag or a `refreshToken` is still around, the guard first `await`s `refreshSession()` for a silent renewal. In Cookie-session mode `accessToken` lives only in memory, so it's inevitably empty after an F5, and has to be restored via the HttpOnly refresh cookie; in the default mode the token is already hydrated from `localStorage`, so this step doesn't fire. There are three outcomes: `ok` falls through; `dead` (the server says outright the session is gone) clears whatever login state is left locally; `transient` (network jitter, a backend restart, a rate limit — the session may well still be valid) keeps the session, and sends a page that needs one to the retryable `/boot-error`, while the login page and `meta.public` pages, which never needed a session, pass through as usual.
 
-**Login redirect, including SSO re-verification.** `/login` is the one auth-free page; an already-logged-in user visiting it is bounced back to `/`. The exception is a URL carrying `pendingLink` (an unlinked SSO account) or `totpChallenge` (a second factor after SSO) — both must stay on the login page to finish the password or second-factor step, even with a leftover session still attached (skip the cleanup and a user could see the odd sight of unlinking a third-party account, then logging back in and sailing straight past the login page).
+**Login redirect, including SSO re-verification.** `/login` is the one auth-free page; an already-logged-in user visiting it is bounced to the remembered redirect target, or `/` if there is none. The exception is a URL carrying `pendingLink` (an unlinked SSO account) or `totpChallenge` (a second factor after SSO) — both must stay on the login page to finish the password or second-factor step, even with a leftover session still attached (skip the cleanup and a user could see the odd sight of unlinking a third-party account, then logging back in and sailing straight past the login page).
+
+**Back to where you were after login.** An unauthenticated visit to a page (say, the deep link of a wall-mounted board) sends the user to `/login?redirect=<original address>` (no `redirect` when the address is the home page); a session that dies mid-use returns to the login page with the current address the same way. The login page stashes `redirect` in `sessionStorage` on entry, because sign-in can detour (an SSO round trip, the MFA bind page) and the query never survives to the moment login succeeds; once it does, `takeLoginRedirect()` reads it and deletes it, and the user lands back on the original address. `redirect` comes from the URL and is untrusted: only a same-site absolute path is accepted, and `//evil.com`, `/\evil.com` (and their percent-encoded forms such as `/%2F%2Fevil.com`), `https://…` and the login page itself are all dropped (`safeRedirect` in `router/loginRedirect.ts`), so it can't be abused as an open redirect.
 
 **`meta.public` passes straight through.** Public routes like the OAuth callback and MFA bind/recovery aren't caught by the "not logged in → send to `/login`" check below.
 
@@ -118,7 +130,7 @@ It handles these things, in order:
 
 **`boot-error` passes itself through.** It's where a failed portal rebuild lands, and it can't be caught by the rebuild guard below and retried, or it loops forever.
 
-**The refresh / deep-link rebuild, triage by error kind.** Dynamic routes live only in the router's in-memory route table — they aren't persisted. On a hard refresh or a directly-opened deep link, `auth.routesReady` is inevitably `false` and none of the `menu-{id}` routes are registered yet. The guard detects this and calls `enterInitial()` right here — which both rebuilds the routes and fills in `auth.modules`, so the portal's decision and the guard's rebuild share one and the same call. With the result in hand the guard then decides where to go: chooser result → `/module` (already headed to `/module` → let it through directly, because the data the chooser page needs is now ready and it must not be bounced back to `/`, or once a default app is set there'd be no way in to change it); target is `/` → resolve to `auth.homePath` directly; anything else → re-return `to.fullPath` so the same URL resolves again now that its route exists. A thrown `enterInitial()` doesn't clear the session unconditionally: `isSessionDead(e)` (`router/bootFailure.ts`) triages first — only an HTTP 401, or one of the two backend codes that explicitly say the token is invalid, counts as the session being genuinely gone, and gets the session cleared and the user sent to `/login`; network jitter, a 5xx, or a rate limit stay put and land on a retryable `/boot-error` instead of conflating a network hiccup with a lost session.
+**The refresh / deep-link rebuild, triage by error kind.** Dynamic routes live only in the router's in-memory route table — they aren't persisted. On a hard refresh or a directly-opened deep link, `auth.routesReady` is inevitably `false` and none of the `menu-{id}` routes are registered yet. The guard detects this and calls `enterInitial()` right here — which both rebuilds the routes and fills in `auth.modules`, so the portal's decision and the guard's rebuild share one and the same call. With the result in hand the guard then decides where to go: chooser result → `/module` (already headed to `/module` → let it through directly, because the data the chooser page needs is now ready and it must not be bounced back to `/`, or once a default app is set there'd be no way in to change it; a full-screen page (`/fullscreen/*`, a wall-mounted board) also passes straight through — it is a static route outside the layout shell and does not depend on the app choice, and the chooser would only strand an unattended screen halfway); target is `/` → resolve to `auth.homePath` directly; anything else → re-return `to.fullPath` so the same URL resolves again now that its route exists. A thrown `enterInitial()` doesn't clear the session unconditionally: `isSessionDead(e)` (`router/bootFailure.ts`) triages first — only an HTTP 401, or a backend code that explicitly says the token is invalid or the account is disabled, counts as the session being genuinely gone, and gets the session cleared and the user sent to `/login` (with `redirect`); network jitter, a 5xx, or a rate limit stay put and land on a retryable `/boot-error` instead of conflating a network hiccup with a lost session.
 
 Two spots here that don't return `to.fullPath` are worth noticing. When the target is `/`, returning `to.fullPath` would be a redirect to itself — and `/` has no static `redirect`, so Vue Router would flag it as an infinite redirect. The other trap is subtler: this rebuild logic can't short-circuit on `to.meta.public`, because a not-yet-registered dynamic route first hits the catch-all (404), which carries the `public` flag — honor `public` and let it through, and the user sees a bogus 404 instead of the correct, rebuilt page.
 

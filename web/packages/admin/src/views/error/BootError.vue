@@ -9,6 +9,7 @@ import AppIcon from '#/components/AppIcon.vue'
 import { useAuthStore } from '#/stores/auth'
 import { useUserStore } from '#/stores/user'
 import { resetRouter } from '#/router'
+import { loginLocation } from '#/router/loginRedirect'
 import LoginDesk from '#/views/login/components/LoginDesk.vue'
 
 const route = useRoute()
@@ -26,7 +27,7 @@ function relogin() {
   resetRouter()
   useAuthStore().reset()
   useUserStore().clear()
-  router.replace('/login')
+  router.replace(loginLocation(redirect.value)) // 重新登录后回到加载失败的那个页面
 }
 </script>
 

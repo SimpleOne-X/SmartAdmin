@@ -58,7 +58,7 @@ export function createApiClient<P extends {}>(): Client<P> {
 export const client = createApiClient<paths>()
 
 // 刷新专用客户端:不挂刷新中间件,避免刷新自身 401 触发递归;
-// 但也要有超时闸:它挂住时路由守卫会一起卡在 ensureAccessToken 上,整页停在白屏。
+// 但也要有超时闸:它挂住时路由守卫的静默续期会一起卡住,整页停在白屏。
 const bare = followApiBase(baseUrl => {
   const c = createClient<paths>({ baseUrl, credentials: 'include' })
   c.use(timeoutMiddleware)
@@ -84,7 +84,7 @@ const timeoutMiddleware: Middleware = {
 }
 ```
 
-默认 30 秒；上传、分片、导出、导入提交这类天然慢的调用，在 api 层显式传一个 `timeout`（毫秒），openapi-fetch 会把这类自定义键原样挂到 `Request` 上。这道闸必须**最先**注册：后面的重放中间件要克隆的是最终发出的那个 `Request`，顺序反了就克隆到一份还没挂超时信号的旧请求。调用方自己传的 `signal` 依然生效，`AbortSignal.any` 把它和超时信号并起来，谁先触发算谁，不是拿超时顶掉调用方的取消能力。`bare` 也单独挂了这一道：刷新请求自己卡死，路由守卫的 `ensureAccessToken` 会跟着一起卡在原地，整页停在白屏。
+默认 30 秒；上传、分片、导出、导入提交这类天然慢的调用，在 api 层显式传一个 `timeout`（毫秒），openapi-fetch 会把这类自定义键原样挂到 `Request` 上。这道闸必须**最先**注册：后面的重放中间件要克隆的是最终发出的那个 `Request`，顺序反了就克隆到一份还没挂超时信号的旧请求。调用方自己传的 `signal` 依然生效，`AbortSignal.any` 把它和超时信号并起来，谁先触发算谁，不是拿超时顶掉调用方的取消能力。`bare` 也单独挂了这一道：刷新请求自己卡死，路由守卫的静默续期会跟着一起卡在原地，整页停在白屏。
 
 ### 认证中间件，外加写请求的 CSRF
 
@@ -122,14 +122,10 @@ const refreshMiddleware: Middleware = {
     const url = request.url
     if (url.includes('/api/v1/auth/refresh') || url.includes('/api/v1/auth/login')) return response
 
-    const ok = await refreshOnce()
-    if (!ok) {
-      useUserStore().clear()
-      const { useAuthStore } = await import('#/stores/auth')
-      useAuthStore().reset()
-      const { router, resetRouter } = await import('#/router') // 惰性引入,避免与 router 静态循环依赖
-      resetRouter()
-      if (router.currentRoute.value.path !== '/login') router.replace('/login')
+    const outcome = await refreshSession()
+    if (outcome === 'transient') throw new RefreshUnavailableError() // 会话可能仍有效:保留会话,这次请求按网络错误失败
+    if (outcome === 'dead') {
+      await endLocalSession() // 清令牌、auth.reset()、resetRouter(),回登录页并带上当前地址
       return response
     }
     // 重放:优先用发出前的克隆副本(body 未被消费),无副本的 GET 直接用原请求;裸 fetch 绕过中间件,手动补新令牌 + CSRF。
@@ -147,46 +143,55 @@ const refreshMiddleware: Middleware = {
 遇到 401，依次发生：
 
 1. **跳过刷新和登录接口自身**：`/auth/refresh` 或 `/auth/login` 返回的 401 是真实的凭证失败，不是令牌过期。把它也塞进刷新流程，会死循环。
-2. **`refreshOnce()`**：并发合流。同一时刻要是有好几个请求一起 401，也只发一次 `/auth/refresh`，让大家都等同一个 promise:
+2. **`refreshSession()`**：并发合流，并给出分诊结果。同一时刻要是有好几个请求一起 401，也只发一次 `/auth/refresh`，让大家都等同一个 promise:
    ```ts
-   let refreshing: Promise<boolean> | null = null
-   function refreshOnce(): Promise<boolean> {
+   type RefreshOutcome = 'ok' | 'dead' | 'transient'
+   let refreshing: Promise<RefreshOutcome> | null = null
+   function refreshSession(): Promise<RefreshOutcome> {
      refreshing ??= doRefresh().finally(() => { refreshing = null })
      return refreshing
    }
    ```
-3. **刷新失败**（没有 refreshToken、网络错误、`code` 非零，或没有 `data`）：清空 `user` 的令牌，`auth.reset()` 清掉授权态，`resetRouter()` 拆掉动态路由，再跳转 `/login`。这里 router 用的是惰性 import，免得和 `client.ts` 形成静态循环依赖。
+3. **按结果分流**。`dead`：服务端明说会话失效（HTTP 401 / 403，或业务码 `40005` 账号停用、`40006` / `40007` 令牌无效），`endLocalSession()` 清空 `user` 的令牌，`auth.reset()` 清掉授权态，`resetRouter()` 拆掉动态路由，再跳 `/login?redirect=<当前地址>`，重新登录后回到原页面（见[路由守卫](/zh/frontend/portal-guards)）。这里 router 用的是惰性 import，免得和 `client.ts` 形成静态循环依赖。`transient`：网络错误、超时、5xx、429 这类服务端没给出结论的失败，保留会话，触发续期的这次请求以 `RefreshUnavailableError` 失败，下一次请求再续。这个错误刻意**不是** `ApiError`：触发续期的那个 401，响应体是业务码 `40006`，交回去会被调用方（包括启动守卫的 `isSessionDead`）读成「会话没了」。换成普通错误后按网络故障处理：启动守卫转到可重试的 `/boot-error`，普通页面只是这一次请求失败，`translateError` 给出本地化提示。后端发版重启期间长开的页面只是取数失败，不会被踢回登录页。
 4. **刷新成功**：用发出前存的克隆副本重建请求，补上刚刷新出来的新令牌，写请求再重新附一次 CSRF 头，再用**裸 `fetch()`** 重放。GET/HEAD 本来就没克隆，直接用原始请求。这里特意不再走一次 `client.GET/POST(...)`。再走 `client`，后面几个中间件会在这次重放上又跑一遍。万一新令牌也被拒，又是一次 401，就会递归进下一轮刷新。
 
 ### 为什么 `doRefresh` 用 `bare` 而不是 `client`
 
 ```ts
-async function doRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<RefreshOutcome> {
   const user = useUserStore()
+  // 别的标签页已经续过期:接手它写下的新令牌,不再拿本页的旧令牌去换
+  if (!user.cookieSession && user.adoptFromStorage()) return 'ok'
   // Cookie 会话:body 不带 refresh(服务端读 smart_rt);body 模式:必须有 refreshToken
-  if (!user.cookieSession && !user.refreshToken) return false
+  if (!user.cookieSession && !user.refreshToken) return 'dead'
 
-  const headers: Record<string, string> = {}
-  if (user.cookieSession || readCookie(CSRF_COOKIE)) {
-    const csrf = readCookie(CSRF_COOKIE)
-    if (csrf) headers[CSRF_HEADER] = csrf
+  // postRefresh 经 bare 发 /auth/refresh(附 CSRF 头;Cookie 模式 body 的 refreshToken 留空);网络错误、超时返回 null
+  let res = await postRefresh(user)
+  // 40037:见下一节。判断必须排在 dead 判定之前
+  if (res?.env?.code === REFRESH_SUPERSEDED_CODE) { /* 等其它标签页 / 重发 */ }
+  if (!res) return 'transient'
+
+  const { response, env } = res
+  if (response.status === 401 || response.status === 403 || isSessionDeadCode(env?.code)) return 'dead'
+  if (response.ok && env?.code === 0 && env.data) {
+    user.setSession(env.data as Parameters<typeof user.setSession>[0])
+    return 'ok'
   }
-
-  const { data, error } = await bare.POST('/api/v1/auth/refresh', {
-    // Cookie 模式刷新令牌在 HttpOnly Cookie 里,body 的 refreshToken 留空:服务端 body 为空才读 Cookie
-    body: user.cookieSession ? { refreshToken: '' } : { refreshToken: user.refreshToken },
-    headers,
-  })
-  const env = data as { code?: number; data?: unknown } | undefined
-  if (error || !env || env.code !== 0 || !env.data) return false
-  user.setSession(env.data as Parameters<typeof user.setSession>[0])
-  return true
+  return 'transient' // 5xx、429、其它业务码:会话可能仍有效
 }
 ```
 
 `bare` 是用同一份 schema 建的第二个 `openapi-fetch` 客户端，**不挂认证 / 刷新 / 再认证这三个中间件**（超时闸例外，两个客户端都挂）。刷新请求走 `bare`，好处是它不会递归。就算刷新本身失败，比如 refreshToken 也过期了、接口照样答 401，这个 401 也进不了 `refreshMiddleware.onResponse`，因为 `bare` 上根本没有认证/刷新中间件链可以递归。`onResponse` 里那道跳过 `/auth/refresh`/`/auth/login` 的 URL 判断只是第二道保险，顺带覆盖经 `client` 调用登录失败的情况。刷新请求自身能防住递归，根子上靠的是它压根不在 `client` 的中间件链上。
 
 正因为 `bare` 没有 `authMiddleware`，`doRefresh` 才要自己手动附 CSRF 头。Cookie 会话下服务端从 `smart_rt` 这个 HttpOnly Cookie 读刷新令牌，body 留空即可；默认模式下服务端只认请求体、不读 Cookie，body 必须带 `refreshToken`。
+
+### 同一浏览器的多个标签页
+
+默认模式下各标签页共用 `localStorage` 里的那份会话，而刷新令牌每次续期都会轮换：一个标签页换到新令牌后，其它标签页内存里的旧令牌就过期了，再拿它去换只会撞上服务端的重放检测。所以有三道配合：
+
+- **先接手**：`doRefresh` 开头先 `user.adoptFromStorage()`，存储里的刷新令牌签发得比本页**更晚**，就整体接手（访问令牌、刷新令牌、用户信息），不再发刷新请求。「更晚」靠 `issuedAt` 判断：它是随会话一起落盘的本地单调递增戳，令牌本身是不透明串、比不出先后。落后的标签页把旧令牌写回存储（比如回填头像时整份落盘），戳比别人的旧，其它标签页不会接手。Cookie 会话的令牌在浏览器 Cookie 里，各标签页天然共用，不需要接手。
+- **输了就等**：两个标签页恰好同时续期，落败的一方服务端回业务码 `40037`（`RefreshTokenSuperseded`，只拒绝、不吊销会话）。`storage` 事件和 `40037` 响应谁先到都有可能，所以默认模式每 200ms 看一次，最多等 5 秒：内存里的刷新令牌已不是发出去的那个（事件抢先接手了新令牌），或存储里出现了更新的令牌，就重放原请求；两者都没有，按暂时失败处理，会话保留，下次请求再续。Cookie 会话浏览器里的 Cookie 已经是新的，隔 500ms 重发刷新请求，最多 3 次。本页不会因为 `40037` 清会话：服务端没有说会话失效。
+- **跟着变**：`installSessionSync()`（`createSmartAdmin` 里装一次）监听 `storage` 事件，判断依据是事件自带的 `newValue`，不是处理时存储里的当前值。别的标签页续期后本页内存跟上；事件里的戳比本页会话旧时，本页把自己的会话写回存储，让存储最终落在最新令牌上；别的标签页退出登录后，本页同样清会话、回登录页，回到当前地址；停在中转页（`/boot-error`、`/oauth/callback`、`/mfa/bind`）时回到该页自带的 `redirect`。
 
 ### 403 短时再认证（reauth）
 

@@ -868,7 +868,7 @@ export default {
       historyOff: '新密码可以和旧密码相同',
       firstChange: '管理员新建的账号首次登录必须修改密码',
       firstChangeOff: '新建账号首次登录不用修改密码',
-      session: '访问令牌 {access} 后自动续期,最长 {refresh} 不用重新登录',
+      session: '访问令牌 {access} 后自动续期,连续 {refresh} 没续期才需重新登录',
       rateLimit: '同一来源每 {seconds} 秒最多 {permit} 次请求',
     },
     job: {
@@ -1039,7 +1039,7 @@ export default {
       },
       session: {
         accessMinutes: '访问令牌有效期',
-        refreshMinutes: '最长免登录',
+        refreshMinutes: '连续未续期多久需重新登录',
       },
       captcha: {
         enabled: '登录验证码',
@@ -1798,6 +1798,7 @@ export default {
     network: {
       timeout: '请求超时,请检查网络后重试',
       aborted: '请求已取消',
+      refreshUnavailable: '登录状态暂时无法确认,请稍后重试',
     },
     auth: {
       passwordWrong: '账号或密码错误',
@@ -1807,6 +1808,7 @@ export default {
       accountDisabled: '账号已停用',
       tokenInvalid: '登录状态无效,请重新登录',
       refreshTokenInvalid: '登录已过期,请重新登录',
+      refreshTokenSuperseded: '登录状态已在其它页面更新，请重试',
       tooManyRequests: '操作过于频繁,请稍后再试',
       smsCodeRequired: '请输入短信验证码',
       smsCodeWrong: '短信验证码错误',
