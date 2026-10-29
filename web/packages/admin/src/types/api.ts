@@ -710,10 +710,12 @@ export interface ExportColumnDef {
   defaultSelected?: boolean
 }
 
-/** 单元格级错误:只带码,文案由前端 translateError(code) 渲染。 */
+/** 单元格级错误:只带码不带文案,由 translateCellError 渲染。 */
 export interface CellError {
   columnKey: string
   code: number
+  /** 后端按错误码登记表解析出的键;消费者自己的业务码只能靠它找到文案。 */
+  msgKey?: string | null
   args?: Record<string, unknown> | null
 }
 

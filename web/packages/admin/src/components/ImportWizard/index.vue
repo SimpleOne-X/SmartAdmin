@@ -30,7 +30,7 @@ import { useI18n } from 'vue-i18n'
 import { SmartTable, type SmartTableColumn } from 'smart-naive-table'
 import AppIcon from '#/components/AppIcon.vue'
 import DictSelect from '#/components/DictSelect/index.vue'
-import { translateError } from '#/utils/error'
+import { translateCellError, translateError } from '#/utils/error'
 import { triggerBlobDownload } from '#/utils/download'
 import { hardErrorsOf as hardErrors, isDuplicateOnly, isHardError } from '#/utils/importDup'
 import type {
@@ -304,8 +304,7 @@ const previewColumns = computed<SmartTableColumn<ImportRow>[]>(() => {
           { trigger: 'hover' },
           {
             trigger: () => cell,
-            default: () =>
-              soft ? t(`import.dupHint.${strategy.value}`) : translateError(err.code),
+            default: () => (soft ? t(`import.dupHint.${strategy.value}`) : translateCellError(err)),
           },
         )
       },
@@ -342,7 +341,7 @@ const previewColumns = computed<SmartTableColumn<ImportRow>[]>(() => {
             h(NTag, { size: 'small', type: 'error', bordered: false }, () =>
               t('import.errorCount', { n: hard.length }),
             ),
-          default: () => hard.map(e => `${e.columnKey}: ${translateError(e.code)}`).join('\n'),
+          default: () => hard.map(e => `${e.columnKey}: ${translateCellError(e)}`).join('\n'),
         },
       )
     },
@@ -471,7 +470,7 @@ function close() {
     <!-- ② 列映射 -->
     <div v-show="step === 2" class="import-pane">
       <n-alert v-if="columnErrors.length" type="warning" style="margin-bottom: 12px">
-        {{ columnErrors.map(e => `${e.columnKey}: ${translateError(e.code)}`).join('; ') }}
+        {{ columnErrors.map(e => `${e.columnKey}: ${translateCellError(e)}`).join('; ') }}
       </n-alert>
       <n-text depth="3" style="display: block; margin-bottom: 12px">
         {{ t('import.mappingHint') }}

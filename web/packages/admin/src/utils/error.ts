@@ -1,8 +1,9 @@
 import { i18n, t } from '#/locales'
 import { ApiError } from '#/api'
+import type { CellError } from '#/types/api'
 
 /**
- * 数值 ErrorCode → msgKey(镜像后端 [MsgKey];CellError 只带码不带文案)。
+ * 数值 ErrorCode → msgKey(镜像后端 [MsgKey]),给没带 msgKey 的错误兜底。
  * 只列导入预览会在单元格/列错误里出现的码 + 常见下载失败码;其余走兜底。
  */
 const CODE_MSG_KEY: Record<number, string> = {
@@ -51,7 +52,7 @@ function translatedArgs(args?: Record<string, unknown> | null): Record<string, u
 
 /**
  * 把任意错误翻成用户可读文案:
- *   - 数字 ErrorCode(CellError.code) → 按码查 i18n
+ *   - 数字 ErrorCode → 按码查 i18n(导入单元格错误用 translateCellError,它还认 msgKey 与 args)
  *   - 超时 / 主动取消 → 专门文案(否则用户看到浏览器的英文原话)
  *   - ApiError.msgKey 命中 i18n → 本地化文案;否则退回 message;再退回通用兜底。
  * 纯函数,不依赖 Naive —— 视图拿到字符串后自行 useMessage 弹出。
@@ -88,4 +89,15 @@ export function translateErrorDetail(err: unknown): string {
     return err.message
   }
   return translateError(err)
+}
+
+/**
+ * 导入单元格 / 列错误的文案:msgKey 命中 i18n 时按它翻译并填 args,否则按数字码兜底。
+ * 消费者强转进来的业务码不在 CODE_MSG_KEY 里,只按码查会全落到兜底文案。
+ */
+export function translateCellError(e: CellError): string {
+  if (e.msgKey && i18n.global.te(e.msgKey)) return t(e.msgKey, translatedArgs(e.args))
+  const key = CODE_MSG_KEY[e.code]
+  if (key && i18n.global.te(key)) return t(key, translatedArgs(e.args))
+  return t('error._fallback')
 }

@@ -115,6 +115,8 @@ public class SampleDocImportProfile(IRepository<SampleDoc> repo, ISampleDocServi
 
 A non-empty `DictTypeCode` marks a dictionary column: template dropdown, import label→value, export value→label. The runner already handles required fields, dict values, and in-file duplicates; `ValidateRowAsync` only adds cross-column and FK rules.
 
+`ValidateRowAsync` can report your own business codes: `new CellError("Line", (ErrorCode)WoErrorCode.LineBusy, new Dictionary<string, object?> { ["line"] = "L1" })`. If the enum the code lives in is [registered](/backend/error-codes#registering-your-own-codes), the `CellError` carries that enum's own `msgKey`; the wizard looks up the text by it and fills placeholders from `Args`. An unregistered code is just a number, and the wizard can only show the generic "operation failed" fallback.
+
 ::: danger Dict column validation must be idempotent
 After a successful check the runner **rewrites** labels in `row.Cells` to values before returning the preview. When the user fixes cells and resubmits the same rows to validate/commit, the cells already hold values. A parser that only accepts labels will fail every preview-green row with `46006` on the second pass, and the wizard is unusable.
 When you wire your own entity, feed **Preview output** into Validate/Commit in tests — do not hand-build label rows every time. Regression shape: `PreviewRows_FedBackTo_ValidateAndCommit_AreIdempotentOnDictColumns`.

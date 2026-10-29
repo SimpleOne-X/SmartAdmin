@@ -19,6 +19,8 @@ RUN npm run build
 # 用 Caddy 托管:真上域名时把 Caddyfile 的 `:8080` 换成域名,即自动申请/续期 Let's Encrypt 证书
 # (见 web/Caddyfile 头注释)。要用 nginx:把下面两行换成 nginx:alpine + web/nginx.conf。
 FROM caddy:2-alpine AS runtime
+# 基础镜像发布之后 Alpine 才修的包(如 brotli-libs、curl)靠这一层补上,否则镜像扫描的 CRITICAL 闸门判红
+RUN apk upgrade --no-cache
 COPY web/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /src/template/dist /srv
 
