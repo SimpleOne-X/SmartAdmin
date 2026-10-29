@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import '#/locales' // 真 i18n(默认 zh-CN),不 mock
+import { i18n } from '#/locales' // 真 i18n(默认 zh-CN),不 mock
 import { ApiError } from '#/api'
-import { translateError, translateErrorDetail } from './error'
+import { translateCellError, translateError, translateErrorDetail } from './error'
 
 describe('translateError', () => {
   it('ApiError.msgKey 命中 i18n → 本地化文案', () => {
@@ -100,5 +100,34 @@ describe('translateErrorDetail', () => {
     // ProblemDetails(400/500)一类信封没有 msgKey,原文必须透出,不能被兜底文案盖掉。
     expect(translateErrorDetail(new ApiError(1, undefined, undefined, '明细原文'))).toBe('明细原文')
     expect(translateErrorDetail(new Error('Failed to fetch'))).toBe('Failed to fetch')
+  })
+})
+
+describe('translateCellError', () => {
+  // 消费者在导入档案里报自己的业务码,数字表里没有它;只按码查,向导里全是兜底文案。
+  it('消费者 msgKey 命中 i18n → 按它翻译并填 args', () => {
+    i18n.global.mergeLocaleMessage('zh-CN', {
+      error: { demo: { lineBusy: '产线 {line} 正在占用' } },
+    })
+    const e = {
+      columnKey: 'Line',
+      code: 61001,
+      msgKey: 'error.demo.lineBusy',
+      args: { line: 'L1' },
+    }
+    expect(translateCellError(e)).toBe('产线 L1 正在占用')
+  })
+
+  it('内核码没有 msgKey 或 msgKey 未命中 → 按数字码回落', () => {
+    expect(translateCellError({ columnKey: 'Name', code: 46005 })).toBe('该单元格为必填项')
+    expect(
+      translateCellError({ columnKey: 'Name', code: 46005, msgKey: 'error.no.such', args: null }),
+    ).toBe('该单元格为必填项')
+  })
+
+  it('码与 msgKey 都查不到 → 兜底文案', () => {
+    expect(translateCellError({ columnKey: 'X', code: 99999, msgKey: null })).toBe(
+      '操作失败,请稍后重试',
+    )
   })
 })

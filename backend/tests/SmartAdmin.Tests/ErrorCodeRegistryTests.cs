@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text.Json;
 using SmartAdmin.Core;
 using SmartAdmin.TestHost;
 
@@ -35,6 +36,22 @@ public class ErrorCodeRegistryTests
 
         Assert.Equal(60001, env.GetProperty("code").GetInt32());
         Assert.Equal("error.sample.widgetBusy", env.GetProperty("msgKey").GetString());
+    }
+
+    /// <summary>导入单元格错误同样带消费者自己的 msgKey;前端回传的行里带着 msgKey 也照常反序列化。</summary>
+    [Fact]
+    public void Cell_error_carries_consumer_msgkey_and_round_trips()
+    {
+        ErrorCodeRegistry.Register(typeof(IdempotentCodes));
+        var error = new CellError("K", (ErrorCode)IdempotentCodes.One, new Dictionary<string, object?> { ["n"] = 3 });
+
+        var json = JsonSerializer.SerializeToElement(error, JsonSerializerOptions.Web);
+        Assert.Equal(61001, json.GetProperty("code").GetInt32());
+        Assert.Equal("error.idempotent.one", json.GetProperty("msgKey").GetString());
+
+        var back = JsonSerializer.Deserialize<CellError>(json, JsonSerializerOptions.Web)!;
+        Assert.Equal((ErrorCode)IdempotentCodes.One, back.Code);
+        Assert.Equal("error.idempotent.one", back.MsgKey);
     }
 
     [Fact]

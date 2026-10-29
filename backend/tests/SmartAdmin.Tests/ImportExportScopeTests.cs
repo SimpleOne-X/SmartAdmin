@@ -108,7 +108,8 @@ public class ImportExportScopeTests
         Assert.NotEmpty(failures);
         Assert.Contains(failures, row =>
             row.GetProperty("errors").EnumerateArray()
-                .Any(e => e.GetProperty("code").GetInt32() == (int)ErrorCode.ImportOrgOutOfScope));
+                .Any(e => e.GetProperty("code").GetInt32() == (int)ErrorCode.ImportOrgOutOfScope
+                    && e.GetProperty("msgKey").GetString() == "error.import.orgOutOfScope"));
 
         using var check = f.Services.CreateScope();
         var exists = await check.ServiceProvider.GetRequiredService<IRepository<SysUser>>()

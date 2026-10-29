@@ -115,6 +115,8 @@ public class SampleDocImportProfile(IRepository<SampleDoc> repo, ISampleDocServi
 
 列上 `DictTypeCode` 非空即为字典列：模板出真下拉，导入 label→value，导出 value→label。Runner 已做必填、字典、文件内重复；`ValidateRowAsync` 只补跨列与外键。
 
+`ValidateRowAsync` 可以报自己的业务码：`new CellError("Line", (ErrorCode)WoErrorCode.LineBusy, new Dictionary<string, object?> { ["line"] = "L1" })`。码所在的枚举[登记过](/zh/backend/error-codes#登记自己的错误码)，`CellError` 就带上它自己的 `msgKey`，向导按它查文案，用 `Args` 填占位符。没登记的码只剩数字，向导只能显示「操作失败」的兜底文案。
+
 ::: danger 字典列校验必须幂等
 校验成功后，Runner 会把单元格里的 label **就地改成 value** 再返回前端。用户改完错把同一批行送回「重新校验 / 提交」时，Cells 里已经是 value。只认 label、不认合法 value 的解析，会让预览通过的行在第二步全部被判 `46006`，向导整条不可用。
 给自己实体写测试时，把 **Preview 的输出**喂回 Validate / Commit，不要每次手造带 label 的行。回归形状见 `PreviewRows_FedBackTo_ValidateAndCommit_AreIdempotentOnDictColumns`。

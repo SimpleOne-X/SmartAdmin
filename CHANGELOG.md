@@ -14,6 +14,10 @@
 
 ## Unreleased
 
+### Added
+
+- **导入向导按消费方自己的错误码显示单元格错误文案。** `CellError` 新增 `MsgKey`，与统一信封同一套解析：消费方在 `IImportProfile.ValidateRowAsync` 里报 `(ErrorCode)自己的码`，只要那个枚举登记过，单元格错误就带它自己的 `[MsgKey]`。前端新增 `translateCellError`：先按 `msgKey` 翻译并用 `args` 填占位符，查不到再按数字码回落；`ImportWizard` 的单元格提示、错误数提示和列映射告警都改用它。以前这些码在向导里一律显示兜底文案。内核 46xxx 码的显示不变。
+
 ### Security
 
 - **前端容器镜像在运行层补装 Alpine 的安全更新。** `caddy:2-alpine` 发布之后 Alpine 才修的包（`brotli-libs` 的 CVE-2026-111497、`curl` 的 CVE-2026-92392）在基础镜像里还是旧版，镜像扫描的 CRITICAL 闸门判红。`web/Dockerfile` 在运行层加 `apk upgrade --no-cache`，构建时取到修复版。caddy 二进制里 Go 依赖的漏洞要等上游重建镜像。

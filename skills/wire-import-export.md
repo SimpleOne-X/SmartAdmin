@@ -329,6 +329,7 @@ var commit = await runner.CommitAsync(preview.Rows, profile, DuplicateStrategy.S
 - [ ] `AddSmartAdminExcel()` 写在 `AddSmartAdmin()` **之前**
 - [ ] `IExportProfile` 已注册；导出取数与列表同源
 - [ ] `IImportProfile`：`CommitRowAsync` 走领域服务，不直插
+- [ ] `ValidateRowAsync` 报自己的业务码 → 所在枚举已登记（`ApplicationAssemblies` 或 `ErrorCodeEnums`），否则向导只显示兜底文案
 - [ ] 六个端点鉴权正确（template=`ActiveSession`，其余 `RolePermission`；commit/export 有 `OperationLog`）
 - [ ] 菜单按钮种子 Permission 与路由一致；系统模块 Id 不回填空洞
 - [ ] 有字典列 → 幂等测试（Preview 输出 → Validate/Commit）

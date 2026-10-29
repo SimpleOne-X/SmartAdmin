@@ -47,8 +47,15 @@ public sealed class ImportRow
     public List<CellError> Errors { get; set; } = [];
 }
 
-/// <summary>单元格级错误。<b>只带码不带文案</b>:前端按 code 查 i18n 渲染。</summary>
-public sealed record CellError(string ColumnKey, ErrorCode Code, IReadOnlyDictionary<string, object?>? Args = null);
+/// <summary>单元格级错误。<b>只带码不带文案</b>:前端按 msgKey 查 i18n 渲染,没有 msgKey 时按 code。</summary>
+public sealed record CellError(string ColumnKey, ErrorCode Code, IReadOnlyDictionary<string, object?>? Args = null)
+{
+    /// <summary>
+    /// 与统一信封同一套解析(<see cref="ErrorCodeRegistry"/>):消费者强转进来的业务码只要登记过,
+    /// 这里就是它自己的 <see cref="MsgKeyAttribute"/>;前端只认数字码时,消费者的码全落到兜底文案。
+    /// </summary>
+    public string MsgKey => Code.GetMsgKey();
+}
 
 /// <summary>预览/重验结果。</summary>
 public sealed class ImportPreview
