@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.31.0 - 2026-10-29
+
 ### 升级说明
 
 - **没配 `AbsoluteHours` 的部署，一直在用的会话不再到登录满 `refreshMinutes`（默认 7 天）时失效。** 会话改为在连续 `refreshMinutes` 没续期后才失效。要「登录满 N 小时必须重登」的部署，显式配 `SmartAdmin:Security:Session:AbsoluteHours`；配了之后期限仍从登录时刻算，续期不能突破，与以前相同。
