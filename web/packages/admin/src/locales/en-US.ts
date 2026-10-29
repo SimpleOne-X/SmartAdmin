@@ -60,6 +60,8 @@ export default {
     desc: 'We could not fetch your apps and menus. This is usually a network problem or a temporarily unavailable server. You are still signed in.',
     retry: 'Retry',
     relogin: 'Sign in again',
+    autoRetry:
+      'Retrying automatically every 30 seconds; you will be taken back once the server is available.',
   },
   missingRoute: {
     title: 'Menu page unavailable',

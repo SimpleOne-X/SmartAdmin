@@ -77,6 +77,7 @@ export default {
     desc: '没能取到你的应用与菜单。多半是网络不通或服务端暂时不可用,你的登录状态仍然有效。',
     retry: '重试',
     relogin: '重新登录',
+    autoRetry: '每 30 秒自动重试一次,服务恢复后自动回到原页面。',
   },
   missingRoute: {
     title: '菜单页面无法加载',
@@ -1808,7 +1809,7 @@ export default {
       accountDisabled: '账号已停用',
       tokenInvalid: '登录状态无效,请重新登录',
       refreshTokenInvalid: '登录已过期,请重新登录',
-      refreshTokenSuperseded: '登录状态已在其它页面更新，请重试',
+      refreshTokenSuperseded: '登录状态已在其它页面更新,请重试',
       tooManyRequests: '操作过于频繁,请稍后再试',
       smsCodeRequired: '请输入短信验证码',
       smsCodeWrong: '短信验证码错误',
