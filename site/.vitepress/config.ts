@@ -71,7 +71,7 @@ const enThemeConfig = {
     { text: 'Components', link: '/components/' },
     { text: 'Standards', link: '/standard/backend' },
     { text: 'Community', link: '/community/contributing' },
-    { text: '10.31.0', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.31.1', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/guide/': enGuideSidebar,
@@ -246,7 +246,7 @@ const zhThemeConfig = {
     { text: '组件', link: '/zh/components/' },
     { text: '规范', link: '/zh/standard/backend' },
     { text: '参与', link: '/zh/community/contributing' },
-    { text: '10.31.0', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
+    { text: '10.31.1', link: 'https://github.com/SimpleOne-X/SmartAdmin/blob/main/CHANGELOG.md' },
   ],
   sidebar: {
     '/zh/guide/': zhGuideSidebar,

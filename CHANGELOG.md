@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.31.1 - 2026-10-29
+
 ### Added
 
 - **导入向导按消费方自己的错误码显示单元格错误文案。** `CellError` 新增 `MsgKey`，与统一信封同一套解析：消费方在 `IImportProfile.ValidateRowAsync` 里报 `(ErrorCode)自己的码`，只要那个枚举登记过，单元格错误就带它自己的 `[MsgKey]`。前端新增 `translateCellError`：先按 `msgKey` 翻译并用 `args` 填占位符，查不到再按数字码回落；`ImportWizard` 的单元格提示、错误数提示和列映射告警都改用它。以前这些码在向导里一律显示兜底文案。内核 46xxx 码的显示不变。
