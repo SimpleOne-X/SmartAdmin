@@ -71,6 +71,12 @@ describe('translateError', () => {
     expect(translateError(timeout)).toBe('请求超时,请检查网络后重试')
     expect(translateError(aborted)).toBe('请求已取消')
   })
+
+  it('续期暂时失败 → 本地化文案,不漏出英文 message', () => {
+    const err = new Error('Session renewal is temporarily unavailable')
+    err.name = 'RefreshUnavailableError'
+    expect(translateError(err)).toBe('登录状态暂时无法确认,请稍后重试')
+  })
 })
 
 describe('translateErrorDetail', () => {

@@ -2,6 +2,8 @@ import createClient, { type Client, type Middleware } from 'openapi-fetch'
 import type { paths } from './schema'
 import { useUserStore } from '#/stores/user'
 import { runtime } from '#/lib/runtime'
+import { isSessionDeadCode } from '#/router/bootFailure'
+import { REFRESH_SUPERSEDED_CODE, endLocalSession } from '#/stores/sessionSync'
 import { REAUTH_REQUIRED_CODE, REAUTH_RETRY_HEADER, requestReauth } from './reauthGate'
 
 // 默认空 apiBase = 同源:schema 的 path 键已含 /api/v1,dev 下由 Vite proxy 反代到后端(默认 :5100),
@@ -81,15 +83,40 @@ const authMiddleware: Middleware = {
 // 键是发出前的 Request 实例(openapi-fetch 把它一路带到 onResponse),WeakMap 随请求回收自动清理。
 const replayable = new WeakMap<Request, Request>()
 
-// 并发 401 合流到同一次刷新。
-let refreshing: Promise<boolean> | null = null
+/**
+ * 一次续期的结果:
+ * - `ok`:换发成功,令牌已写入 store;
+ * - `dead`:服务端明确说会话失效(401 / 403,或业务码为令牌失效、账号停用),调用方应清会话回登录页;
+ * - `transient`:网络错误、超时、5xx、429 等暂时失败,会话可能仍有效,调用方保留会话、下次请求再续。
+ */
+export type RefreshOutcome = 'ok' | 'dead' | 'transient'
 
-/** 单飞静默刷新;路由守卫 F5 重建 Cookie 会话时也可调用。 */
-export function refreshOnce(): Promise<boolean> {
+/**
+ * 续期遇到暂时失败时,让触发续期的那次请求以此失败。刻意不是 ApiError:调用方把它当网络错误处理
+ * (启动守卫转可重试的错误页,普通页面本次请求失败),不会像 401 的 40006 信封那样被判成会话失效。
+ * `name` 供 translateError 认出并给本地化文案。
+ */
+export class RefreshUnavailableError extends Error {
+  constructor() {
+    super('Session renewal is temporarily unavailable')
+    this.name = 'RefreshUnavailableError'
+  }
+}
+
+// 并发 401 合流到同一次刷新。
+let refreshing: Promise<RefreshOutcome> | null = null
+
+/** 单飞静默续期并返回分诊结果;路由守卫 F5 重建会话时也调用它。 */
+export function refreshSession(): Promise<RefreshOutcome> {
   refreshing ??= doRefresh().finally(() => {
     refreshing = null
   })
   return refreshing
+}
+
+/** 单飞静默刷新,成功与否的布尔视图(要区分失败原因用 `refreshSession`)。 */
+export async function refreshOnce(): Promise<boolean> {
+  return (await refreshSession()) === 'ok'
 }
 
 /**
@@ -103,29 +130,85 @@ export async function ensureAccessToken(): Promise<boolean> {
   return refreshOnce()
 }
 
-async function doRefresh(): Promise<boolean> {
-  const user = useUserStore()
-  // Cookie 会话:body 不带 refresh(服务端读 smart_rt);body 模式:必须有 refreshToken
-  if (!user.cookieSession && !user.refreshToken) return false
+// 40037:刷新令牌刚被同一浏览器的另一标签页轮换。body 模式等它把新令牌写进 localStorage,
+// Cookie 模式浏览器 Cookie 已是新的,重发即可。
+const SIBLING_POLL_MS = 200
+const SIBLING_WAIT_MS = 5_000
+const COOKIE_RETRY_MS = 500
+const COOKIE_RETRY_MAX = 3
 
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+type RefreshEnvelope = { code?: number; data?: unknown }
+
+/** 发一次刷新请求;网络错误、超时闸中止、响应体读不出来返回 null(服务端没给出结论)。 */
+async function postRefresh(user: ReturnType<typeof useUserStore>) {
   const headers: Record<string, string> = {}
   if (user.cookieSession || readCookie(CSRF_COOKIE)) {
     const csrf = readCookie(CSRF_COOKIE)
     if (csrf) headers[CSRF_HEADER] = csrf
   }
-
-  const { data, error } = await bare.POST('/api/v1/auth/refresh', {
-    // Cookie 模式刷新令牌在 HttpOnly Cookie 里,body 的 refreshToken 留空:服务端 body 为空才读 Cookie
-    body: user.cookieSession ? { refreshToken: '' } : { refreshToken: user.refreshToken },
-    headers,
-  })
-  const env = data as { code?: number; data?: unknown } | undefined
-  if (error || !env || env.code !== 0 || !env.data) return false
-  user.setSession(env.data as Parameters<typeof user.setSession>[0])
-  return true
+  try {
+    const result = await bare.POST('/api/v1/auth/refresh', {
+      // Cookie 模式刷新令牌在 HttpOnly Cookie 里,body 的 refreshToken 留空:服务端 body 为空才读 Cookie
+      body: user.cookieSession ? { refreshToken: '' } : { refreshToken: user.refreshToken },
+      headers,
+    })
+    return {
+      response: result.response,
+      env: (result.data ?? result.error) as RefreshEnvelope | undefined,
+    }
+  } catch {
+    return null
+  }
 }
 
-/** 401 → 刷新一次并重放原请求;刷新失败 → 清会话 + 跳登录。 */
+/**
+ * body 模式 40037:每 200ms 看一次,最多 5 秒;别的标签页的新令牌已落到本页(内存里的刷新令牌不再是
+ * 发出去的那个,可能是 storage 事件抢先接手的)或从存储里接手到,即成功,等不到按暂时失败处理。
+ */
+async function awaitSiblingTokens(
+  user: ReturnType<typeof useUserStore>,
+  sent: string,
+): Promise<RefreshOutcome> {
+  for (let waited = 0; ; waited += SIBLING_POLL_MS) {
+    if ((user.refreshToken && user.refreshToken !== sent) || user.adoptFromStorage()) return 'ok'
+    if (waited >= SIBLING_WAIT_MS) return 'transient'
+    await sleep(SIBLING_POLL_MS)
+  }
+}
+
+async function doRefresh(): Promise<RefreshOutcome> {
+  const user = useUserStore()
+  // 别的标签页已经续过期:接手它写下的新令牌,不再拿本页的旧令牌去换(旧令牌会撞上重放检测)。
+  if (!user.cookieSession && user.adoptFromStorage()) return 'ok'
+  // Cookie 会话:body 不带 refresh(服务端读 smart_rt);body 模式:必须有 refreshToken
+  if (!user.cookieSession && !user.refreshToken) return 'dead'
+
+  const sent = user.refreshToken
+  let res = await postRefresh(user)
+  // 40037 的判断必须排在 dead 判定之前:它与 40007 的 HTTP 状态相同,顺序反了会把「只是慢了一步」当成凭证无效清掉会话。
+  if (res?.env?.code === REFRESH_SUPERSEDED_CODE) {
+    if (!user.cookieSession) return awaitSiblingTokens(user, sent)
+    for (let i = 0; i < COOKIE_RETRY_MAX && res?.env?.code === REFRESH_SUPERSEDED_CODE; i++) {
+      await sleep(COOKIE_RETRY_MS)
+      res = await postRefresh(user)
+    }
+  }
+  if (!res) return 'transient' // 网络错误、超时、响应体读不出来:服务端没给出结论
+  const { response, env } = res
+  const code = env?.code
+
+  // 刷新是匿名端点:业务失败走 HTTP 200 + 信封 code;401 来自网关,403 只会是 CSRF 无效(重试不会好)。
+  if (response.status === 401 || response.status === 403 || isSessionDeadCode(code)) return 'dead'
+  if (response.ok && code === 0 && env?.data) {
+    user.setSession(env.data as Parameters<typeof user.setSession>[0])
+    return 'ok'
+  }
+  return 'transient' // 5xx、429、其它业务码(含重试后仍是 40037):会话可能仍有效,留给下一次请求再续
+}
+
+/** 401 → 刷新一次并重放原请求;会话失效 → 清会话 + 跳登录;暂时失败 → 保留会话、本次请求以 RefreshUnavailableError 失败。 */
 const refreshMiddleware: Middleware = {
   onRequest({ request }) {
     // 带 body 的写请求发出前存一份可重放副本(GET/HEAD 无 body,不必克隆)。
@@ -138,14 +221,10 @@ const refreshMiddleware: Middleware = {
     const url = request.url
     if (url.includes('/api/v1/auth/refresh') || url.includes('/api/v1/auth/login')) return response
 
-    const ok = await refreshOnce()
-    if (!ok) {
-      useUserStore().clear()
-      const { useAuthStore } = await import('#/stores/auth')
-      useAuthStore().reset()
-      const { router, resetRouter } = await import('#/router') // 惰性引入,避免与 router 静态循环依赖
-      resetRouter()
-      if (router.currentRoute.value.path !== '/login') router.replace('/login')
+    const outcome = await refreshSession()
+    if (outcome === 'transient') throw new RefreshUnavailableError()
+    if (outcome === 'dead') {
+      await endLocalSession()
       return response
     }
     // 重放:优先用发出前的克隆副本(body 未被消费),无副本的 GET 直接用原请求;裸 fetch 绕过中间件,手动补新令牌 + CSRF。
@@ -254,7 +333,7 @@ export function createApiClient<P extends {}>(): Client<P> {
 export const client = createApiClient<paths>()
 
 // 刷新专用客户端:不挂刷新中间件,避免刷新自身 401 触发递归;
-// 但也要有超时闸:它挂住时路由守卫会一起卡在 ensureAccessToken 上,整页停在白屏。
+// 但也要有超时闸:它挂住时路由守卫的静默续期会一起卡住,整页停在白屏。
 const bare = followApiBase(baseUrl => {
   const c = createClient<paths>({ baseUrl, credentials: 'include' })
   c.use(timeoutMiddleware)

@@ -30,7 +30,7 @@ GET {{host}}/api/v1/ping
 Authorization: Bearer {{login.response.body.$.data.accessToken}}
 
 ### 刷新令牌 —— 换一对新令牌
-# 轮换语义:旧刷新令牌立即作废,再拿它换一次会被判为泄露并吊销整条会话。
+# 轮换语义:旧刷新令牌立即作废,轮换 10 秒后再拿它换一次会被判为泄露并吊销整条会话(10 秒内只拒绝、不吊销)。
 # 跑完这条,上面 login 的 accessToken 仍然有效到自然过期,后续请求继续引用 login 那条即可。
 POST {{host}}/api/v1/auth/refresh
 Content-Type: application/json

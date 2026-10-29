@@ -37,8 +37,8 @@ public class SysSession : BaseEntity
     public DateTime ExpiresAt { get; set; }
 
     /// <summary>
-    /// 绝对过期时刻(见 <c>Security:Session:AbsoluteHours</c>;刷新不得突破)。
-    /// 登录建会话时按策略写入;未启用绝对窗时与 <see cref="ExpiresAt"/> 对齐。
+    /// 绝对过期时刻(见 <c>Security:Session:AbsoluteHours</c>;启用时刷新不得突破)。
+    /// 登录建会话时按策略写入;未启用绝对窗时与 <see cref="ExpiresAt"/> 对齐,且随每次续期一起顺延。
     /// 存量会话在库里是 NULL,SqlSugar 物化为 <see cref="DateTime.MinValue"/>,读侧回退到 <see cref="ExpiresAt"/>。
     /// 演进列必须可空:MSSQL 无法对有数据的表 ADD 无 DEFAULT 的 NOT NULL 列。
     /// </summary>

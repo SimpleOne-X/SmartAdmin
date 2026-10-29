@@ -32,6 +32,8 @@ This is a security baseline, not a suggestion. Production will simply refuse to 
 | `sys.security.session.accessMinutes` | `Jwt:ExpireMinutes` |
 | `sys.security.session.refreshMinutes` | `Jwt:RefreshExpireMinutes` |
 
+`refreshMinutes` also decides how long a session may go without being renewed. With no absolute lifetime (`Session:AbsoluteHours = 0`), every refresh pushes the session deadline out to the refresh time plus `refreshMinutes`, and the session only expires after that long without a refresh. A page that keeps refreshing (a wall-mounted board, say) is never logged out just because the login is 7 days old. With `AbsoluteHours` set, the deadline is measured from login and refreshing cannot extend it.
+
 ## Captcha
 
 Login captchas are handled by `CaptchaService` plus three built-in generators with zero drawing-library dependencies. Configured under `SmartAdmin:Security:Captcha` (`AdminCaptchaOptions`):
@@ -355,11 +357,11 @@ The kicked user's access token, even if not yet expired, gets a 401 on the next 
 | `...:Session:CookieMode` | `false` | When `true`, refresh is HttpOnly cookie + CSRF only (see section above) |
 | `...:Session:CookieDomain` | `null` | Cookie Domain; empty = current host |
 | `...:Session:IdleMinutesNormal` / `IdleMinutesMfa` | `0` | Idle timeout (minutes); `0` = off |
-| `...:Session:AbsoluteHours` | `0` | Absolute max hours; `0` = follow refresh only |
+| `...:Session:AbsoluteHours` | `0` | Absolute max hours, measured from login; `0` = no separate cap, the session expires after `refreshMinutes` without a refresh |
 
 Quota trimming uses "**insert first, then converge**": the new session is inserted into the DB before trimming runs, so two concurrent logins both see each other's row and both compute the same "keep only the newest N" answer — convergence happens naturally, without relying on an in-process lock, which is what lets it work correctly across multiple replicas (a single-process lock wouldn't kick an old session on a different replica).
 
-**Refresh-token reuse detection** (`SessionService.RefreshAsync`): a rotated token reappearing counts as a replay — the entire session is revoked (attacker and legitimate user are both logged out; safety takes priority). Rotation uses a conditional update (only sets `Used` if still `Active`), which doubles as concurrency protection.
+**Refresh-token reuse detection** (`SessionService.RefreshAsync`): a rotated token reappearing outside the 10-second grace window (`SessionService.RotationGrace`) counts as a replay — the entire session is revoked and `RefreshTokenInvalid` (40007) is thrown (attacker and legitimate user are both logged out; safety takes priority). Within 10 seconds of rotation the token most likely comes from another tab of the same browser renewing at almost the same moment, so it is only rejected, not revoked: `RefreshTokenSuperseded` (40037), and the caller should pick up the newer token the other tab stored. A request that loses a concurrent rotation gets the same 40037. Rotation uses a conditional update (only sets `Used` if still `Active`), which doubles as concurrency protection; it also stamps the rotation time (UTC, in `UpdateTime`), which the grace check reads.
 
 ## Password policy
 

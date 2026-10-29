@@ -15,6 +15,7 @@ import { externalAuthApi } from '#/api'
 import { useUserStore } from '#/stores/user'
 import { useAuthStore } from '#/stores/auth'
 import { resetRouter } from '#/router'
+import { takeLoginRedirect } from '#/router/loginRedirect'
 import { translateError } from '#/utils/error'
 import LoginDesk from '#/views/login/components/LoginDesk.vue'
 
@@ -99,7 +100,7 @@ onMounted(async () => {
   if (ticket) {
     try {
       user.setSession(await externalAuthApi.exchange(ticket))
-      router.replace('/')
+      router.replace(takeLoginRedirect() ?? '/')
     } catch (e) {
       fail(translateError(e))
     }

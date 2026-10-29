@@ -44,7 +44,8 @@ public interface IAuthService
     /// </summary>
     Task<LoginOutput> LoginByExternalIdentityAsync(Core.ExternalIdentity identity, CancellationToken cancellationToken = default);
 
-    /// <summary>用刷新令牌换发新令牌对(轮换 + 复用检测);失败抛 40007。</summary>
+    /// <summary>用刷新令牌换发新令牌对(轮换 + 复用检测)。</summary>
+    /// <remarks>令牌无效、或重放超出宽限窗抛 40007(吊销整会话);刚轮换的宽限窗内再次出示、或并发轮换落败,只拒绝不吊销,抛 40037。</remarks>
     Task<LoginOutput> RefreshAsync(RefreshInput input);
 
     /// <summary>登出:吊销指定会话(原访问令牌下次请求即 401)。</summary>

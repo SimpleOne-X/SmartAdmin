@@ -28,11 +28,13 @@ const CODE_MSG_KEY: Record<number, string> = {
 /**
  * 请求被中止:超时闸(client.ts 的 timeoutMiddleware)抛 TimeoutError,主动取消抛 AbortError。
  * 二者都是 DOMException,原始 message 是浏览器的英文原话,不能直接给用户看。
+ * 续期暂时失败(client.ts 的 RefreshUnavailableError)同理,message 是英文,换成本地化文案。
  */
 function abortMsgKey(err: unknown): string | undefined {
   if (!(err instanceof Error)) return undefined
   if (err.name === 'TimeoutError') return 'error.network.timeout'
   if (err.name === 'AbortError') return 'error.network.aborted'
+  if (err.name === 'RefreshUnavailableError') return 'error.network.refreshUnavailable'
   return undefined
 }
 

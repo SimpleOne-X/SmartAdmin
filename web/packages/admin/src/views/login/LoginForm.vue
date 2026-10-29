@@ -21,6 +21,7 @@ import { useUserStore } from '#/stores/user'
 import { useAuthStore } from '#/stores/auth'
 import { useSite } from '#/composables/useSite'
 import { resetRouter } from '#/router'
+import { takeLoginRedirect } from '#/router/loginRedirect'
 import { translateError } from '#/utils/error'
 import { shake } from '#/utils/shake'
 import {
@@ -227,7 +228,7 @@ function onSsoOverflow(key: string | number) {
 }
 
 async function enterHome() {
-  await router.replace('/')
+  await router.replace(takeLoginRedirect() ?? '/')
 }
 
 // 密码错 / 验证码错:表单左右抖一下(macOS 登录框的做法),比只弹 toast 更直接。

@@ -40,6 +40,8 @@
 | `sys.security.session.accessMinutes` | `Jwt:ExpireMinutes` |
 | `sys.security.session.refreshMinutes` | `Jwt:RefreshExpireMinutes` |
 
+`refreshMinutes` 同时决定会话能「断多久」：没开绝对寿命（`Session:AbsoluteHours = 0`）时，每次续期都把会话期限顺延到续期时刻加 `refreshMinutes`，连续这么久没续期，会话才失效。只要有页面一直在续期（比如挂墙看板），会话就不会因为登录满 7 天而掉线。开了 `AbsoluteHours` 则期限从登录时刻算，续期突破不了。
+
 ## 验证码
 
 `CaptchaService` 内置三种验证码生成器，都不依赖绘图库。配置在 `SmartAdmin:Security:Captcha`（`AdminCaptchaOptions`）下：
@@ -347,11 +349,11 @@ public virtual async Task RevokeAsync(string sessionId)
 | `...:Session:CookieMode` | `false` | `true` 时 refresh 仅 HttpOnly Cookie + CSRF（见上节） |
 | `...:Session:CookieDomain` | `null` | Cookie Domain；空 = 当前 host |
 | `...:Session:IdleMinutesNormal` / `IdleMinutesMfa` | `0` | 闲置超时（分）；`0` = 不启用 |
-| `...:Session:AbsoluteHours` | `0` | 绝对最长小时；`0` = 仅随 refresh |
+| `...:Session:AbsoluteHours` | `0` | 绝对最长小时，从登录时刻算；`0` = 不另设上限，连续 `refreshMinutes` 没续期后失效 |
 
 同一个人挤爆并发会话上限，该踢谁？这里用的是「**先插入、再收敛**」：新会话先插进数据库，收敛动作在那之后才做。这样一来，并发发生的两个登录都能看到对方那一行，各自算出的都是同一个「只保留最新 N 个」的答案，自然收敛到一致结果，不需要额外协调。为什么不用进程内锁？锁只在单个进程里有效。换成多副本部署，一个副本锁着，另一个副本照样能把同一个名额抢走，锁挡不住跨副本的并发。
 
-刷新令牌用过一次之后再出现，说明什么？只有一种解释：重放。处理很干脆：直接吊销整个会话，哪怕因此把真正的用户也一起下线，安全优先。轮换这一步用的是条件更新，只有当前状态还是 `Active` 才会被置成 `Used`，顺带也当了一层并发保护。这段逻辑在 `SessionService.RefreshAsync` 里。
+刷新令牌用过一次之后再出现，说明什么？超出 10 秒宽限窗（`SessionService.RotationGrace`）的，只有一种解释：重放。处理很干脆：直接吊销整个会话，抛 `RefreshTokenInvalid`（40007），哪怕因此把真正的用户也一起下线，安全优先。刚轮换 10 秒内再被出示的，多半是同一个浏览器的另一个标签页几乎同时续期、抢先换发了，这种情况只拒绝、不吊销，抛 `RefreshTokenSuperseded`（40037），调用方改用另一处写下的新令牌即可；并发轮换时落败的那一次同样抛 40037。轮换这一步用的是条件更新，只有当前状态还是 `Active` 才会被置成 `Used`，顺带也当了一层并发保护；置 `Used` 时还会记下轮换时刻（UTC，写在 `UpdateTime`），宽限判定读的就是它。这段逻辑在 `SessionService.RefreshAsync` 里。
 
 ## 密码策略
 

@@ -14,7 +14,8 @@ public interface ISessionService
     /// <summary>会话是否活跃(热路径:先读缓存,未命中查库回填)。强退/登出/过期后即为 false。</summary>
     Task<bool> IsActiveAsync(string sessionId);
 
-    /// <summary>用刷新令牌换发新令牌对:校验 + 轮换(旧置 Used)+ 复用检测(重放整会话吊销)。失败抛 40007。</summary>
+    /// <summary>用刷新令牌换发新令牌对:校验 + 轮换(旧置 Used)+ 复用检测。</summary>
+    /// <remarks>令牌无效、或已轮换超出宽限窗后再现(重放,吊销整会话)抛 40007;刚轮换的宽限窗内再次出示、或并发轮换落败,只拒绝不吊销,抛 40037。</remarks>
     Task<RefreshedSession> RefreshAsync(string refreshToken);
 
     /// <summary>吊销会话(登出 / 强退):标记会话与其刷新令牌失效 + 清缓存。原访问令牌下次请求即 401。</summary>

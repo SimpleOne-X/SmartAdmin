@@ -50,11 +50,16 @@ router.beforeEach(async to => {
 
   // Cookie 会话:access 只在内存,F5 后靠 cookieSession 标记 + HttpOnly refresh 静默换发。
   if (!user.accessToken && (user.cookieSession || user.refreshToken)) {
-    const ok = await ensureAccessToken()
-    if (!ok) user.clear()
+    const outcome = await refreshSession()
+    if (outcome === 'dead') user.clear()
+    else if (outcome === 'transient' && to.name !== 'login' && !to.meta.public)
+      return to.name === 'boot-error'
+        ? true
+        : { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
   }
 
   if (to.name === 'login') {
+    rememberLoginRedirect(to.query.redirect)
     const needReauth = !!(to.query.pendingLink || to.query.totpChallenge)
     if (needReauth) {
       if (user.accessToken || user.refreshToken || user.cookieSession) {
@@ -64,13 +69,15 @@ router.beforeEach(async to => {
       }
       return true
     }
-    return user.isLoggedIn ? { path: '/', replace: true } : true
+    if (!user.isLoggedIn) return true
+    const { path, query, hash } = router.resolve(takeLoginRedirect() ?? '/')
+    return { path, query, hash, replace: true }
   }
 
   // 公开的 OAuth 回调和 MFA 绑定/恢复页不能被登录守卫送回登录页。
   if (to.meta.public) return true
 
-  if (!user.isLoggedIn) return { path: '/login', replace: true }
+  if (!user.isLoggedIn) return loginLocation(to.fullPath)
 
   if (user.userInfo?.mustChangePassword) {
     return to.path === '/personal/password' ? true : { path: '/personal/password', replace: true }
@@ -83,7 +90,10 @@ router.beforeEach(async to => {
     try {
       const { useModule } = await import('#/composables/useModule')
       const res = await useModule().enterInitial()
-      if (res.chooser) return to.name === 'module' ? true : { path: '/module', replace: true }
+      if (res.chooser)
+        return to.name === 'module' || isFullscreenPath(to.path)
+          ? true
+          : { path: '/module', replace: true }
       if (to.name === 'module') return true
       if (to.path === '/') return { path: auth.homePath, replace: true }
       return to.fullPath
@@ -93,7 +103,7 @@ router.beforeEach(async to => {
         resetRouter()
         auth.reset()
         user.clear()
-        return { path: '/login', replace: true }
+        return loginLocation(to.fullPath)
       }
       return { path: '/boot-error', query: { redirect: to.fullPath }, replace: true }
     }
@@ -106,17 +116,19 @@ router.beforeEach(async to => {
 
 它按顺序把这些事料理掉：
 
-**Cookie 会话的静默续令牌。** 内存里没有 `accessToken`、但要么带着 `cookieSession` 标记、要么还留着 `refreshToken` 时，先 `await ensureAccessToken()` 试一次静默刷新。Cookie 会话下 `accessToken` 只活在内存里，F5 之后必然是空的，得先靠 HttpOnly 的 refresh Cookie 换一次；默认模式下令牌已经从 `localStorage` 水合好，这一步立即成立，直接跳过。刷新失败就清掉本地残留的登录态。
+**Cookie 会话的静默续令牌。** 内存里没有 `accessToken`、但要么带着 `cookieSession` 标记、要么还留着 `refreshToken` 时，先 `await refreshSession()` 试一次静默续期。Cookie 会话下 `accessToken` 只活在内存里，F5 之后必然是空的，得先靠 HttpOnly 的 refresh Cookie 换一次；默认模式下令牌已经从 `localStorage` 水合好，这一步不会触发。结果分三种：`ok` 往下走；`dead`（服务端明说会话失效）清掉本地残留的登录态；`transient`（网络抖动、后端重启、被限流，会话可能仍有效）保留会话，需要会话的页面转到可重试的 `/boot-error`，登录页和 `meta.public` 的页面本来就不需要会话，照常放行。
 
-**登录跳转，含 SSO 二次验证。** `/login` 是唯一免认证页；已登录的人再访问会被弹回 `/`。但 URL 带着 `pendingLink`（SSO 未绑定）或 `totpChallenge`（SSO 之后的二次验证）时是例外——这两种场景必须停在登录页完成账密或二次验证，哪怕这时候还残留着一份未清干净的会话（不清掉的话，用户会看到「解绑第三方账号后再登录，页面却直接跳过登录页」这种怪现象）。
+**登录跳转，含 SSO 二次验证。** `/login` 是唯一免认证页；已登录的人再访问会被弹回暂存的回跳地址，没有就是 `/`。但 URL 带着 `pendingLink`（SSO 未绑定）或 `totpChallenge`（SSO 之后的二次验证）时是例外——这两种场景必须停在登录页完成账密或二次验证，哪怕这时候还残留着一份未清干净的会话（不清掉的话，用户会看到「解绑第三方账号后再登录，页面却直接跳过登录页」这种怪现象）。
+
+**登录后回到原地址。** 未登录访问某个页面（比如挂墙看板的深链），守卫把人送去 `/login?redirect=<原地址>`（原地址是首页时不带）；会话失效被迫回登录页时同样带上当前地址。登录页进入时把 `redirect` 暂存到 `sessionStorage`，因为登录会绕路（SSO 往返、MFA 绑定页），query 到不了登录成功那一刻；登录成功后 `takeLoginRedirect()` 读出即删，跳回原地址。`redirect` 来自 URL，不可信：只认站内绝对路径，`//evil.com`、`/\evil.com`（含 `/%2F%2Fevil.com` 这类百分号编码变体）、`https://…` 和登录页自身都会被丢弃（`router/loginRedirect.ts` 的 `safeRedirect`），避免被拿来做开放重定向。
 
 **`meta.public` 直接放行。** OAuth 回调、MFA 绑定/恢复这些公开路由，不会被下面「未登录则送去 `/login`」这条判断拦下。
 
 **强制改密。** `mustChangePassword` 一旦为真，除了 `/personal/password` 本身，任何导航都被拦下、重定向到那里。这个标志是管理员建号或重置密码后首登带上的。这一判定刻意放在下面的动态路由重建**之前**。为什么？改密页是静态路由，不依赖菜单树就能渲染，先放行它，能避免「重建 → 选应用 → 又被弹回改密页」这种绕圈。改密成功后现有流程会强制登出重登，标志由后端清零。
 
-**`boot-error` 自身放行。** 这是门户重建失败时的落点，本身不能再被下面的重建守卫拦下来重试一次，否则就是死循环。
+**`boot-error` 自身放行。** 这是门户重建失败时的落点，本身不能再被下面的重建守卫拦下来重试一次，否则就是死循环。错误页的「重试」把 `redirect` 再导航一次、重新走守卫；`redirect` 是 `/fullscreen/` 整屏页时，错误页每 30 秒自动重试一次——挂墙大屏无人值守，开机早于服务器或赶上发版重启时，得自己等到后端恢复。再次失败时守卫回到同一个错误页地址，导航判重，页面不重新挂载，定时器继续走。
 
-**刷新 / 深链的重建，按错误类型分诊。** 动态路由只活在 router 的内存路由表里，不持久化。硬刷新或者直接打开一条深链时，`auth.routesReady` 必然是 `false`，任何 `menu-{id}` 路由都还没注册。守卫一检测到这点，就在这里把 `enterInitial()` 调进来。它既重建路由，又填好 `auth.modules`。所以门户的判定和守卫的重建，其实共用这同一次调用。拿到结果，守卫再决定去向。结果是选择器，就去 `/module`。要是本来就去 `/module`，直接放行，因为渲染选择页要的数据这时已经齐了。这种情况不能弹回 `/`，否则默认应用一旦设定，就再没入口去改它。目标是 `/`，就直接给出 `auth.homePath`。其余情况，重新返回 `to.fullPath`，让同一个 URL 在路由建好之后再解析一次。`enterInitial()` 抛错时不会一律清空登录态：`isSessionDead(e)`（`router/bootFailure.ts`）先分诊——只有 HTTP 401，或后端明说令牌失效的两个业务码，才判定会话真的没了，清会话送回 `/login`；网络抖动、5xx、被限流不是会话丢了，留在原地跳到一个可重试的 `/boot-error`，没必要连当前页面也一起搭进去。
+**刷新 / 深链的重建，按错误类型分诊。** 动态路由只活在 router 的内存路由表里，不持久化。硬刷新或者直接打开一条深链时，`auth.routesReady` 必然是 `false`，任何 `menu-{id}` 路由都还没注册。守卫一检测到这点，就在这里把 `enterInitial()` 调进来。它既重建路由，又填好 `auth.modules`。所以门户的判定和守卫的重建，其实共用这同一次调用。拿到结果，守卫再决定去向。结果是选择器，就去 `/module`。要是本来就去 `/module`，直接放行，因为渲染选择页要的数据这时已经齐了。目标是整屏页（`/fullscreen/*`，挂墙看板）也直接放行：它们是布局壳之外的静态路由，渲染不依赖应用选择，选应用页只会把无人值守的大屏拦在半路。这种情况不能弹回 `/`，否则默认应用一旦设定，就再没入口去改它。目标是 `/`，就直接给出 `auth.homePath`。其余情况，重新返回 `to.fullPath`，让同一个 URL 在路由建好之后再解析一次。`enterInitial()` 抛错时不会一律清空登录态：`isSessionDead(e)`（`router/bootFailure.ts`）先分诊——只有 HTTP 401，或后端明说令牌失效 / 账号停用的业务码，才判定会话真的没了，清会话送回 `/login`（带 `redirect`）；网络抖动、5xx、被限流不是会话丢了，留在原地跳到一个可重试的 `/boot-error`，没必要连当前页面也一起搭进去。
 
 这里有两个位置不返回 `to.fullPath`，值得留意。第一个，目标是 `/` 的时候。返回 `to.fullPath` 等于重定向到自身，而 `/` 没有静态 `redirect`，Vue Router 会判成无限重定向。另一个坑更隐蔽。这段重建逻辑不能用 `to.meta.public` 提前短路。因为一条还没注册的动态路由会先命中 catch-all(404)，而它带着 `public` 标记。真按 `public` 放行，用户看到的就是一个错的 404，而不是重建后的正确页面。
 

@@ -60,6 +60,8 @@ export default {
     desc: 'We could not fetch your apps and menus. This is usually a network problem or a temporarily unavailable server. You are still signed in.',
     retry: 'Retry',
     relogin: 'Sign in again',
+    autoRetry:
+      'Retrying automatically every 30 seconds; you will be taken back once the server is available.',
   },
   missingRoute: {
     title: 'Menu page unavailable',
@@ -888,7 +890,8 @@ export default {
       historyOff: 'A new password may repeat an old one',
       firstChange: 'Admin-created accounts must change their password at first sign-in',
       firstChangeOff: 'New accounts keep their initial password at first sign-in',
-      session: 'Access tokens renew every {access}; sign-in lasts up to {refresh}',
+      session:
+        'Access tokens renew every {access}; sign-in expires after {refresh} without a renewal',
       rateLimit: 'At most {permit} requests per {seconds} s from one source',
     },
     job: {
@@ -1062,7 +1065,7 @@ export default {
       },
       session: {
         accessMinutes: 'Access token lifetime',
-        refreshMinutes: 'Stay signed in up to',
+        refreshMinutes: 'Sign out after no renewal for',
       },
       captcha: {
         enabled: 'Login captcha',
@@ -1837,6 +1840,7 @@ export default {
     network: {
       timeout: 'Request timed out, check your connection and try again',
       aborted: 'Request cancelled',
+      refreshUnavailable: 'Could not confirm your sign-in right now, please try again shortly',
     },
     auth: {
       passwordWrong: 'Incorrect account or password',
@@ -1846,6 +1850,7 @@ export default {
       accountDisabled: 'Account disabled',
       tokenInvalid: 'Invalid session, please sign in again',
       refreshTokenInvalid: 'Session expired, please sign in again',
+      refreshTokenSuperseded: 'Session was renewed in another tab, please retry',
       tooManyRequests: 'Too many requests, slow down',
       smsCodeRequired: 'Please enter the SMS verification code',
       smsCodeWrong: 'Incorrect SMS verification code',

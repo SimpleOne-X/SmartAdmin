@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import { createPersistedState } from 'pinia-plugin-persistedstate'
-import { isCookieSession, useUserStore } from './user'
+import { isCookieSession, parseStoredUser, useUserStore } from './user'
 import type { LoginOutput } from '#/types/api'
 
 type PersistedUserStore = ReturnType<typeof useUserStore> & { $persist: () => void }
@@ -120,5 +120,103 @@ describe('useUserStore Cookie 会话 persist', () => {
     expect(user.refreshToken).toBe('')
     expect(user.cookieSession).toBe(false)
     expect(user.userInfo).toBeNull()
+  })
+})
+
+/** 模拟别的标签页按 persist 序列化格式写进 localStorage 的会话。 */
+function writeFromOtherTab(storage: Storage, over: Record<string, unknown> = {}) {
+  storage.setItem(
+    'user',
+    JSON.stringify({
+      accessToken: 'at-B',
+      refreshToken: 'B',
+      cookieSession: false,
+      userInfo: { userId: 2, account: 'other', name: 'Other', mustChangePassword: false },
+      ...over,
+    }),
+  )
+}
+
+describe('useUserStore.adoptFromStorage', () => {
+  afterEach(() => {
+    vi.useRealTimers() // 还原 setSystemTime 改过的 Date
+  })
+
+  function signedIn() {
+    const storage = makeMemoryStorage()
+    vi.stubGlobal('localStorage', storage)
+    const user = mountUserStore(storage)
+    user.setSession(sample({ refreshToken: 'A', sessionMode: 'body' }))
+    return { storage, user }
+  }
+
+  it('接手签发戳更新的令牌', () => {
+    const { storage, user } = signedIn()
+    writeFromOtherTab(storage, { issuedAt: user.issuedAt + 1 })
+
+    expect(user.adoptFromStorage()).toBe(true)
+    expect(user.refreshToken).toBe('B')
+    expect(user.accessToken).toBe('at-B')
+    expect(user.userInfo?.account).toBe('other')
+  })
+
+  it('戳相同、更旧或缺失的不接手(落后标签页写回的旧令牌)', () => {
+    const { storage, user } = signedIn()
+
+    writeFromOtherTab(storage, { issuedAt: user.issuedAt })
+    expect(user.adoptFromStorage()).toBe(false)
+    writeFromOtherTab(storage, { issuedAt: user.issuedAt - 1 })
+    expect(user.adoptFromStorage()).toBe(false)
+    writeFromOtherTab(storage) // 缺戳按 0 处理
+    expect(user.adoptFromStorage()).toBe(false)
+    expect(user.refreshToken).toBe('A')
+  })
+
+  it('候选参数优先于存储:用 storage 事件的 newValue 判断,不重读当前存储', () => {
+    const { storage, user } = signedIn()
+    writeFromOtherTab(storage, { issuedAt: 1 }) // 当前存储已被落后标签页写回旧令牌
+
+    const fresh = parseStoredUser(
+      JSON.stringify({
+        accessToken: 'at-B',
+        refreshToken: 'B',
+        cookieSession: false,
+        userInfo: null,
+        issuedAt: user.issuedAt + 1,
+      }),
+    )
+    expect(user.adoptFromStorage(fresh)).toBe(true)
+    expect(user.refreshToken).toBe('B')
+    expect(user.issuedAt).toBe(fresh!.issuedAt)
+  })
+
+  it('存储没有刷新令牌、没有数据、或本页是 Cookie 会话时不动', () => {
+    const { storage, user } = signedIn()
+
+    writeFromOtherTab(storage, { refreshToken: '', issuedAt: user.issuedAt + 1 }) // Cookie 会话落盘形状
+    expect(user.adoptFromStorage()).toBe(false)
+
+    storage.removeItem('user')
+    expect(user.adoptFromStorage()).toBe(false)
+
+    user.setSession(sample({ sessionMode: 'cookie', refreshToken: '' })) // 本页是 Cookie 会话
+    writeFromOtherTab(storage, { refreshToken: 'C', issuedAt: user.issuedAt + 1 })
+    expect(user.adoptFromStorage()).toBe(false)
+    expect(user.refreshToken).toBe('')
+  })
+
+  it('persist 落盘带签发戳;setSession 的戳单调递增,系统时钟回拨也不倒退', () => {
+    const { storage, user } = signedIn()
+    const first = user.issuedAt
+    expect(first).toBeGreaterThan(0)
+    user.$persist()
+    expect(JSON.parse(storage.getItem('user')!).issuedAt).toBe(first)
+
+    vi.setSystemTime(first - 60_000) // 时钟回拨
+    user.setSession(sample({ refreshToken: 'A2', sessionMode: 'body' }))
+    expect(user.issuedAt).toBeGreaterThan(first)
+
+    user.clear()
+    expect(user.issuedAt).toBe(0)
   })
 })

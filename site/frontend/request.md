@@ -58,7 +58,7 @@ export function createApiClient<P extends {}>(): Client<P> {
 export const client = createApiClient<paths>()
 
 // Refresh-only client: no refresh middleware, so the refresh call's own 401 can't recurse;
-// it still needs the timeout guard — if it hangs, the router guard hangs on ensureAccessToken and the page stays blank.
+// it still needs the timeout guard — if it hangs, the router guard's silent refresh hangs and the page stays blank.
 const bare = followApiBase(baseUrl => {
   const c = createClient<paths>({ baseUrl, credentials: 'include' })
   c.use(timeoutMiddleware)
@@ -84,7 +84,7 @@ const timeoutMiddleware: Middleware = {
 }
 ```
 
-The default is 30 seconds; a naturally slow call — an upload, a chunk, an export, an import submission — passes an explicit `timeout` (in milliseconds) at the API layer, and openapi-fetch carries that custom key straight through onto the `Request`. This guard has to be registered **first**: the replay middlewares further down clone the final `Request` that's actually sent, and get the order wrong and they'd clone a stale request that never got the timeout signal attached. A caller's own `signal` still works — `AbortSignal.any` merges it with the timeout signal, whichever fires first wins, rather than the timeout overriding the caller's own cancellation. `bare` gets this guard too, on its own: if the refresh call itself hangs, the router guard's `ensureAccessToken` hangs right along with it, and the whole page sits on a blank screen.
+The default is 30 seconds; a naturally slow call — an upload, a chunk, an export, an import submission — passes an explicit `timeout` (in milliseconds) at the API layer, and openapi-fetch carries that custom key straight through onto the `Request`. This guard has to be registered **first**: the replay middlewares further down clone the final `Request` that's actually sent, and get the order wrong and they'd clone a stale request that never got the timeout signal attached. A caller's own `signal` still works — `AbortSignal.any` merges it with the timeout signal, whichever fires first wins, rather than the timeout overriding the caller's own cancellation. `bare` gets this guard too, on its own: if the refresh call itself hangs, the router guard's silent refresh hangs right along with it, and the whole page sits on a blank screen.
 
 ### Auth middleware, plus CSRF on mutating requests
 
@@ -122,14 +122,10 @@ const refreshMiddleware: Middleware = {
     const url = request.url
     if (url.includes('/api/v1/auth/refresh') || url.includes('/api/v1/auth/login')) return response
 
-    const ok = await refreshOnce()
-    if (!ok) {
-      useUserStore().clear()
-      const { useAuthStore } = await import('#/stores/auth')
-      useAuthStore().reset()
-      const { router, resetRouter } = await import('#/router') // lazy import, avoids a static cycle with router
-      resetRouter()
-      if (router.currentRoute.value.path !== '/login') router.replace('/login')
+    const outcome = await refreshSession()
+    if (outcome === 'transient') throw new RefreshUnavailableError() // session may still be valid: keep it, fail this request like a network error
+    if (outcome === 'dead') {
+      await endLocalSession() // clear tokens, auth.reset(), resetRouter(), back to login with the current address
       return response
     }
     // Replay: prefer the pre-send clone (body untouched); a GET with no clone uses the original request;
@@ -148,47 +144,56 @@ const refreshMiddleware: Middleware = {
 On a 401, in order:
 
 1. **Skip the refresh/login endpoints themselves** — a 401 from `/auth/refresh` or `/auth/login` is a genuine credential failure, not an expired token; feeding it into the refresh flow too would loop.
-2. **`refreshOnce()`** — single-flight coalescing: if several requests 401 at the same moment, only one `/auth/refresh` call goes out, and they all await the same promise:
+2. **`refreshSession()`** — single-flight coalescing with a triaged result: if several requests 401 at the same moment, only one `/auth/refresh` call goes out, and they all await the same promise:
    ```ts
-   let refreshing: Promise<boolean> | null = null
-   function refreshOnce(): Promise<boolean> {
+   type RefreshOutcome = 'ok' | 'dead' | 'transient'
+   let refreshing: Promise<RefreshOutcome> | null = null
+   function refreshSession(): Promise<RefreshOutcome> {
      refreshing ??= doRefresh().finally(() => { refreshing = null })
      return refreshing
    }
    ```
-3. **Refresh fails** (no refresh token, network error, non-zero `code`, or no `data`) — clear the `user` store's tokens, `auth.reset()` the authorization state, `resetRouter()` to tear down the dynamic routes, then redirect to `/login` (the router is lazily imported to avoid a static circular dependency with `client.ts`).
+3. **Branch on the result.** `dead` — the server says outright that the session is gone (HTTP 401 / 403, or business code `40005` account disabled, `40006` / `40007` token invalid): `endLocalSession()` clears the `user` store's tokens, `auth.reset()`s the authorization state, `resetRouter()`s the dynamic routes, then redirects to `/login?redirect=<current address>` so signing in again lands back on the same page (see [Route guards](/frontend/portal-guards)); the router is lazily imported to avoid a static circular dependency with `client.ts`. `transient` — a network error, timeout, 5xx or 429, where the server gave no verdict: the session is kept and the request that triggered the refresh fails with a `RefreshUnavailableError`; the next request tries again. The error is deliberately **not** an `ApiError`: the 401 that triggered the refresh carries business code `40006` in its body, and handing that back would be read by callers (the startup guard's `isSessionDead` included) as "the session is gone". As a plain error it is treated like a network failure — the startup guard goes to the retryable `/boot-error` page, an ordinary page just fails this one request, and `translateError` shows a localized message. A page left open across a backend restart just fails to load data for a while, and is not kicked back to the login page.
 4. **Refresh succeeds** — rebuild the request from the clone stashed before it was sent (GET/HEAD never cloned, so the original request is used directly), stamp on the freshly-refreshed token, reattach CSRF for a write request, and replay it with a **raw `fetch()`** — not another `client.GET/POST(...)`. Going back through `client` would re-run the later middlewares on this replay, and if the new token were also rejected (another 401), it would recurse into the next round of refresh.
 
 ### Why `doRefresh` uses `bare`, not `client`
 
 ```ts
-async function doRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<RefreshOutcome> {
   const user = useUserStore()
+  // Another tab already renewed: adopt the new tokens it wrote, do not spend this page's stale one.
+  if (!user.cookieSession && user.adoptFromStorage()) return 'ok'
   // Cookie session: no refresh in the body (the backend reads smart_rt instead); body mode needs one.
-  if (!user.cookieSession && !user.refreshToken) return false
+  if (!user.cookieSession && !user.refreshToken) return 'dead'
 
-  const headers: Record<string, string> = {}
-  if (user.cookieSession || readCookie(CSRF_COOKIE)) {
-    const csrf = readCookie(CSRF_COOKIE)
-    if (csrf) headers[CSRF_HEADER] = csrf
+  // postRefresh sends /auth/refresh through bare (CSRF header attached; in Cookie mode the body's
+  // refreshToken stays empty); it returns null on a network error or timeout.
+  let res = await postRefresh(user)
+  // 40037: see the next section. This check must come before the dead check below.
+  if (res?.env?.code === REFRESH_SUPERSEDED_CODE) { /* wait for the other tab / resend */ }
+  if (!res) return 'transient'
+
+  const { response, env } = res
+  if (response.status === 401 || response.status === 403 || isSessionDeadCode(env?.code)) return 'dead'
+  if (response.ok && env?.code === 0 && env.data) {
+    user.setSession(env.data as Parameters<typeof user.setSession>[0])
+    return 'ok'
   }
-
-  const { data, error } = await bare.POST('/api/v1/auth/refresh', {
-    // In Cookie mode the refresh token lives in the HttpOnly cookie, so refreshToken stays empty:
-    // the backend reads the cookie only when the body is empty.
-    body: user.cookieSession ? { refreshToken: '' } : { refreshToken: user.refreshToken },
-    headers,
-  })
-  const env = data as { code?: number; data?: unknown } | undefined
-  if (error || !env || env.code !== 0 || !env.data) return false
-  user.setSession(env.data as Parameters<typeof user.setSession>[0])
-  return true
+  return 'transient' // 5xx, 429, other business codes: the session may still be valid
 }
 ```
 
 `bare` is a second `openapi-fetch` client built from the same schema, with **the auth, refresh, and reauth middlewares left off** (the timeout guard is the exception — both clients get it). Routing the refresh request through `bare` means a failed refresh (say, the refresh token itself has expired and the endpoint answers 401 too) never re-enters `refreshMiddleware.onResponse` at all — there's no auth/refresh middleware chain on `bare` to recurse into. The URL check in `onResponse` that skips `/auth/refresh`/`/auth/login` is a second line of defense, one that incidentally also covers login failures called through `client`; the refresh request's own recursion-safety comes, fundamentally, from it not being on `client`'s middleware chain in the first place.
 
 Because `bare` has no `authMiddleware`, `doRefresh` attaches the CSRF header itself: in Cookie-session mode the backend reads the refresh token off the HttpOnly `smart_rt` cookie, so the body can stay empty; in the default mode the backend reads only the request body and never the cookie, so the body must carry `refreshToken`.
+
+### Several tabs in one browser
+
+In the default mode every tab shares the session in `localStorage`, and the refresh token rotates on every renewal: once one tab has swapped in a new token, the stale one in another tab's memory is spent, and presenting it would only trip the server's replay detection. Three pieces work together:
+
+- **Adopt first.** `doRefresh` begins with `user.adoptFromStorage()`: if storage holds a refresh token issued *later* than this page's, it takes over the whole session (access token, refresh token, user info) and sends no refresh request. "Later" is decided by `issuedAt`, a local, strictly increasing stamp persisted with the session — the tokens themselves are opaque and cannot be ordered. A stale tab that writes its old token back (after back-filling an avatar, say) carries an older stamp, so no other tab adopts it. A Cookie session needs no adopting, since its tokens live in the browser's cookies and every tab shares them.
+- **Wait if you lose.** When two tabs renew at the same instant, the loser gets business code `40037` (`RefreshTokenSuperseded`; reject only, the session is not revoked). The `storage` event and the `40037` response can arrive in either order, so in the default mode it checks every 200 ms for up to 5 seconds whether the refresh token in memory is no longer the one it sent (the event already adopted the new one) or storage now holds a newer one, and replays the original request as soon as either is true; if neither happens it is treated as a transient failure, the session is kept, and the next request tries again. A Cookie session already has the new cookie, so it resends the refresh request after 500 ms, up to 3 times. `40037` never clears the session: the server did not say it was gone.
+- **Follow along.** `installSessionSync()` (installed once in `createSmartAdmin`) listens for the `storage` event and judges the event's own `newValue`, not whatever storage holds by then. When another tab renews, this page's memory catches up; if the event carries an older stamp than this page's session, this page writes its own session back so storage ends up on the newest token; when another tab signs out, this page clears its session and returns to the login page too — to the current address, or, when it is sitting on a transit page (`/boot-error`, `/oauth/callback`, `/mfa/bind`), to that page's own `redirect`.
 
 ### 403 short-lived re-authentication (reauth)
 
