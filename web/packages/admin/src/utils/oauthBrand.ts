@@ -59,10 +59,14 @@ export type ConfigProviderRow = {
   enabled: boolean
   /** 未绑定的外部身份按账号名关联同名本地账号(sys.externalauth.{code}.linkByAccount) */
   linkByAccount: boolean
+  /** 该类型能把站内通知推到外部渠道:显示推送开关与测试消息按钮 */
+  supportsNotice: boolean
+  /** 发布通知时同时推到这个渠道(sys.externalauth.{code}.notify) */
+  notify: boolean
 }
 
 type CatalogLike = {
-  types: readonly { type: string }[]
+  types: readonly { type: string; supportsNotice: boolean }[]
   providers: readonly {
     code: string
     type: string
@@ -74,7 +78,7 @@ type CatalogLike = {
   }[]
 }
 
-type AdminLike = { code: string; enabled: boolean; linkByAccount?: boolean }
+type AdminLike = { code: string; enabled: boolean; linkByAccount?: boolean; notify?: boolean }
 
 /**
  * 配置页列表 = 四个官方厂商(按固定顺序,没装的也列出并标「未安装」)
@@ -103,9 +107,10 @@ export function buildConfigProviderRows(
         : 'unconfigured'
     const a = adminByCode.get(code)
     const registered = state === 'configured'
+    const type = p?.type ?? (official ? code : '')
     rows.push({
       code,
-      type: p?.type ?? (official ? code : ''),
+      type,
       displayName: p?.displayName || (isBrandCode(code) ? brandDisplayName(code) : code),
       icon: p?.icon ?? null,
       state,
@@ -113,6 +118,10 @@ export function buildConfigProviderRows(
       registered,
       enabled: registered && !!a?.enabled,
       linkByAccount: registered && !!a?.linkByAccount,
+      // 代码注册的 provider 没有类型,也就没有推送能力
+      supportsNotice: catalog.types.some(x => x.type === type && x.supportsNotice),
+      // 后端缺省为开:管理端条目没带 notify 就按开
+      notify: registered && (a?.notify ?? true),
     })
   }
 

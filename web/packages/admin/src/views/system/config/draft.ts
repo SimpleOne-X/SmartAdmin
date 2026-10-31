@@ -24,6 +24,7 @@ import {
 
 export const enabledKey = (code: string) => `sys.externalauth.${code}.enabled`
 export const linkKey = (code: string) => `sys.externalauth.${code}.linkByAccount`
+export const notifyKey = (code: string) => `sys.externalauth.${code}.notify`
 export const hasLinkSwitch = (code: string) => LINK_BY_ACCOUNT_CODES.includes(code)
 
 /** 与原值不同的键(按字符串比较;配置值一律以字符串落库)。 */
@@ -74,9 +75,11 @@ export function createConfigDraft() {
   /** 结构化表单认领的全部键:「高级」页排除它们。未注册的第三方登录方式也算,它们的开关在卡片上。 */
   const claimedKeys = computed(() => [
     ...STATIC_CLAIMED_KEYS,
-    ...providerRows.value.flatMap(p =>
-      hasLinkSwitch(p.code) ? [enabledKey(p.code), linkKey(p.code)] : [enabledKey(p.code)],
-    ),
+    ...providerRows.value.flatMap(p => [
+      enabledKey(p.code),
+      ...(hasLinkSwitch(p.code) ? [linkKey(p.code)] : []),
+      ...(p.supportsNotice ? [notifyKey(p.code)] : []),
+    ]),
   ])
 
   function reset(next: Record<string, string>) {
@@ -110,12 +113,13 @@ export function createConfigDraft() {
     }
   }
 
-  /** 已配置的第三方各自的开关值(enabled / linkByAccount)。 */
+  /** 已配置的第三方各自的开关值(enabled / linkByAccount / 支持推送的 notify)。 */
   function providerSwitchValues() {
     const out: Record<string, string> = {}
     for (const p of providerRows.value.filter(row => row.registered)) {
       out[enabledKey(p.code)] = String(p.enabled)
       if (hasLinkSwitch(p.code)) out[linkKey(p.code)] = String(p.linkByAccount)
+      if (p.supportsNotice) out[notifyKey(p.code)] = String(p.notify)
     }
     return out
   }
@@ -138,7 +142,7 @@ export function createConfigDraft() {
       values[key] = value
     }
     for (const row of providerRows.value.filter(r => !r.registered)) {
-      for (const key of [enabledKey(row.code), linkKey(row.code)]) {
+      for (const key of [enabledKey(row.code), linkKey(row.code), notifyKey(row.code)]) {
         delete original[key]
         delete values[key]
       }

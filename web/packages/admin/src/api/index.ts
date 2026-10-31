@@ -391,10 +391,12 @@ export interface ExternalProvider {
   icon?: string | null
 }
 
-/** 管理端:全部已注册 provider(含已禁用)+ enabled / linkByAccount 两个运营开关。 */
+/** 管理端:全部已注册 provider(含已禁用)+ enabled / linkByAccount / notify 三个运营开关。 */
 export interface ExternalProviderAdmin extends ExternalProvider {
   enabled: boolean
   linkByAccount: boolean
+  /** 缺省为开 */
+  notify?: boolean
 }
 
 export interface ExternalBinding {
@@ -458,6 +460,13 @@ export const externalAuthApi = {
     client
       .POST('/api/v1/sys/external-auth/providers/test', { body })
       .then(r => unwrap<ExternalAuthTestResult>(r)),
+  /** 向当前管理员在该 provider 下绑定的账号发一条测试消息;各种失败都折成返回体的 status,不抛。 */
+  testNotice: (code: string) =>
+    client
+      .POST('/api/v1/sys/external-auth/providers/{code}/test-notice', {
+        params: { path: { code } },
+      })
+      .then(r => unwrap<ExternalNoticeTestResult>(r)),
 }
 
 export type ExternalAuthCatalog = components['schemas']['ExternalAuthCatalogOutput']
@@ -468,6 +477,7 @@ export type ExternalAuthProviderSaveInput = components['schemas']['ExternalAuthP
 export type ExternalAuthProviderTestInput = components['schemas']['ExternalAuthProviderTestInput']
 export type ExternalAuthTestResult = components['schemas']['ExternalAuthTestView']
 export type ExternalAuthCheck = components['schemas']['ExternalAuthCheckView']
+export type ExternalNoticeTestResult = components['schemas']['ExternalNoticeTestView']
 
 export const dashboardApi = {
   /** 工作台首页统计([ActiveSession]:任何登录用户可取,无需权限码)。 */

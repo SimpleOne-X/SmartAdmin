@@ -2,16 +2,26 @@
 // 登录方式:登录页上出现哪些登录入口——账号密码(始终可用)、短信验证码、各第三方登录。
 // 每个第三方一行:状态(未安装 / 未配置 / 已配置)、「设置」按钮、开关。连接信息与密钥在设置面板里填,
 // 加密入库,不经过页面草稿;开关是草稿项,随底部保存条保存。没配好的方式开关灰掉,也永远不写库。
-// 「按账号自动关联」打开前要确认两边账号是同一批人。预览就是登录框本身。
+// 「按账号自动关联」打开前要确认两边账号是同一批人。支持推送的方式多一行:推送开关(草稿项)和「发送测试消息」。
+// 预览就是登录框本身。
 import { computed, ref } from 'vue'
-import { NButton, NSwitch } from 'naive-ui'
+import { NButton, NSwitch, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { externalAuthApi } from '#/api'
 import BrandIcon from '#/components/oauth/BrandIcon.vue'
 import { useConfirm } from '#/composables/useConfirm'
 import { useAppStore } from '#/stores/app'
+import { translateError } from '#/utils/error'
 import type { ConfigProviderRow } from '#/utils/oauthBrand'
 import { SMS_LOGIN_KEY } from '../groups'
-import { enabledKey, hasLinkSwitch, linkKey, useConfigDraft, useDraftFields } from '../draft'
+import {
+  enabledKey,
+  hasLinkSwitch,
+  linkKey,
+  notifyKey,
+  useConfigDraft,
+  useDraftFields,
+} from '../draft'
 import SectionLayout from './SectionLayout.vue'
 import CfgGroup from './CfgGroup.vue'
 import CfgRow from './CfgRow.vue'
@@ -19,7 +29,8 @@ import ScaleToFit from './ScaleToFit.vue'
 import LoginMock from './LoginMock.vue'
 import ProviderSheet from './ProviderSheet.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
+const message = useMessage()
 const app = useAppStore()
 const { ask } = useConfirm()
 const draft = useConfigDraft()
@@ -29,6 +40,9 @@ const smsLogin = bool(SMS_LOGIN_KEY)
 const rows = computed(() => draft.providerRows.value)
 const isOn = (code: string) => values[enabledKey(code)] === 'true'
 const linkOn = (code: string) => values[linkKey(code)] === 'true'
+const notifyOn = (code: string) => values[notifyKey(code)] === 'true'
+/** 从属行的置灰条件:没配好或总开关关着 */
+const subOff = (p: ConfigProviderRow) => !p.registered || !isOn(p.code)
 
 /** 官方厂商对应的服务器扩展包,「未安装」时告诉管理员装哪个。 */
 const PACKAGE_OF: Record<string, string> = {
@@ -72,6 +86,30 @@ async function toggleLink(p: ConfigProviderRow, v: boolean) {
   )
     return
   values[linkKey(p.code)] = String(v)
+}
+
+function toggleNotify(p: ConfigProviderRow, v: boolean) {
+  if (p.registered) values[notifyKey(p.code)] = String(v)
+}
+
+/** 正在发测试消息的 provider 码,空串 = 空闲;同一时刻只发一条。 */
+const testing = ref('')
+
+async function testNotice(p: ConfigProviderRow) {
+  if (testing.value) return
+  testing.value = p.code
+  try {
+    const r = await externalAuthApi.testNotice(p.code)
+    const key = `config.externalAuth.noticeTest.${r.status}`
+    // 后端新增的状态码前端还没翻译时,原样显示状态码,不要露出 i18n 键
+    const text = te(key) ? t(key, { detail: r.detail ?? '' }) : r.status
+    if (r.status === 'ok') message.success(text)
+    else message.error(text)
+  } catch (e) {
+    message.error(translateError(e))
+  } finally {
+    testing.value = ''
+  }
 }
 </script>
 
@@ -144,7 +182,7 @@ async function toggleLink(p: ConfigProviderRow, v: boolean) {
           :label="t('config.externalAuth.linkByAccount')"
           :hint="t('config.externalAuth.linkByAccountHint')"
           :keys="[linkKey(p.code)]"
-          :disabled="!p.registered || !isOn(p.code)"
+          :disabled="subOff(p)"
           :data-link="p.code"
           sub
         >
@@ -152,6 +190,30 @@ async function toggleLink(p: ConfigProviderRow, v: boolean) {
             :value="linkOn(p.code)"
             :aria-label="`${p.displayName} ${t('config.externalAuth.linkByAccount')}`"
             @update:value="v => toggleLink(p, v)"
+          />
+        </CfgRow>
+        <CfgRow
+          v-if="p.supportsNotice"
+          :label="t('config.externalAuth.notify')"
+          :hint="t('config.externalAuth.notifyHint')"
+          :keys="[notifyKey(p.code)]"
+          :disabled="subOff(p)"
+          :data-notify="p.code"
+          sub
+        >
+          <n-button
+            size="small"
+            data-testid="provider-test-notice"
+            :loading="testing === p.code"
+            :disabled="!!testing || subOff(p)"
+            @click="testNotice(p)"
+          >
+            {{ t('config.externalAuth.testNotice') }}
+          </n-button>
+          <n-switch
+            :value="notifyOn(p.code)"
+            :aria-label="`${p.displayName} ${t('config.externalAuth.notify')}`"
+            @update:value="v => toggleNotify(p, v)"
           />
         </CfgRow>
       </template>
