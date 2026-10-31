@@ -134,7 +134,7 @@ public bool Owns(long? createOrgId, long? createUserId) =>
 
 仓储要读当前范围，构造函数末尾加可选参数 `IDataScopeContext? dataScope = null`。
 `IOrgShared` 实体的仓储拿不到它时，写操作抛 `InvalidOperationException`，不能静默放行。
-`: SqlSugarRepository<T>(db)` 这种只传 `db` 的子类如果用在 `OrgAuditEntity` 上，要补传这个参数，写进升级说明。
+`: SqlSugarRepository<T>(db)` 这种没传 `dataScope` 的子类（三参数写法同样没传）如果用在 `OrgAuditEntity` 上，要补传这个参数，写进升级说明。
 
 ### 其余要兼容新接口的位置
 
@@ -180,7 +180,9 @@ route.IsShared = true;                               // 设为共享
 
 业务方要遵守两条约定，内核拦不了：
 
-- **明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），接口先校验主表。** 过滤器按表生效，明细如果也带机构字段，别的机构能看到主表却看不到明细。
+- **明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），接口先校验主表：读明细校验主表可见，写明细校验调用者归属主表。** 过滤器按表生效，明细如果也带机构字段，别的机构能看到主表却看不到明细。
+  写明细要用 `DataScopeResult.Owns` 判断归属：明细不受仓储写守卫管，共享行又能通过 `GetByIdAsync`，只校验可见的话，B 机构能改 A 机构共享路线的明细。
+  不能用 `IDataScopeGuard.EnsureOrgInScope`，它把 `null` 机构算在范围内。
 - **共享行不要引用某个机构的私有数据。** 比如共享路线引用了 A 的私有工作中心，B 打开时这部分查不到。内核不知道业务外键，由业务保存时校验。
 
 ## 已发现的问题

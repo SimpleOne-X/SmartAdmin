@@ -222,5 +222,5 @@ Take "delete a role" as an example:
 
 1. **Authentication** — validates the JWT signature and expiry, reads out `sub` / `sid` / `sadm`.
 2. **`[RolePermission]`** — session `sid` is still active; not a super admin; permission code `DELETE:/api/v1/sys/role/{id}` is present in the user's permission code set → pass through. The user's data scope is also written into `IDataScopeContext` at this point.
-3. **Data scope** — the repository's write-path guard first queries through the scope-filtered path to confirm the target row is within scope; attempting to modify/delete a row from another org returns 0 rows and is rejected.
+3. **Data scope** — the repository's write-path guard first queries through the scope-filtered path to confirm the target row is within scope; attempting to modify/delete a row from another org returns 0 rows and is rejected, while a shared row modified or deleted by a non-owner throws `OrgOutOfScope`.
 4. **Result envelope** — the controller's `return` result is wrapped into `Result<T>`; if an `AdminException` was thrown along the way, it's converted into a business-code envelope instead.

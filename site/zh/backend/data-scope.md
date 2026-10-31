@@ -196,28 +196,55 @@ client.QueryFilter.AddTableFilter<IOrgShared>(e =>
 受限用户里只有范围含「仅本人」的创建人能写，其他人更新或删除时同样抛 `OrgOutOfScope`。
 后台任务、启动期这类没有 HTTP 上下文的调用不受限。
 
-归属判断收口在 `DataScopeResult.Owns(createOrgId, createUserId)`，
-写守卫用它，业务服务也可以用它给 DTO 算「能否编辑」。
+归属判断收口在 `DataScopeResult.Owns(createOrgId, createUserId)`。
+写守卫用它；业务服务可以用它给 DTO 算「能否编辑」，也可以在仓储守卫管不到的写之前自己校验归属。
 它与过滤器的前三个分支含义一致，不含共享放行。
 
 写守卫要读当前数据范围，所以 `OrgAuditEntity` 的仓储必须带 `IDataScopeContext`。
 DI 注入的仓储自带它。
-自己 `new`，或者写成 `: SqlSugarRepository<T>(db)` 的子类，要把它补传给构造函数，
-缺了就在更新或删除时抛 `InvalidOperationException`，不会静默放行。
+自己 `new`，或者子类没把它传给基类构造函数，更新或删除时就抛 `InvalidOperationException`，不会静默放行。
+`: SqlSugarRepository<T>(db)` 和 `: SqlSugarRepository<T>(db, time, currentUser)` 都算没传。
 插入不经过写守卫，不受这条影响。
 
-绕过仓储、直接走 `Db.Updateable` / `Deleteable` 的写不受这道守卫约束，共享行也要自己校验归属。
+绕过仓储的写不受这道守卫约束，共享行能读到不等于能写，下面一节列了这类写法。
 `OrgAuditEntity` 是物理删除，没有回收站，共享行删掉之后所有机构都看不到了，也恢复不了。
+
+### 可见不等于可写
+
+对 `OrgAuditEntity` 来说，`GetByIdAsync` 取到行只说明这行可见，不说明调用者能写它：别的机构的共享行同样取得到。
+下面这些写法绕开了写守卫，或者把「取得到」当成「可以写」，共享行上会让非归属方写成功：
+
+- `GetByIdAsync` 判非空之后，直接走 `Db.Updateable` / `Deleteable`。
+- 子类覆写 `InScopeAsync`，照抄 `Queryable.Where(id).AnyAsync()`。共享行查得到，守卫返回 true，归属判断就被绕过了。
+- 覆写 `UpdateAsync` / `DeleteAsync` 不调 `base`，或者用 `TryAdd` 换掉 `IRepository<>`。写守卫跟着一起没了。
+- 按业务键取行，比如 `GetFirstAsync(x => x.Code == code)`。它可能取到别的机构的共享行，接着改、删会抛 `OrgOutOfScope`；统计汇总也会把共享行算进去。
+
+这几处都改成取出行之后用 `Owns` 判断归属，不归属的行不要当成自己的。写法见下一节写明细的那段。
 
 ### 接入约定
 
 下面这些内核拦不了，要业务代码自己守：
 
-- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），读写明细的接口先校验主表。
+- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），接口先校验主表，读和写校验的东西不一样：
+  读明细校验主表对调用者可见，写明细校验调用者归属主表。
   过滤器按表生效，明细要是也带机构字段，别的机构能看到主表，却看不到明细。
 - 共享行不要引用某个机构的私有数据。
   比如共享路线引用了 A 机构的私有工作中心，B 机构打开路线时，这部分查不到。
   内核不知道业务外键，只能由业务在保存时校验。
+
+写明细要校验归属，是因为明细不是机构实体，仓储的写守卫管不到它，而共享行能通过 `GetByIdAsync`。
+只校验「主表读得到」，B 机构就能改 A 机构共享路线的明细。
+写明细前这样校验：
+
+```csharp
+// routes 是主表的 IRepository<ProcessRoute>，dataScope 是注入的 IDataScopeContext
+var route = await routes.GetByIdAsync(routeId)
+    ?? throw new AdminException(ErrorCode.XxxNotFound);   // 换成业务自己的“找不到”错误码
+AdminException.ThrowIf(!dataScope.Current.Owns(route.CreateOrgId, route.CreateUserId), ErrorCode.OrgOutOfScope);
+```
+
+这里不能用 `IDataScopeGuard.EnsureOrgInScope` 代替。
+它把 `null` 机构算在范围内，`CreateOrgId` 为空的共享行会被任何人放行，也不认范围含「仅本人」的创建人。
 
 ### 清除过滤器
 
@@ -248,9 +275,9 @@ HTTP 路径**刻意不用 `AsyncLocal`**，原因写在 `HttpContextDataScopeCon
 
 ## 未绑定时 fail-closed
 
-认证请求没绑上范围的时候，回退是**空范围**（机构集为空、附加「仅本人」），也就是只看得见自己创建的行，不是「不受限」。
+认证请求没绑上范围的时候，回退是**空范围**（机构集为空、附加「仅本人」），也就是只看得见自己创建的行和 `OrgAuditEntity` 的共享行，不是「不受限」。
 
-正常路径上范围总会在授权阶段绑好，这个回退只在异常路径上兜底：兜底方向选的是让漏绑的端点表现为「查不到数据」，而不是「看到全部机构的数据」——前者有人会立刻报障，后者悄无声息，危险得多。
+正常路径上范围总会在授权阶段绑好，这个回退只在异常路径上兜底：兜底方向选的是让漏绑的端点表现为「只看得到自己的数据」，而不是「看到全部机构的数据」——前者有人会立刻报障，后者悄无声息，危险得多。
 
 三类调用不受这条约束：没有 `HttpContext` 的调用（后台任务、启动期、种子，都是可信上下文）、匿名请求、超管。
 

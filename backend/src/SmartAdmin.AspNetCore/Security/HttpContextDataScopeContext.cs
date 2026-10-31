@@ -10,7 +10,8 @@ namespace SmartAdmin.AspNetCore;
 /// <para>为什么不用 AsyncLocal:授权过滤器是 MVC 管道的被调用方,其内部 <c>await</c> 之后设置的 AsyncLocal
 /// 不会回流到管道上游(经典陷阱),动作里的查询将读不到。<c>HttpContext.Items</c> 挂在请求对象上、
 /// 全管道稳定可见,无此问题。非 HTTP 场景(自检/后台)回退到 SqlSugar 层的 AsyncLocal 实现。</para>
-/// <para><b>未绑定时的回退是 fail-closed 的</b>:认证请求拿到空范围(查不到任何受控行),而不是"看全库"。
+/// <para><b>未绑定时的回退是 fail-closed 的</b>:认证请求拿到空范围(机构集为空、仅本人),只看得到自己创建的行,
+/// <c>OrgAuditEntity</c> 的共享行也看得到,而不是"看全库"。
 /// 正常情况下 <see cref="DataScopeAutoBindFilter"/> 已在授权阶段绑好真实范围,回退只在异常路径上兜底。
 /// 无 HttpContext(后台任务/启动)、匿名请求、超管仍然不受限。要让回退改为不受限,配
 /// <c>SmartAdmin:Security:DataScopeFailOpen=true</c>。</para>

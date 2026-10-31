@@ -212,33 +212,72 @@ and anyone else gets `OrgOutOfScope` on update or delete as well.
 Calls with no HTTP context, such as background jobs and startup, are unrestricted.
 
 Ownership is decided in `DataScopeResult.Owns(createOrgId, createUserId)`.
-The write guard uses it, and a business service can use it too, to compute an "editable" flag on a DTO.
+The write guard uses it.
+A business service can use it too, to compute an "editable" flag on a DTO,
+or to check ownership itself before a write the repository guard can't reach.
 It matches the first three branches of the filter, without the shared allowance.
 
 The write guard has to read the current data scope,
 so a repository for an `OrgAuditEntity` must carry an `IDataScopeContext`.
-A repository injected through DI already does;
-one you `new` yourself, or a subclass written as `: SqlSugarRepository<T>(db)`,
-has to pass it on to the constructor,
-otherwise an update or delete throws `InvalidOperationException` instead of passing silently.
+A repository injected through DI already does.
+One you `new` yourself, or a subclass that doesn't pass it on to the base constructor,
+throws `InvalidOperationException` on update or delete instead of passing silently.
+Both `: SqlSugarRepository<T>(db)` and `: SqlSugarRepository<T>(db, time, currentUser)` count as not passing it.
 Insert does not go through the write guard, so this does not affect it.
 
-Writes that bypass the repository through `Db.Updateable` / `Deleteable` are not covered by this guard,
-and shared rows need their ownership checked by hand too.
+Writes that bypass the repository are not covered by this guard.
+A shared row you can read is not necessarily a row you can write; the next section lists the patterns to watch.
 `OrgAuditEntity` deletes physically with no recycle bin:
 once a shared row is deleted, no org sees it any more, and it cannot be restored.
+
+### Visible is not writable
+
+For an `OrgAuditEntity`, getting a row back from `GetByIdAsync` only tells you the row is visible.
+It doesn't tell you the caller may write it, because another org's shared row comes back too.
+These patterns skip the write guard, or treat "found" as "writable", and let a non-owner write a shared row:
+
+- Calling `Db.Updateable` / `Deleteable` straight after `GetByIdAsync` returned non-null.
+- A subclass that overrides `InScopeAsync` and copies `Queryable.Where(id).AnyAsync()`.
+  A shared row is found, so the guard returns true and the ownership check is skipped.
+- Overriding `UpdateAsync` / `DeleteAsync` without calling `base`, or replacing `IRepository<>` with `TryAdd`.
+  The write guard goes with it.
+- Fetching by a business key, such as `GetFirstAsync(x => x.Code == code)`.
+  It may return another org's shared row, so a following update or delete throws `OrgOutOfScope`,
+  and a summary or count includes shared rows.
+
+Fix each of them the same way: after fetching the row, check ownership with `Owns`,
+and don't treat a row you don't own as yours.
+The next section shows the check for detail rows.
 
 ### Conventions when adopting it
 
 The kernel can't enforce these, so business code has to:
 
 - Detail tables carry no org field (inherit `PrimaryId` or `BaseEntity`),
-  and the endpoints that read or write details check the parent table first.
+  and the endpoints that touch details check the parent table first, but reads and writes check different things:
+  a read checks that the parent row is visible to the caller,
+  a write checks that the caller owns the parent row.
   Filters take effect per table;
   if a detail table carried an org field too, another org could see the parent row but not its details.
 - A shared row must not reference one org's private data.
   If a shared route points at A's private work center, B sees nothing for that part when opening the route.
   The kernel doesn't know the business foreign keys, so the business must check at save time.
+
+A write to details has to check ownership because a detail table is not an org entity,
+so the repository write guard doesn't cover it, while a shared row passes `GetByIdAsync`.
+If the check were only "the parent row is readable", org B could edit the details of org A's shared route.
+Check like this before writing details:
+
+```csharp
+// routes is the parent's IRepository<ProcessRoute>; dataScope is the injected IDataScopeContext
+var route = await routes.GetByIdAsync(routeId)
+    ?? throw new AdminException(ErrorCode.XxxNotFound);   // use your own "not found" error code
+AdminException.ThrowIf(!dataScope.Current.Owns(route.CreateOrgId, route.CreateUserId), ErrorCode.OrgOutOfScope);
+```
+
+Don't use `IDataScopeGuard.EnsureOrgInScope` here instead.
+It counts a `null` org as in scope, so a shared row with an empty `CreateOrgId` passes for anyone,
+and it doesn't recognize a creator whose scope includes "self only".
 
 ### Clearing the filter
 
@@ -271,9 +310,9 @@ In other words, scope is written in the **authorization filter**, while the quer
 
 ## Unbound requests fail closed
 
-When an authenticated request has no scope bound, the fallback is an **empty scope** (empty org set, plus "self only"), so it sees only rows it created itself. It is not "unrestricted".
+When an authenticated request has no scope bound, the fallback is an **empty scope** (empty org set, plus "self only"), so it sees only rows it created itself, plus the shared rows of `OrgAuditEntity`. It is not "unrestricted".
 
-On the normal path the scope is always bound during authorization, so this fallback only catches the exceptional path. The fallback direction is chosen deliberately: an unbound endpoint shows "no data comes back," which someone reports within the hour, rather than "every org's data is visible," which says nothing at all and is far more dangerous.
+On the normal path the scope is always bound during authorization, so this fallback only catches the exceptional path. The fallback direction is chosen deliberately: an unbound endpoint shows "only my own data comes back," which someone reports within the hour, rather than "every org's data is visible," which says nothing at all and is far more dangerous.
 
 Three kinds of call are exempt: calls with no `HttpContext` (background jobs, startup, seeding — all trusted contexts), anonymous requests, and super admins.
 

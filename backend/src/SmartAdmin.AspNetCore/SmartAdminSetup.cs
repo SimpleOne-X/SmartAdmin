@@ -275,7 +275,7 @@ public static class SmartAdminSetup
                 if (options.DemoMode)
                     o.Filters.Add<DemoModeFilter>();
                 // 数据范围先于一切:已认证但没挂授权特性的端点(消费者只写 [Authorize] 的那种)也拿到真实范围,
-                // 否则会落到 HttpContextDataScopeContext 的 fail-closed 回退、查不到任何受控行。
+                // 否则会落到 HttpContextDataScopeContext 的 fail-closed 回退,只看得到自己创建的行(OrgAuditEntity 的共享行也看得到)。
                 o.Filters.Add<DataScopeAutoBindFilter>(int.MinValue);
                 o.Filters.Add<AdminExceptionFilter>();
                 o.Filters.Add<ExceptionLogFilter>();   // 未捕获异常旁路留痕(不吞异常,500 照旧);业务异常显式跳过

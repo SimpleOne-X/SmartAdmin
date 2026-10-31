@@ -222,5 +222,5 @@ public void OnException(ExceptionContext context)
 
 1. **认证**：校验 JWT 签名与有效期，读出 `sub` / `sid` / `sadm`。
 2. **`[RolePermission]`**：会话 `sid` 仍然活跃，用户不是超管，权限码 `DELETE:/api/v1/sys/role/{id}` 也在用户的权限码集合里，于是放行。同时把该用户的数据范围写入 `IDataScopeContext`。
-3. **数据范围**：仓储的写路径守卫先用带范围过滤器的查询，确认目标行在范围内。越权改删别的机构的行，返回 0 行被拒。
+3. **数据范围**：仓储的写路径守卫先用带范围过滤器的查询，确认目标行在范围内。越权改删别的机构的行，返回 0 行被拒；共享行被非归属方改删，则抛 `OrgOutOfScope`。
 4. **结果信封**：控制器 `return` 的结果被包成 `Result<T>`。中途要是抛了 `AdminException`，就转成业务码信封返回。

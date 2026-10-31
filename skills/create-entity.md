@@ -158,9 +158,22 @@ public OrderStatus Status { get; set; }
   别的用户更新或删除抛 `ErrorCode.OrgOutOfScope`（不是返回 0 行）。
   私有行被越权更新或删除仍返回 0 行。
 - 写守卫要读当前数据范围，仓储必须带 `IDataScopeContext`。
-  DI 注入的仓储自带；自己 `new`、或写 `: SqlSugarRepository<T>(db)` 的子类要补传这个参数，
-  缺了更新或删除时抛 `InvalidOperationException`。
-- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），读写明细的接口先校验主表。
+  DI 注入的仓储自带；自己 `new`、或子类没把它传给基类构造函数的，更新或删除时抛 `InvalidOperationException`
+  （`: SqlSugarRepository<T>(db)` 和 `(db, time, currentUser)` 都算没传）。
+- 可见不等于可写：`GetByIdAsync` 取得到共享行，不代表调用者能写它。
+  凡是绕开仓储写守卫的写法，都要取出行后用 `DataScopeResult.Owns` 判断归属：
+  `GetByIdAsync` 判非空后直接 `Db.Updateable` / `Deleteable`；覆写 `InScopeAsync` 照抄 `Where(id).AnyAsync()`；
+  覆写 `UpdateAsync` / `DeleteAsync` 不调 `base`，或 `TryAdd` 替换 `IRepository<>`；
+  按业务键 `GetFirstAsync` 取行，可能取到别的机构的共享行。
+- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），接口先校验主表，读和写校验的不一样：
+  读明细校验主表可见，写明细校验调用者归属主表。仓储写守卫管不到明细，写明细前这样校验：
+
+  ```csharp
+  var route = await routes.GetByIdAsync(routeId) ?? throw new AdminException(ErrorCode.XxxNotFound);
+  AdminException.ThrowIf(!dataScope.Current.Owns(route.CreateOrgId, route.CreateUserId), ErrorCode.OrgOutOfScope);
+  ```
+
+  不能用 `IDataScopeGuard.EnsureOrgInScope`：它把 `null` 机构算在范围内，`CreateOrgId` 为空的共享行会被任何人放行。
 - 共享行不要引用某个机构的私有数据（如共享路线引用了某机构的私有工作中心），
   内核不知道业务外键，由业务保存时校验。
 - 清掉机构范围过滤要写 `.ClearFilter<IOrgScoped, IOrgShared>()`。

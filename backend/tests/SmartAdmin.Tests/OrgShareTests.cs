@@ -112,8 +112,8 @@ public class OrgShareTests
 
         using var scope = sp.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IRepository<FooShare>>();
-        Assert.Equal(0, await repo.AsQueryable().ClearFilter<IOrgScoped>().CountAsync());                        // 老写法清不掉共享过滤器
-        Assert.Equal(1, await repo.AsQueryable().ClearFilter<IOrgScoped, IOrgShared>().CountAsync());            // 新写法才清得掉
+        Assert.Equal(0, await repo.AsQueryable().ClearFilter<IOrgScoped>().CountAsync());                        // 只清 IOrgScoped:清不掉共享过滤器
+        Assert.Equal(1, await repo.AsQueryable().ClearFilter<IOrgScoped, IOrgShared>().CountAsync());            // 两个接口一起清才清得掉
 
         TestDb.Cleanup(id, dbFile);
     }

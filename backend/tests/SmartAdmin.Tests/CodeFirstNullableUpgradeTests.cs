@@ -150,6 +150,12 @@ public class CodeFirstNullableUpgradeTests
                 legacyId = legacy.Id;
 
                 db.DbMaintenance.DropColumn("sample_org_doc", "IsShared");
+
+                // 列确实被砍掉了,后面 Contains 才不是空转通过
+                var colsAfterDrop = db.DbMaintenance.GetColumnInfosByTableName("sample_org_doc", false)
+                    .Select(c => c.DbColumnName)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                Assert.DoesNotContain("IsShared", colsAfterDrop);
             }
 
             using var v2 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false };
