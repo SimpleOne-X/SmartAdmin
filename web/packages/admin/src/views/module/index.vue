@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { NButton, NCard, NEmpty, NSpin, NTag, NTooltip, useMessage } from 'naive-ui'
 import { Icon } from '@iconify/vue'
 import { useI18n } from 'vue-i18n'
@@ -10,6 +10,7 @@ import { useUserStore } from '#/stores/user'
 import { useModule } from '#/composables/useModule'
 import { beginVoluntaryLogout } from '#/composables/useRealtime'
 import { resetRouter } from '#/router'
+import { safeRedirect } from '#/router/loginRedirect'
 import { translateError } from '#/utils/error'
 import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 import { authApi } from '#/api'
@@ -17,6 +18,7 @@ import AppIcon from '#/components/AppIcon.vue'
 import SmartLogo from '#/components/SmartLogo.vue'
 import { translateMenuTitle } from '#/locales/menuTitle'
 
+const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const { t } = useI18n()
@@ -32,8 +34,8 @@ const lineIcon = (icon?: string | null) =>
 async function pick(id: number) {
   busy.value = true
   try {
-    // switchModule = 建路由 + 清标签 + 落新应用首页(旧应用的标签在新应用里都是死链)
-    await useModule().switchModule(id)
+    // switchModule = 建路由 + 清标签 + 落原页面或新应用首页(旧应用的标签在新应用里都是死链)
+    await useModule().switchModule(id, safeRedirect(route.query.redirect) ?? undefined)
   } catch (e) {
     message.error(translateError(e))
   } finally {

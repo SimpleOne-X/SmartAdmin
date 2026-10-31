@@ -113,7 +113,12 @@ router.beforeEach(async to => {
       if (res.chooser)
         return to.name === 'module' || isFullscreenPath(to.path)
           ? true
-          : { path: '/module', replace: true }
+          : {
+              path: '/module',
+              // 选完应用要能回到原页面(比如点开的通知卡片);'/' 没有目标,落应用首页
+              query: to.path === '/' ? undefined : { redirect: to.fullPath },
+              replace: true,
+            }
       // 选应用页放行:enterInitial 已填好 auth.modules,渲染所需数据齐备。
       // 不能弹回 '/' —— 那样默认应用一旦设定就再无入口改它(右上角九宫格正是导航到这里)。
       if (to.name === 'module') return true

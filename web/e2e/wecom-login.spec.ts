@@ -151,6 +151,61 @@ test('未登录打开深链 → 静默登录后回到原页面', async ({ page, 
   expect(exchanges).toBe(1)
 })
 
+test('没记住应用的用户点卡片深链 → 选应用后落到卡片指向的页面', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const session = await apiAdminSession(request)
+  await countAuthorize(page, `${baseURL}/oauth/callback?ticket=e2e`)
+  await page.route('**/api/v1/auth/external/exchange', route =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 0, data: session }),
+    }),
+  )
+
+  await page.goto('/personal/notice')
+
+  await page.locator('.mod-card').first().waitFor({ timeout: 15_000 })
+  await page.locator('.mod-card').first().click()
+
+  await expect(page.locator('.top-user')).toBeVisible({ timeout: 15_000 })
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/personal/notice')
+})
+
+test('同一浏览器一页退出 → 另一页留在登录页,不被自动登录拉回', async ({ context, request }) => {
+  const session = await apiAdminSession(request)
+  const leaving = await context.newPage()
+  const staying = await context.newPage()
+  const hits = await countAuthorize(staying)
+  await seedSession(leaving, session)
+
+  for (const page of [leaving, staying]) {
+    await page.goto('/')
+    await page.locator('.top-user, .mod-card').first().waitFor()
+    await enterFirstAppIfNeeded(page)
+    await expect(page.locator('.top-user')).toBeVisible()
+  }
+
+  // 登录方式接口回来后紧跟着就是自动登录的判断
+  const providersLoaded = staying.waitForResponse(
+    r => r.request().method() === 'GET' && r.url().includes('/api/v1/auth/external/providers'),
+  )
+  await leaving.locator('.top-user').click()
+  await leaving
+    .locator('.n-dropdown-option')
+    .filter({ hasText: /退出登录|Log out/ })
+    .click()
+
+  await providersLoaded
+  // 跳转紧跟在接口返回之后发起,留一小段时间:这段时间里一次授权请求都没有才算没跳
+  await staying.waitForTimeout(500)
+  expect(hits.count).toBe(0)
+  await expect(staying).toHaveURL(/\/login/)
+  await expect(staying.getByPlaceholder(/账号|account/i)).toBeVisible()
+})
+
 test('本地有登录态、没进过登录页时主动退出 → 不再自动登录', async ({ page, request }) => {
   const hits = await countAuthorize(page)
   await seedSession(page, await apiAdminSession(request))
