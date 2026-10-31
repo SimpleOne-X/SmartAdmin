@@ -3,6 +3,7 @@ using SqlSugar;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
+using SmartAdmin.TestHost;
 
 namespace SmartAdmin.Tests;
 
@@ -246,6 +247,32 @@ public class SeedUpgradeTests
                 Assert.True(menu.IsDelete);   // 仍是删除态,没被升级复活
                 Assert.Single(await db.Queryable<SysMenu>().ClearFilter()
                     .Where(x => x.Id == WorkbenchMenuId).ToListAsync());   // 没被重复插入
+            });
+    }
+
+    /// <summary>
+    /// 升级时:开了 SyncOnUpgrade 的机构共享实体种子,业务列(标题)刷回种子值,
+    /// 用户打开的共享标记和已有的归属机构留着。整行刷的话,升级会把用户共享出去的行悄悄收回成私有,
+    /// 并把归属机构清空(受限用户从此看不到这行)。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_keeps_share_flag_and_owner_org()
+    {
+        await RestartWithAsync(
+            async db =>
+            {
+                await DowngradeVersionAsync(db);
+                await db.Updateable<SampleOrgDoc>()
+                    .SetColumns(x => new SampleOrgDoc { Title = "用户改过", IsShared = true, CreateOrgId = 77 })
+                    .Where(x => x.Id == SampleOrgDocSeed.SeedId)
+                    .ExecuteCommandAsync();
+            },
+            async db =>
+            {
+                var doc = await db.Queryable<SampleOrgDoc>().FirstAsync(x => x.Id == SampleOrgDocSeed.SeedId);
+                Assert.Equal("种子标题", doc.Title);   // 升级确实同步过,下面两条的"留着"才不是空转通过
+                Assert.True(doc.IsShared);
+                Assert.Equal(77, doc.CreateOrgId);
             });
     }
 

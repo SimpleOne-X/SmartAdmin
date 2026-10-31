@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SqlSugar;
 using SmartAdmin.Services;
 using SmartAdmin.SqlSugar;
+using SmartAdmin.TestHost;
 
 namespace SmartAdmin.Tests;
 
@@ -119,6 +120,51 @@ public class CodeFirstNullableUpgradeTests
 
             var business = await db2.Queryable<SysModule>().FirstAsync(x => x.Id == 2);
             Assert.Null(business.IsDelegatable);
+        }
+        finally
+        {
+            TestDb.Cleanup(dbPath, dbPath);
+        }
+    }
+
+    /// <summary>
+    /// 老库升级:OrgAuditEntity 表已有数据时补可空列 IsShared;存量行是 NULL(不共享),可见性不变。
+    /// 这个宿主没有 HTTP 上下文,数据范围固定为不受限,所以这里只锁结构与存量值,不断言可见性。
+    /// </summary>
+    [Fact]
+    public async Task Existing_org_audit_table_gets_nullable_IsShared()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"smart-orgshared-upg-{Guid.NewGuid():N}.db");
+        try
+        {
+            long legacyId;
+            using (var v1 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false, FreshDatabase = true })
+            {
+                _ = v1.CreateClient();
+                using var scope = v1.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+                var repo = scope.ServiceProvider.GetRequiredService<IRepository<SampleOrgDoc>>();
+
+                var legacy = new SampleOrgDoc { Title = "老行", CreateOrgId = 10 };
+                await repo.InsertAsync(legacy);
+                legacyId = legacy.Id;
+
+                db.DbMaintenance.DropColumn("sample_org_doc", "IsShared");
+            }
+
+            using var v2 = new AdminAppFactory { DbPath = dbPath, DeleteDbOnDispose = false };
+            _ = v2.CreateClient();
+            using var s2 = v2.Services.CreateScope();
+            var db2 = s2.ServiceProvider.GetRequiredService<ISqlSugarClient>();
+
+            var cols = db2.DbMaintenance.GetColumnInfosByTableName("sample_org_doc", false)
+                .Select(c => c.DbColumnName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("IsShared", cols);
+
+            var row = await db2.Queryable<SampleOrgDoc>().FirstAsync(x => x.Id == legacyId);
+            Assert.Equal(10, row.CreateOrgId);
+            Assert.Null(row.IsShared);
         }
         finally
         {

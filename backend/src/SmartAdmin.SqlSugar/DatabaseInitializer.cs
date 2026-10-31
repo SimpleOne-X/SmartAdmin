@@ -410,17 +410,20 @@ internal sealed class DatabaseInitializer(
         // IgnoreColumns 不是防御性代码:AsUpdateable 默认刷全部映射列,而种子实例的 CreateTime 是
         // default(DateTime)(0001-01-01)、CreateUserId 是 null —— 不排除就会把老库正确的审计字段刷成垃圾。
         // IsDelete 同理:用户软删掉的内置菜单不该被升级复活。
-        // CreateOrgId(数据范围锚点)只在 IOrgScoped 实体(DataEntity / OrgAuditEntity)上存在;
-        // 刷成 null 会让那些行从所有机构范围查询里消失,一并排除。按接口而非 DataEntity 基类判定,覆盖不软删的机构实体。
+        // CreateOrgId(数据范围锚点)只在 IOrgScoped(DataEntity)与 IOrgShared(OrgAuditEntity)实体上存在;
+        // 刷成 null 会让那些行从所有机构范围查询里消失,一并排除。按接口而非基类判定,覆盖不软删的机构实体。
+        // IsShared 只在 IOrgShared 实体上有:它是用户在业务页打开的共享标记,种子实例上恒为 null,
+        // 不排除就会在升级时把用户共享出去的行悄悄收回成私有。
         // IsDelete 仅 BaseEntity 系有此列;AuditEntity 系无该列时 IgnoreColumns 找不到即跳过,无害,故无条件列入。
-        string[] ignored = typeof(TEntity).IsAssignableTo(typeof(IOrgScoped))
-            ? [nameof(AuditEntity.CreateTime), nameof(AuditEntity.CreateUserId), nameof(BaseEntity.IsDelete), nameof(IOrgScoped.CreateOrgId)]
-            : [nameof(AuditEntity.CreateTime), nameof(AuditEntity.CreateUserId), nameof(BaseEntity.IsDelete)];
+        var isShared = typeof(TEntity).IsAssignableTo(typeof(IOrgShared));
+        List<string> ignored = [nameof(AuditEntity.CreateTime), nameof(AuditEntity.CreateUserId), nameof(BaseEntity.IsDelete)];
+        if (isShared || typeof(TEntity).IsAssignableTo(typeof(IOrgScoped))) ignored.Add(nameof(IOrgScoped.CreateOrgId));
+        if (isShared) ignored.Add(nameof(IOrgShared.IsShared));
 
         // 声明了列白名单就只刷这几列(见 ISeedData.SyncColumns),否则按上面的排除法刷其余全部列
         var synced = seed.SyncColumns is { Length: > 0 } only
             ? await db.Updateable(toUpdate).UpdateColumns(only).ExecuteCommandAsync()
-            : await db.Updateable(toUpdate).IgnoreColumns(ignored).ExecuteCommandAsync();
+            : await db.Updateable(toUpdate).IgnoreColumns(ignored.ToArray()).ExecuteCommandAsync();
 
         return (inserted, synced);
     }
