@@ -1,5 +1,13 @@
-import { test, expect } from '@playwright/test'
-import { apiAdminToken, apiClearExternalProvider, apiConfigureWeCom } from './api'
+import { test, expect, type Page } from '@playwright/test'
+import {
+  apiAdminSession,
+  apiAdminToken,
+  apiClearExternalProvider,
+  apiConfigureWeCom,
+  apiFirstModuleId,
+  type AdminSession,
+} from './api'
+import { enterFirstAppIfNeeded } from './helpers'
 
 /**
  * 企业微信客户端里打开登录页:前端直接发起企业微信登录,后端按 UA 给网页授权地址(扫码页在客户端里用不了)。
@@ -71,4 +79,112 @@ test('企业微信客户端里打开登录页 → 直接走网页授权;同一�
   await expect(page.getByPlaceholder(/账号|account/i)).toBeVisible()
   await page.waitForLoadState('networkidle')
   expect(authorizeHits).toBe(1)
+})
+
+/** pinia 持久化(stores/user.ts)落在 localStorage 'user' 里的会话形状。 */
+function storedUser(s: AdminSession | null) {
+  return {
+    accessToken: s?.accessToken ?? 'invalid-access-token',
+    refreshToken: s?.refreshToken ?? '',
+    cookieSession: false,
+    userInfo: s
+      ? {
+          userId: Number(s.userId),
+          account: s.account,
+          name: s.name,
+          mustChangePassword: false,
+          isSuperAdmin: !!s.isSuperAdmin,
+        }
+      : { userId: 1, account: 'stale', name: 'stale', mustChangePassword: false },
+    issuedAt: Date.now(),
+  }
+}
+
+/**
+ * 每个文档加载前把会话写进 localStorage,但只写一次:页面里的退出或会话失效清掉它之后,
+ * 后面的整页跳转(自动登录会顶层导航)不能再把它写回来。
+ */
+async function seedSession(page: Page, session: AdminSession | null) {
+  await page.addInitScript(user => {
+    if (sessionStorage.getItem('e2e-session-seeded')) return
+    localStorage.setItem('user', JSON.stringify(user))
+    sessionStorage.setItem('e2e-session-seeded', '1')
+  }, storedUser(session))
+}
+
+/** 截住发起授权这一跳并计数;redirectTo 给了就回 302,否则回占位页。 */
+async function countAuthorize(page: Page, redirectTo?: string) {
+  const hits = { count: 0 }
+  await page.route('**/api/v1/auth/external/wecom/authorize', async route => {
+    hits.count++
+    if (redirectTo) await route.fulfill({ status: 302, headers: { location: redirectTo } })
+    else await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>wecom</p>' })
+  })
+  return hits
+}
+
+test('未登录打开深链 → 静默登录后回到原页面', async ({ page, request, baseURL }) => {
+  const session = await apiAdminSession(request)
+  const hits = await countAuthorize(page, `${baseURL}/oauth/callback?ticket=e2e`)
+  // 企业微信那边换到的会话由后端签发;这里换成一份真实会话,回调页落地后才能进业务页
+  let exchanges = 0
+  await page.route('**/api/v1/auth/external/exchange', route => {
+    exchanges++
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 0, data: session }),
+    })
+  })
+  // 登录态过期的老用户:浏览器里没有会话,但记得上次在哪个应用(多应用且没设默认时,没有它会落到应用选择页)
+  const moduleId = await apiFirstModuleId(request, session.accessToken)
+  await page.addInitScript(id => {
+    localStorage.setItem('auth', JSON.stringify({ currentModuleId: id }))
+  }, moduleId)
+
+  await page.goto('/personal/notice')
+
+  // 不能靠 waitForURL:goto 返回时地址本来就是 /personal/notice,守卫还没把它送去登录页。
+  // 顶栏只有进了应用壳才有,等到它再看地址,才说明是回调之后落到的原页面。
+  await expect(page.locator('.top-user')).toBeVisible({ timeout: 15_000 })
+  expect(new URL(page.url()).pathname).toBe('/personal/notice')
+  expect(hits.count).toBe(1)
+  expect(exchanges).toBe(1)
+})
+
+test('本地有登录态、没进过登录页时主动退出 → 不再自动登录', async ({ page, request }) => {
+  const hits = await countAuthorize(page)
+  await seedSession(page, await apiAdminSession(request))
+
+  await page.goto('/')
+  // goto 在 load 就返回,守卫里重建路由还没落定:等到顶栏或应用选择页任一个出现,再决定要不要选应用
+  await page.locator('.top-user, .mod-card').first().waitFor()
+  await enterFirstAppIfNeeded(page)
+  await page.locator('.top-user').click()
+  // 退出是页内路由切换,没有新文档,networkidle 在这里是空等;改为等登录方式接口回来——自动登录的判断紧随其后
+  const providersLoaded = page.waitForResponse(
+    r => r.request().method() === 'GET' && r.url().includes('/api/v1/auth/external/providers'),
+  )
+  await page
+    .locator('.n-dropdown-option')
+    .filter({ hasText: /退出登录|Log out/ })
+    .click()
+
+  await providersLoaded
+  // 跳转紧跟在接口返回之后发起,留一小段时间:这段时间里一次授权请求都没有才算没跳
+  await page.waitForTimeout(500)
+  expect(hits.count).toBe(0)
+  await expect(page).toHaveURL(/\/login/)
+  await expect(page.getByPlaceholder(/账号|account/i)).toBeVisible()
+  await expect(page.locator('[href*="/wecom/authorize"]').first()).toBeVisible()
+})
+
+test('登录态失效回到登录页 → 仍会自动登录', async ({ page }) => {
+  const hits = await countAuthorize(page)
+  await seedSession(page, null)
+
+  await page.goto('/personal/notice')
+
+  await expect.poll(() => hits.count, { timeout: 15_000 }).toBe(1)
+  await page.waitForLoadState('networkidle')
+  expect(hits.count).toBe(1)
 })

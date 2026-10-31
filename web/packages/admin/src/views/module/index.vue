@@ -11,6 +11,7 @@ import { useModule } from '#/composables/useModule'
 import { beginVoluntaryLogout } from '#/composables/useRealtime'
 import { resetRouter } from '#/router'
 import { translateError } from '#/utils/error'
+import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 import { authApi } from '#/api'
 import AppIcon from '#/components/AppIcon.vue'
 import SmartLogo from '#/components/SmartLogo.vue'
@@ -42,6 +43,7 @@ async function pick(id: number) {
 
 async function handleLogout() {
   await beginVoluntaryLogout()
+  suppressWeComAutoLogin()
   try {
     await authApi.logout()
   } catch {}

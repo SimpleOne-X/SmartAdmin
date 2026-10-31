@@ -194,6 +194,20 @@ export function claimWeComAutoLogin(opts: {
   }
 }
 
+/**
+ * 主动退出时调用:本会话还没进过登录页(带着持久化令牌直接进的应用),一次性标记还没落下,
+ * 不预先写入的话退出后的登录页会被 claimWeComAutoLogin 放行,立刻又静默登录回去。
+ * 只在主动退出的几处调用,不放进 user.clear():令牌过期也走 clear,那时要让点开卡片的人静默登录回原页面。
+ */
+export function suppressWeComAutoLogin(storage?: Pick<Storage, 'setItem'>): void {
+  try {
+    // sessionStorage 被禁用时,光是取这个全局就会抛,所以默认值要在 try 里取
+    ;(storage ?? sessionStorage).setItem(WECOM_AUTO_LOGIN_KEY, '1')
+  } catch {
+    // 存储不可用时 claimWeComAutoLogin 本来就不会自动跳
+  }
+}
+
 /** 严格保序切分:前 max 平铺,其余进溢出。 */
 export function splitLoginProviders<T>(
   providers: readonly T[],

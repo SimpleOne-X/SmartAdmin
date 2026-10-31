@@ -29,6 +29,7 @@ import { clearClientCache } from '#/composables/clearClientCache'
 import { beginVoluntaryLogout } from '#/composables/useRealtime'
 import { resetRouter } from '#/router'
 import { translateError } from '#/utils/error'
+import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 import SmartLogo from '#/components/SmartLogo.vue'
 import AppIcon from '#/components/AppIcon.vue'
 import SettingsDrawer from './SettingsDrawer.vue'
@@ -187,6 +188,7 @@ async function onClearCache() {
 async function logout() {
   // 先断实时并标记自愿退出:logout API 会 Revoke 会话并推 force-logout,避免误弹「您已被强制下线」。
   await beginVoluntaryLogout()
+  suppressWeComAutoLogin() // 企业微信内退出后停在登录页,不被自动登录拉回去
   try {
     await authApi.logout()
   } catch (e) {
