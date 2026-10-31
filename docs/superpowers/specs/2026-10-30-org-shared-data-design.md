@@ -144,7 +144,7 @@ public bool Owns(long? createOrgId, long? createUserId) =>
 
 ## 这是破坏性变更
 
-`OrgAuditEntity` 不再实现 `IOrgScoped`，消费方升级时要做三件事，都写进 `CHANGELOG.md` 的升级说明。
+`OrgAuditEntity` 不再实现 `IOrgScoped`，消费方升级要做的事都写进 `CHANGELOG.md` 的升级说明，下面三件最重要。
 
 ### 1. 替换 `ClearFilter<IOrgScoped>()`
 

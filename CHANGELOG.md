@@ -43,6 +43,7 @@
     手写 `ADD COLUMN "IsShared"` 带引号，建出的是大小写敏感的 `IsShared` 列。
     启动期的缺列检查按忽略大小写比较，会放它过去，第一次查询才报列不存在。
     写 `ADD COLUMN IsShared boolean`，不加引号，PostgreSQL 会折成小写。
+  - 子类里已经定义了同名 `IsShared` 属性的，会遮蔽基类的属性（编译器给出 CS0108 警告），升级前先改名或去掉。
 - **测试宿主里自己注册的 `AddTableFilter<IOrgScoped>(...)` 不再作用于 `OrgAuditEntity`，要再注册一个 `AddTableFilter<IOrgShared>(...)`。**
   表达式照 `IOrgScoped` 那条写，末尾多一个 `|| e.IsShared == true` 分支。
   不补的话，涉及 `OrgAuditEntity` 的隔离测试测的就不是真实行为。
@@ -57,14 +58,15 @@
   - `where T : IOrgScoped` 的泛型帮助方法，传 `OrgAuditEntity` 子类现在编译不过。
   - 想让两类机构隔离实体都走原来的逻辑，同时判断 `IOrgShared`，比如 `x is IOrgScoped or IOrgShared`。
 - **搜一遍写 `OrgAuditEntity` 的代码：「`GetByIdAsync` 取得到」不再等于「可以写」，别的机构的共享行同样取得到。**
-  下面这些写法会让非归属方写成功，漏改编译照常通过，都要改成取出行后用 `DataScopeResult.Owns` 判断归属：
+  下面这些写法会让非归属方写成功，或者把别的机构的行当成自己的，漏改编译照常通过，
+  都要改成取出行后用 `DataScopeResult.Owns` 判断归属：
   - `GetByIdAsync` 判非空之后，直接 `Db.Updateable` / `Db.Deleteable`。
   - 子类覆写 `InScopeAsync`，照抄 `Queryable.Where(id).AnyAsync()`：共享行查得到，守卫返回 true，归属判断被绕过。
   - 覆写 `UpdateAsync` / `DeleteAsync` 不调 `base`，或者用 `TryAdd` 替换 `IRepository<>`：写守卫跟着没了。
   - `GetFirstAsync(x => x.Code == code)` 这类按业务键取行，可能取到别的机构的共享行，接着改、删会抛 `OrgOutOfScope`；
     统计汇总也会把共享行算进去。取出后用 `Owns` 判断，不归属的行不要当成自己的。
   - 写法见文档站「多组织数据权限」一页的「可见不等于可写」一节。
-- **升级后存量行的可见范围不变。开始用共享之后，有四处行为要知道。**
+- **升级后存量行的可见范围不变，下面四处行为要知道。**
   - 别的机构更新或删除共享行抛 `ErrorCode.OrgOutOfScope`（`42030`），不是返回 0 行。
     私有行被越权更新或删除仍返回 0 行。
   - 共享行对「仅本人」范围和空范围的用户也可见，所以「空范围查不到任何数据」今后只对继承 `DataEntity` 的表成立。
@@ -76,7 +78,6 @@
   - `IsShared` 是普通的可写属性，没有单独的权限控制。
     直接拿实体当请求体、或把请求体全属性映射到实体的接口，调用者能在请求里带上 `isShared` 自己打开共享；
     要限制谁能共享，请求体 DTO 里就不要放这个字段。
-    子类里已经定义了同名 `IsShared` 属性的，会遮蔽基类的属性（编译器报 CS0108），升级前先改名或去掉。
 
 ### Added
 
