@@ -66,7 +66,11 @@ public abstract class DataEntity : BaseEntity, IOrgScoped
 /// <para>它<b>不实现</b> <see cref="IOrgScoped"/>:全局过滤器按接口匹配,<c>ClearFilter&lt;IOrgScoped&gt;()</c> 清不掉它的过滤器,
 /// 要写 <c>ClearFilter&lt;IOrgScoped, IOrgShared&gt;()</c>。</para>
 /// <para><b>写路径守卫</b>:<see cref="SqlSugarRepository{TEntity}"/> 对机构实体的
-/// <c>UpdateAsync</c>/<c>DeleteAsync</c> 已内置范围守卫,越权改删他机构行被拒(返回 0 行)。</para>
+/// <c>UpdateAsync</c>/<c>DeleteAsync</c>/<c>HardDeleteAsync</c> 已内置范围守卫:私有行被非归属方写入返回 0 行(对他机构不可见),
+/// <b>共享行被非归属方写入抛 <c>ErrorCode.OrgOutOfScope</c></b>(共享行能读到,静默返回 0 会让忽略返回值的代码以为保存成功)。
+/// 归属以 <c>DataScopeResult.Owns</c> 判断,业务服务也可以用它给 DTO 算“能否编辑”。
+/// 守卫要读当前数据范围,所以仓储必须带 <c>IDataScopeContext</c>(DI 注入的仓储自带;自己 <c>new</c> 或
+/// <c>: SqlSugarRepository&lt;T&gt;(db)</c> 的子类要补传),缺省时写操作抛 <see cref="InvalidOperationException"/>。</para>
 /// </summary>
 public abstract class OrgAuditEntity : AuditEntity, IOrgShared
 {

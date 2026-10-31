@@ -11,11 +11,14 @@ namespace SmartAdmin.SqlSugar;
 /// <para>以开放泛型注册(<c>IRepository&lt;&gt;</c> → <c>SqlSugarRepository&lt;&gt;</c>),
 /// 任意实体无需逐个注册即可注入。类 public、方法 virtual——遵循框架"继承覆写"承诺,
 /// 用户可继承本类只改想改的方法,再以 TryAdd 前置注册接管。</para>
-/// <para><paramref name="time"/> / <paramref name="currentUser"/> <b>必须保持可选参数</b>:本类是消费者可继承的
+/// <para><paramref name="time"/> / <paramref name="currentUser"/> / <paramref name="dataScope"/> <b>必须保持可选参数</b>:本类是消费者可继承的
 /// public 类型(ReplaceabilityContract 扩展点契约),加必需构造参数就是源码破坏性变更——现有 <c>: SqlSugarRepository&lt;T&gt;(db)</c>
-/// 的子类会编译不过。两者只在软删审计留痕时用到,缺省即回退系统时钟 / 无操作人。</para>
+/// 的子类会编译不过。<paramref name="time"/> / <paramref name="currentUser"/> 只在软删审计留痕时用到,缺省即回退系统时钟 / 无操作人;
+/// <paramref name="dataScope"/> 只有 <see cref="IOrgShared"/> 实体(<c>OrgAuditEntity</c>)的写守卫要读当前范围,
+/// 其余实体不用,缺省时 <see cref="IOrgShared"/> 实体的写操作抛 <see cref="InvalidOperationException"/>,不会静默放行。</para>
 /// </summary>
-public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time = null, ICurrentUser? currentUser = null)
+public class SqlSugarRepository<TEntity>(
+    ISqlSugarClient db, TimeProvider? time = null, ICurrentUser? currentUser = null, IDataScopeContext? dataScope = null)
     : IRepository<TEntity>
     where TEntity : AuditEntity, new()
 {
@@ -41,13 +44,35 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     public virtual ISugarQueryable<TEntity> AsQueryable() => db.Queryable<TEntity>();
 
     /// <summary>
-    /// 机构实体(IOrgScoped / IOrgShared)的写前范围守卫:经带全局范围过滤器的查询确认目标行在当前数据范围内。
-    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c> / <c>AddTableFilter&lt;IOrgShared&gt;</c>),
-    /// 不在范围内(或不存在)即返回 false,调用方据此拒写——堵住按主键改删他机构行的 IDOR。
+    /// 机构实体(IOrgScoped / IOrgShared)的写前范围守卫,堵住按主键改删他机构行的 IDOR。
+    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c> / <c>AddTableFilter&lt;IOrgShared&gt;</c>)。
+    /// <list type="bullet">
+    /// <item><b>IOrgScoped</b>:目标行经过滤器查不到(不在范围内或不存在)即返回 false,调用方返回 0 行。</item>
+    /// <item><b>IOrgShared</b>:过滤器查不到返回 false(私有行对他机构不可见,同样返回 0 行);
+    /// 查到且 <see cref="DataScopeResult.Owns"/> 为真返回 true;查到但不归属(共享行被非归属方写入)抛
+    /// <see cref="Core.ErrorCode.OrgOutOfScope"/>。这里不能返回 false:共享行能通过 <c>GetByIdAsync</c> 读到,
+    /// 静默返回 0 会让忽略返回值的业务代码以为保存成功。</item>
+    /// </list>
     /// 普通 BaseEntity(两个标记都不实现)恒真短路,无额外查询、行为不变。
     /// </summary>
-    protected virtual async Task<bool> InScopeAsync(long id) =>
-        !(IsOrgScoped || IsOrgShared) || await db.Queryable<TEntity>().Where(e => e.Id == id).AnyAsync();
+    protected virtual async Task<bool> InScopeAsync(long id)
+    {
+        if (IsOrgShared)
+        {
+            if (dataScope is null)
+                throw new InvalidOperationException(
+                    $"{typeof(TEntity).Name} 实现了 IOrgShared,写操作要读取当前数据范围以判断归属;请把 IDataScopeContext 传给 SqlSugarRepository 的构造函数(子类 `: SqlSugarRepository<T>(db)` 需补传该参数)。");
+
+            var row = await db.Queryable<TEntity>().Where(e => e.Id == id).FirstAsync();
+            if (row is null) return false;
+
+            var shared = (IOrgShared)row;
+            if (dataScope.Current.Owns(shared.CreateOrgId, shared.CreateUserId)) return true;
+            throw new AdminException(Core.ErrorCode.OrgOutOfScope);
+        }
+
+        return !IsOrgScoped || await db.Queryable<TEntity>().Where(e => e.Id == id).AnyAsync();
+    }
 
     /// <inheritdoc />
     public virtual Task<TEntity?> GetByIdAsync(long id) =>
@@ -72,7 +97,7 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     /// <inheritdoc />
     public virtual async Task<int> UpdateAsync(TEntity entity)
     {
-        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅机构实体触发实际检查)
+        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅机构实体触发实际检查;共享行被非归属方写入会抛 OrgOutOfScope)
         return await db.Updateable(entity).ExecuteCommandAsync();
     }
 

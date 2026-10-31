@@ -24,6 +24,16 @@ public sealed record DataScopeResult
     /// <summary>不受限(看全部)。系统/可信上下文与 All 范围用户共用此值。</summary>
     public static readonly DataScopeResult Unrestricted = new() { IsUnrestricted = true };
 
+    /// <summary>
+    /// 这个范围是否<b>拥有</b>(可写)归属为 <paramref name="createOrgId"/>、创建人为 <paramref name="createUserId"/> 的行。
+    /// 与查询过滤器的前三个分支(不受限 / 机构在范围内 / 仅本人且是创建人)含义一致,不含"共享"放行:
+    /// 共享行所有机构都看得到,但只有拥有它的范围才能写。归属机构为空的行没有机构可匹配,只剩"仅本人"与不受限能拥有。
+    /// </summary>
+    public bool Owns(long? createOrgId, long? createUserId) =>
+        IsUnrestricted
+        || (createOrgId is { } org && OrgIds.Contains(org))
+        || (IncludeSelf && createUserId == UserId);
+
     /// <summary>受限范围:给定机构集合 + 可选"仅本人"。两者皆空即"看不到任何数据"(默认拒绝)。</summary>
     public static DataScopeResult Restricted(IReadOnlyCollection<long> orgIds, bool includeSelf, long userId) =>
         new() { IsUnrestricted = false, OrgIds = orgIds, IncludeSelf = includeSelf, UserId = userId };

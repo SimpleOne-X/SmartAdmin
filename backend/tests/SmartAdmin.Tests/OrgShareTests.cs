@@ -96,7 +96,7 @@ public class OrgShareTests
             new FooShare { Title = "shared", CreateOrgId = 10, IsShared = true },
             new FooShare { Title = "private", CreateOrgId = 10, IsShared = null });
 
-        Assert.Equal(["shared"], await ShareTitlesAsync(sp, DataScopeResult.Restricted([], false, 0)));   // 空范围不再是“什么都看不到”
+        Assert.Equal(["shared"], await ShareTitlesAsync(sp, DataScopeResult.Restricted([], false, 0)));   // 空范围只能看到共享行
 
         TestDb.Cleanup(id, dbFile);
     }
@@ -144,10 +144,12 @@ public class OrgShareTests
         var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
         await using var sp = BuildSp(id, dbFile);
         var parent = new FooShare { Title = "p", CreateOrgId = 10, IsShared = true };
-        await InsertAsync(sp, parent);
+        var privateParent = new FooShare { Title = "p-private", CreateOrgId = 10, IsShared = null };
+        await InsertAsync(sp, parent, privateParent);
         await InsertAsync(sp,
             new FooShareChild { ParentId = parent.Id, Title = "child-null", CreateOrgId = 10, IsShared = null },
-            new FooShareChild { ParentId = parent.Id, Title = "child-true", CreateOrgId = 10, IsShared = true });
+            new FooShareChild { ParentId = parent.Id, Title = "child-true", CreateOrgId = 10, IsShared = true },
+            new FooShareChild { ParentId = privateParent.Id, Title = "child-of-private", CreateOrgId = 10, IsShared = true });
 
         sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([20], false, 0);
         using var scope = sp.CreateScope();
@@ -157,7 +159,9 @@ public class OrgShareTests
             .Select((p, c) => c.Title)
             .ToListAsync();
 
-        Assert.Equal(["child-true"], titles);   // 父表共享行放行,子表只剩共享行,且两张表的 CreateOrgId/IsShared 列没有歧义
+        // 父表共享行放行、私有父行被挡(child-of-private 本身是共享行,只因父表过滤才丢);
+        // 子表只剩共享行(child-null 被挡),且两张表的 CreateOrgId/IsShared 列没有歧义
+        Assert.Equal(["child-true"], titles);
 
         TestDb.Cleanup(id, dbFile);
     }
@@ -191,6 +195,228 @@ public class OrgShareTests
             .Select((p, s) => p.Title)
             .ToListAsync();
         Assert.Equal(["a", "b"], cleared.Order());
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    // ---- 归属判断与写守卫 ----
+
+    private static IRepository<T> RepoOf<T>(IServiceScope scope) where T : AuditEntity, new() =>
+        scope.ServiceProvider.GetRequiredService<IRepository<T>>();
+
+    private static async Task<FooShare?> ReloadAsync(ServiceProvider sp, long rowId)
+    {
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Unrestricted;
+        using var scope = sp.CreateScope();
+        return await RepoOf<FooShare>(scope).GetByIdAsync(rowId);
+    }
+
+    // 每组:范围(是否不受限 / 机构集合 / 是否含仅本人 / 当前用户)× 行(归属机构 / 创建人)→ 是否归属
+    [Theory]
+    [InlineData(true, new long[0], false, 0L, 10L, 1L, true)]       // 不受限
+    [InlineData(false, new[] { 10L }, false, 0L, 10L, 1L, true)]    // 机构在范围内
+    [InlineData(false, new[] { 10L }, false, 0L, 20L, 1L, false)]   // 机构在范围外
+    [InlineData(false, new[] { 10L }, false, 0L, null, 1L, false)]  // 行无归属机构
+    [InlineData(false, new long[0], true, 7L, 20L, 7L, true)]       // 仅本人:创建人是自己
+    [InlineData(false, new long[0], true, 7L, 20L, 8L, false)]      // 仅本人:创建人是别人
+    public async Task Owns_matches_the_filter(bool unrestricted, long[] orgIds, bool includeSelf, long userId, long? rowOrg, long rowUser, bool expected)
+    {
+        var range = unrestricted ? DataScopeResult.Unrestricted : DataScopeResult.Restricted(orgIds, includeSelf, userId);
+
+        Assert.Equal(expected, range.Owns(rowOrg, rowUser));
+
+        var id = $"orgshare-owns-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        await InsertAsync(sp, new FooShare { Title = "row", CreateOrgId = rowOrg, CreateUserId = rowUser, IsShared = null });
+
+        Assert.Equal(expected, (await ShareTitlesAsync(sp, range)).Count == 1);   // IsShared 为空时,Owns 与查询可见性必须一致
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Owner_can_update_and_delete_shared_row()
+    {
+        var id = $"orgshare-owner-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var row = new FooShare { Title = "route", CreateOrgId = 10, IsShared = true };
+        await InsertAsync(sp, row);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([10], false, 0);
+        using var scope = sp.CreateScope();
+        var repo = RepoOf<FooShare>(scope);
+        row.Title = "route-2";
+        Assert.Equal(1, await repo.UpdateAsync(row));
+        Assert.Equal(1, await repo.DeleteAsync(row.Id));
+        Assert.Null(await repo.GetByIdAsync(row.Id));
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Parent_org_scope_can_write_child_org_shared_row()
+    {
+        var id = $"orgshare-parent-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var row = new FooShare { Title = "route", CreateOrgId = 11, IsShared = true };
+        await InsertAsync(sp, row);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([10, 11], false, 0);   // 本机构及以下:范围含子机构
+        using var scope = sp.CreateScope();
+        row.Title = "route-2";
+        Assert.Equal(1, await RepoOf<FooShare>(scope).UpdateAsync(row));
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Non_owner_write_to_shared_row_throws()
+    {
+        var id = $"orgshare-nonowner-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var row = new FooShare { Title = "route", CreateOrgId = 10, IsShared = true };
+        await InsertAsync(sp, row);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([20], false, 0);
+        using var scope = sp.CreateScope();
+        var repo = RepoOf<FooShare>(scope);
+        Assert.NotNull(await repo.GetByIdAsync(row.Id));   // 读得到,所以静默返回 0 会被调用方当成保存成功
+
+        row.Title = "tampered";
+        Assert.Equal(ErrorCode.OrgOutOfScope, (await Assert.ThrowsAsync<AdminException>(() => repo.UpdateAsync(row))).Code);
+        Assert.Equal(ErrorCode.OrgOutOfScope, (await Assert.ThrowsAsync<AdminException>(() => repo.DeleteAsync(row.Id))).Code);
+        Assert.Equal(ErrorCode.OrgOutOfScope, (await Assert.ThrowsAsync<AdminException>(() => repo.HardDeleteAsync(row.Id))).Code);
+
+        var after = await ReloadAsync(sp, row.Id);
+        Assert.Equal("route", after?.Title);   // 行内容未变,也没被删
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Non_owner_write_to_private_row_returns_zero()
+    {
+        var id = $"orgshare-private-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var row = new FooShare { Title = "route", CreateOrgId = 10, IsShared = null };
+        await InsertAsync(sp, row);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([20], false, 0);
+        using var scope = sp.CreateScope();
+        var repo = RepoOf<FooShare>(scope);
+        row.Title = "tampered";
+        Assert.Equal(0, await repo.UpdateAsync(row));   // 私有行对他机构不可见,沿用“返回 0 行”的现有语义
+        Assert.Equal(0, await repo.DeleteAsync(row.Id));
+        Assert.Equal("route", (await ReloadAsync(sp, row.Id))?.Title);
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Shared_row_without_org_is_writable_only_by_creator_or_unrestricted()
+    {
+        var id = $"orgshare-noorgwrite-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var row = new FooShare { Title = "route", CreateOrgId = null, CreateUserId = 7, IsShared = true };
+        await InsertAsync(sp, row);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([20], false, 0);
+        using (var scope = sp.CreateScope())
+        {
+            var ex = await Assert.ThrowsAsync<AdminException>(() => RepoOf<FooShare>(scope).UpdateAsync(row));
+            Assert.Equal(ErrorCode.OrgOutOfScope, ex.Code);
+        }
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([], true, 7);
+        using (var scope = sp.CreateScope())
+            Assert.Equal(1, await RepoOf<FooShare>(scope).UpdateAsync(row));
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Unrestricted;
+        using (var scope = sp.CreateScope())
+            Assert.Equal(1, await RepoOf<FooShare>(scope).UpdateAsync(row));
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Owner_edit_keeps_share_flag()
+    {
+        // 整行更新用读出来的实体回写,IsShared 随实体带回去,编辑不会悄悄把共享关掉
+        var id = $"orgshare-keepflag-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var seed = new FooShare { Title = "route", CreateOrgId = 10, IsShared = true };
+        await InsertAsync(sp, seed);
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([10], false, 0);
+        using (var scope = sp.CreateScope())
+        {
+            var repo = RepoOf<FooShare>(scope);
+            var row = await repo.GetByIdAsync(seed.Id);
+            Assert.NotNull(row);
+            row.Title = "route-2";
+            Assert.Equal(1, await repo.UpdateAsync(row));
+        }
+
+        var after = await ReloadAsync(sp, seed.Id);
+        Assert.NotNull(after);
+        Assert.True(after.IsShared);
+        Assert.Equal("route-2", after.Title);
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Turning_share_off_hides_row_from_other_orgs()
+    {
+        var id = $"orgshare-unshare-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var seed = new FooShare { Title = "route", CreateOrgId = 10, IsShared = true };
+        await InsertAsync(sp, seed);
+        Assert.Equal(["route"], await ShareTitlesAsync(sp, DataScopeResult.Restricted([20], false, 0)));
+
+        sp.GetRequiredService<IDataScopeContext>().Current = DataScopeResult.Restricted([10], false, 0);
+        using (var scope = sp.CreateScope())
+        {
+            var repo = RepoOf<FooShare>(scope);
+            var row = await repo.GetByIdAsync(seed.Id);
+            Assert.NotNull(row);
+            row.IsShared = false;
+            Assert.Equal(1, await repo.UpdateAsync(row));
+        }
+
+        Assert.Empty(await ShareTitlesAsync(sp, DataScopeResult.Restricted([20], false, 0)));
+
+        TestDb.Cleanup(id, dbFile);
+    }
+
+    [Fact]
+    public async Task Repository_without_scope_context_refuses_shared_entity_writes()
+    {
+        var id = $"orgshare-noctx-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        await using var sp = BuildSp(id, dbFile);
+        var shared = new FooShare { Title = "route", CreateOrgId = 10, IsShared = true };
+        var priv = new FooPrivate { Title = "route", CreateOrgId = 10 };
+        await InsertAsync(sp, shared);
+        await InsertAsync(sp, priv);
+        var db = sp.GetRequiredService<ISqlSugarClient>();
+
+        var sharedRepo = new SqlSugarRepository<FooShare>(db);   // 没传 IDataScopeContext:拿不到当前范围,写操作不能静默放行
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sharedRepo.UpdateAsync(shared));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sharedRepo.DeleteAsync(shared.Id));
+
+        var privateRepo = new SqlSugarRepository<FooPrivate>(db);   // IOrgScoped 路径不需要范围上下文,行为不变
+        priv.Title = "route-2";
+        Assert.Equal(1, await privateRepo.UpdateAsync(priv));
+        Assert.Equal(1, await privateRepo.DeleteAsync(priv.Id));
 
         TestDb.Cleanup(id, dbFile);
     }
