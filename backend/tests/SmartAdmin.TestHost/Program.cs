@@ -11,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSmartAdmin(builder.Configuration, o => o.ApplicationAssemblies.Add(typeof(Program).Assembly));
 builder.Services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, SampleWidgetSeed>());   // 用户自定义种子
 builder.Services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, SampleWidgetDetailSeed>());   // 明细表(PrimaryId)种子
+builder.Services.TryAddEnumerable(ServiceDescriptor.Transient<ISeedData, SampleOrgDocSeed>());          // 可共享机构表(OrgAuditEntity)种子
 builder.Services.TryAddSingleton<ReadyHookRecord>();                                                   // 钩子调用现场(用例断言用)
 builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IDatabaseReadyHook, SampleReadyHook>());    // 库就绪钩子
 builder.Services.AddRecycleBinType<SampleWidget>("widget", w => w.Name);               // 消费者软删表接进回收站

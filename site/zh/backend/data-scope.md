@@ -43,7 +43,9 @@ protected virtual async Task<DataScopeResult> ComputeAsync(long userId)
 ```
 
 ::: tip 安全默认
-没有角色，或者有角色但一个范围都没配，都收敛成「仅本人」，为的是不放大可见面。要是两样都空，机构集是空的、也不含本人，那就是「看不到任何数据」。这是默认拒绝，不是默认放行。
+没有角色，或者有角色但一个范围都没配，都收敛成「仅本人」，为的是不放大可见面。
+要是两样都空，机构集是空的、也不含本人，那就是「看不到任何数据」（`OrgAuditEntity` 上标成共享的行除外）。
+这是默认拒绝，不是默认放行。
 :::
 
 `DataScopeResult`（`Core/Security/DataScopeResult.cs`）是不可变值对象，可安全放进缓存跨请求复用：
@@ -93,7 +95,9 @@ else if (info is { PropertyName: nameof(DataEntity.CreateOrgId),
 
 ## 全局过滤器：业务代码零过滤条件
 
-过滤器对所有实现 `IOrgScoped` 接口的实体一次性挂上，也就是 `DataEntity` 及其子类，对所有查询都生效。挂载的位置在 `SqlSugarSetup.cs`。
+过滤器对所有实现 `IOrgScoped` 接口的实体一次性挂上，也就是 `DataEntity` 及其子类，对所有查询都生效。
+挂载的位置在 `SqlSugarSetup.cs`。
+继承 `OrgAuditEntity` 的表实现的是 `IOrgShared`，机构范围的规则相同，由另一个过滤器负责，见下面的「按行共享」。
 
 ```csharp
 client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
@@ -105,7 +109,9 @@ client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
 三个分支对应三种可见性。不受限时整体恒真，等于不过滤。否则就看 `CreateOrgId` 在不在机构集里。要是启用了「仅本人」，再放行 `CreateUserId == 当前用户` 的行。
 
 ::: details 两个实现细节
-**按接口匹配，不按基类**：SqlSugar 的 `AddTableFilter<T>` 只认接口或精确类型，不认基类。所以锚点字段是通过 `IOrgScoped` 接口暴露的。软删过滤器 `AddTableFilter<ISoftDelete>` 也是一个道理。
+**按接口匹配，不按基类**：SqlSugar 的 `AddTableFilter<T>` 只认接口或精确类型，不认基类。
+所以锚点字段是通过 `IOrgScoped` 接口暴露的，`IOrgShared` 也暴露同样的 `CreateOrgId`、`CreateUserId`，外加 `IsShared`。
+软删过滤器 `AddTableFilter<ISoftDelete>` 也是一个道理。
 
 **布尔标记写成 `== true`**：`scope.Current` 的三个属性都和实体参数无关。SqlSugar 会先把它们在本地求值成常量，机构集渲染成 SQL 的 `IN`，再拼进 `WHERE`。两个布尔为什么写成 `== true`，不写裸布尔？因为 SqlServer 的谓词上下文不接受裸标量，必须是个比较式。
 :::
@@ -123,8 +129,134 @@ var orders = await orderRepo.AsQueryable()
 还是这段代码。`All` 范围的用户看到全部待处理订单，`Org` 范围的用户只看到本机构的，`Self` 用户只看到自己建的。差异全都来自请求早期解析出的那个 `DataScopeResult`，业务逻辑一个字都不用改。
 
 ::: warning 写路径守卫
-全局过滤器只管**查询（SELECT）**，不管按主键的 `Updateable` / `Deleteable`。所以仓储 `SqlSugarRepository` 给 `IOrgScoped` 实体的 `UpdateAsync` / `DeleteAsync` 内置了一道写路径守卫。写之前，它先用带范围过滤器的查询确认目标行在当前范围内，越权改删别的机构的行会被拒，返回 0 行。要是绕过仓储、直接走 `Db.Updateable/Deleteable` 这个逃生舱口，这道守卫就管不着了，得自己校验归属。
+全局过滤器只管**查询（SELECT）**，不管按主键的 `Updateable` / `Deleteable`。
+所以仓储 `SqlSugarRepository` 给 `IOrgScoped` 与 `IOrgShared` 实体的 `UpdateAsync` / `DeleteAsync` 内置了一道写路径守卫。
+写之前，它先用带范围过滤器的查询确认目标行在当前范围内。
+看不到的行（别的机构的私有行）返回 0 行；共享行被非归属方更新或删除，抛 `ErrorCode.OrgOutOfScope`。
+要是绕过仓储、直接走 `Db.Updateable/Deleteable` 这个逃生舱口，这道守卫就管不着了，得自己校验归属。
 :::
+
+## 按行共享：`IsShared`
+
+同一张表里多数行归各机构私有，个别行却要让所有机构都看到，比如一条所有机构共用的工艺路线。
+继承 `OrgAuditEntity` 的表把某一行的 `IsShared` 设成 `true` 就行，基类和角色的数据范围都不用动。
+
+```csharp
+public class ProcessRoute : OrgAuditEntity { /* 业务字段 */ }
+
+route.IsShared = true;   // 这一行所有机构都能查到
+```
+
+### 查询规则
+
+`OrgAuditEntity` 实现 `IOrgShared`，过滤器在机构范围之外多放行一个分支：
+
+```csharp
+client.QueryFilter.AddTableFilter<IOrgShared>(e =>
+    scope.Current.IsUnrestricted == true
+    || (e.CreateOrgId != null && scope.Current.OrgIds.Contains(e.CreateOrgId.Value))
+    || (scope.Current.IncludeSelf == true && e.CreateUserId == scope.Current.UserId)
+    || e.IsShared == true);
+```
+
+对受限用户来说，一行能不能查到只看 `IsShared` 和 `CreateOrgId` 的四种组合：
+
+| `IsShared` | `CreateOrgId` | 能否查到 |
+| --- | --- | --- |
+| `true` | 有值或为空 | 能，所有机构的用户都能 |
+| `null` 或 `false` | 在用户的机构范围内 | 能 |
+| `null` 或 `false` | 不在范围内 | 不能，范围含「仅本人」且是创建人的除外 |
+| `null` 或 `false` | 为空 | 不能，只有范围含「仅本人」的创建人能 |
+
+`null` 与 `false` 都表示不共享，所以给已有数据的表补上这一列，行的可见范围不会变。
+「全部」范围与超管不受限，看得到所有行。
+
+共享行对「仅本人」范围的用户可见，对未绑定范围时回退的空范围用户也可见。
+接口权限照常校验，共享只放开数据范围这一层。
+因此「空范围查不到任何数据」只对继承 `DataEntity` 的表成立。
+
+### 谁能写共享行
+
+别的机构只能看和引用共享行，不能改。
+能写的有两类用户：数据范围包含这一行归属机构的，以及范围含「仅本人」的创建人本人。
+这与普通机构数据的写权限一致：
+
+| 操作 | 范围含归属机构，或含「仅本人」且是创建人 | 其他受限用户 |
+| --- | --- | --- |
+| 查询共享行 | 可见 | 可见 |
+| 更新、删除共享行 | 允许 | 抛 `ErrorCode.OrgOutOfScope`（`42030`） |
+| 更新、删除私有行 | 允许 | 返回 0 行 |
+| 打开或关闭共享标记 | 允许 | 同更新，被拒 |
+
+共享行抛错、私有行返回 0 行，差别在于共享行别的机构读得到。
+要是 `UpdateAsync` 也静默返回 0，忽略返回值的业务代码会以为保存成功。
+私有行对别的机构本来就不可见，沿用既有的返回 0 行。
+
+`CreateOrgId` 为空的共享行没有归属机构，
+受限用户里只有范围含「仅本人」的创建人能写，其他人更新或删除时同样抛 `OrgOutOfScope`。
+后台任务、启动期这类没有 HTTP 上下文的调用不受限。
+
+归属判断收口在 `DataScopeResult.Owns(createOrgId, createUserId)`。
+写守卫用它；业务服务可以用它给 DTO 算「能否编辑」，也可以在仓储守卫管不到的写之前自己校验归属。
+它与过滤器的前三个分支含义一致，不含共享放行。
+
+写守卫要读当前数据范围，所以 `OrgAuditEntity` 的仓储必须带 `IDataScopeContext`。
+DI 注入的仓储自带它。
+自己 `new`，或者子类没把它传给基类构造函数，更新或删除时就抛 `InvalidOperationException`，不会静默放行。
+`: SqlSugarRepository<T>(db)` 和 `: SqlSugarRepository<T>(db, time, currentUser)` 都算没传。
+插入不经过写守卫，不受这条影响。
+
+绕过仓储的写不受这道守卫约束，共享行能读到不等于能写，下面一节列了这类写法。
+`OrgAuditEntity` 是物理删除，没有回收站，共享行删掉之后所有机构都看不到了，也恢复不了。
+
+### 可见不等于可写
+
+对 `OrgAuditEntity` 来说，`GetByIdAsync` 取到行只说明这行可见，不说明调用者能写它：别的机构的共享行同样取得到。
+下面这些写法绕开了写守卫，或者把「取得到」当成「可以写」，共享行上会让非归属方写成功：
+
+- `GetByIdAsync` 判非空之后，直接走 `Db.Updateable` / `Deleteable`。
+- 子类覆写 `InScopeAsync`，照抄 `Queryable.Where(id).AnyAsync()`。共享行查得到，守卫返回 true，归属判断就被绕过了。
+- 覆写 `UpdateAsync` / `DeleteAsync` 不调 `base`，或者用 `TryAdd` 换掉 `IRepository<>`。写守卫跟着一起没了。
+- 按业务键取行，比如 `GetFirstAsync(x => x.Code == code)`。它可能取到别的机构的共享行，接着改、删会抛 `OrgOutOfScope`；统计汇总也会把共享行算进去。
+
+这几处都改成取出行之后用 `Owns` 判断归属，不归属的行不要当成自己的。写法见下一节写明细的那段。
+
+### 接入约定
+
+下面这些内核拦不了，要业务代码自己守：
+
+- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），接口先校验主表，读和写校验的东西不一样：
+  读明细校验主表对调用者可见，写明细校验调用者归属主表。
+  过滤器按表生效，明细要是也带机构字段，别的机构能看到主表，却看不到明细。
+- 共享行不要引用某个机构的私有数据。
+  比如共享路线引用了 A 机构的私有工作中心，B 机构打开路线时，这部分查不到。
+  内核不知道业务外键，只能由业务在保存时校验。
+
+写明细要校验归属，是因为明细不是机构实体，仓储的写守卫管不到它，而共享行能通过 `GetByIdAsync`。
+只校验「主表读得到」，B 机构就能改 A 机构共享路线的明细。
+写明细前这样校验：
+
+```csharp
+// routes 是主表的 IRepository<ProcessRoute>，dataScope 是注入的 IDataScopeContext
+var route = await routes.GetByIdAsync(routeId)
+    ?? throw new AdminException(ErrorCode.XxxNotFound);   // 换成业务自己的“找不到”错误码
+AdminException.ThrowIf(!dataScope.Current.Owns(route.CreateOrgId, route.CreateUserId), ErrorCode.OrgOutOfScope);
+```
+
+这里不能用 `IDataScopeGuard.EnsureOrgInScope` 代替。
+它把 `null` 机构算在范围内，`CreateOrgId` 为空的共享行会被任何人放行，也不认范围含「仅本人」的创建人。
+
+### 清除过滤器
+
+需要绕过机构范围的查询（比如全库判重）用 `ClearFilter`。
+它按过滤器注册的接口精确匹配，`OrgAuditEntity` 的过滤器注册在 `IOrgShared` 上，所以两个接口要一起清：
+
+```csharp
+db.Queryable<ProcessRoute>().ClearFilter<IOrgScoped, IOrgShared>()
+```
+
+这个写法在 `DataEntity` 表上同样适用。
+只写 `ClearFilter<IOrgScoped>()` 清不掉 `OrgAuditEntity` 的过滤器：编译照常通过，查询却悄悄受机构范围限制。
 
 ## 上下文载体：为什么不是 `AsyncLocal`
 
@@ -143,9 +275,9 @@ HTTP 路径**刻意不用 `AsyncLocal`**，原因写在 `HttpContextDataScopeCon
 
 ## 未绑定时 fail-closed
 
-认证请求没绑上范围的时候，回退是**空范围**（机构集为空、附加「仅本人」），也就是只看得见自己创建的行，不是「不受限」。
+认证请求没绑上范围的时候，回退是**空范围**（机构集为空、附加「仅本人」），也就是只看得见自己创建的行和 `OrgAuditEntity` 的共享行，不是「不受限」。
 
-正常路径上范围总会在授权阶段绑好，这个回退只在异常路径上兜底：兜底方向选的是让漏绑的端点表现为「查不到数据」，而不是「看到全部机构的数据」——前者有人会立刻报障，后者悄无声息，危险得多。
+正常路径上范围总会在授权阶段绑好，这个回退只在异常路径上兜底：兜底方向选的是让漏绑的端点表现为「只看得到自己的数据」，而不是「看到全部机构的数据」——前者有人会立刻报障，后者悄无声息，危险得多。
 
 三类调用不受这条约束：没有 `HttpContext` 的调用（后台任务、启动期、种子，都是可信上下文）、匿名请求、超管。
 
@@ -163,7 +295,7 @@ HTTP 路径**刻意不用 `AsyncLocal`**，原因写在 `HttpContextDataScopeCon
 
 ## 系统表：过滤器管不着的那一半
 
-全局过滤器只认 `IOrgScoped`，而内核自己的 `Sys*` 表一律继承 `BaseEntity`，过滤器对它们一行都不生效。所以「谁能看见哪些日志、哪些会话」得各服务自己判。
+全局过滤器只认 `IOrgScoped` 与 `IOrgShared`，而内核自己的 `Sys*` 表一律继承 `BaseEntity`，过滤器对它们一行都不生效。所以「谁能看见哪些日志、哪些会话」得各服务自己判。
 
 这些表对非超管只显示范围内用户产生的行：
 

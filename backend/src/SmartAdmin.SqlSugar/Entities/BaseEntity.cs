@@ -43,7 +43,7 @@ public abstract class PrimaryId
 /// <para><b>与 <see cref="BaseEntity"/> 的取舍:</b>AuditEntity 只审计留痕、不参与软删除过滤,仓储的
 /// <c>DeleteAsync</c> 对它是<b>物理删除</b>(行从库中移除,无回收站)。适用于确需真删、又要审计的表——
 /// 例如可被真删的关联/明细业务表、只增日志表。需要软删除/回收站/<c>RestoreAsync</c> 的表继续用 <see cref="BaseEntity"/>。</para>
-/// <para>带机构数据范围又不要软删的表用 <c>OrgAuditEntity</c>(审计 + <c>IOrgScoped</c>,随组织模块引入)。</para>
+/// <para>带机构数据范围又不要软删的表用 <c>OrgAuditEntity</c>(审计 + 可按行共享的 <c>IOrgShared</c>,随组织模块引入)。</para>
 /// </summary>
 public abstract class AuditEntity : PrimaryId
 {

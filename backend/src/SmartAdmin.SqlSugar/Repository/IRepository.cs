@@ -36,17 +36,23 @@ public interface IRepository<TEntity> where TEntity : AuditEntity, new()
     /// <summary>批量插入,返回受影响行数</summary>
     Task<int> InsertRangeAsync(List<TEntity> entities);
 
-    /// <summary>整行更新(UpdateTime 由 AOP 自动刷新),返回受影响行数</summary>
+    /// <summary>
+    /// 整行更新(UpdateTime 由 AOP 自动刷新),返回受影响行数。机构实体越权返回 0;
+    /// 可共享实体(<c>OrgAuditEntity</c>)的共享行被非归属机构更新则抛 <see cref="ErrorCode.OrgOutOfScope"/>。
+    /// </summary>
     Task<int> UpdateAsync(TEntity entity);
 
     /// <summary>
     /// 按主键删除,返回受影响行数。<b>按实体能力分流</b>:实体实现 <see cref="ISoftDelete"/>(<see cref="BaseEntity"/> 系)时
     /// 为软删除(置 IsDelete 标记,物理数据保留、查询即不可见,可 <see cref="RestoreAsync"/> 恢复);否则(<see cref="AuditEntity"/> 系,如 <c>OrgAuditEntity</c>)
-    /// 为物理删除(行从库中移除)。
+    /// 为物理删除(行从库中移除)。机构实体越权返回 0;可共享实体的共享行被非归属机构删除则抛 <see cref="ErrorCode.OrgOutOfScope"/>。
     /// </summary>
     Task<int> DeleteAsync(long id);
 
-    /// <summary>按主键物理删除(行从数据库彻底移除)。用于 GDPR 清理、过期数据归档等确需真删的场景。</summary>
+    /// <summary>
+    /// 按主键物理删除(行从数据库彻底移除)。用于 GDPR 清理、过期数据归档等确需真删的场景。
+    /// 越权语义同 <see cref="DeleteAsync"/>:共享行被非归属机构删除抛 <see cref="ErrorCode.OrgOutOfScope"/>。
+    /// </summary>
     Task<int> HardDeleteAsync(long id);
 
     /// <summary>

@@ -12,9 +12,10 @@ public class SysSchemaVersion : BaseEntity
     /// <see cref="ISeedData{TEntity}.SyncOnUpgrade"/> 为 true 的结构性种子执行覆盖。
     /// 新增行不需要 bump(缺哪行插哪行,本就会到)。
     /// <para>内核给自己的表<b>加列</b>时同样要 bump:它参与 CodeFirstVersion 的门控键,
-    /// 不 bump 的话钉了版本号的消费方升级后不会重扫,第一次写那张表才炸在"列不存在"上。</para>
+    /// 不 bump 的话钉了版本号的消费方升级后不会重扫,第一次写那张表才炸在"列不存在"上。
+    /// 消费方表继承的基类(如 <see cref="OrgAuditEntity"/>)加列时同样要 bump。</para>
     /// </summary>
-    public const string Current = "7";
+    public const string Current = "8";
 
     /// <summary>架构版本号,对应 <see cref="Current"/>。</summary>
     [SugarColumn(Length = 32, ColumnDescription = "架构版本")]

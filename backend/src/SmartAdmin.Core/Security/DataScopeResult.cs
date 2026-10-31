@@ -2,8 +2,9 @@ namespace SmartAdmin.Core;
 
 /// <summary>
 /// 解析后的<b>生效数据范围</b>(某用户合并其所有角色范围后的最终可见性描述)。
-/// 全局查询过滤器据此对 <c>DataEntity</c> 生成 SQL 过滤:
-/// <c>Unrestricted</c> → 不过滤;否则 <c>CreateOrgId ∈ OrgIds</c> 或(<c>IncludeSelf</c> 且 <c>CreateUserId == UserId</c>)。
+/// 全局查询过滤器据此对机构实体(<c>DataEntity</c> 与 <c>OrgAuditEntity</c>)生成 SQL 过滤:
+/// <c>Unrestricted</c> → 不过滤;否则 <c>CreateOrgId ∈ OrgIds</c> 或(<c>IncludeSelf</c> 且 <c>CreateUserId == UserId</c>);
+/// <c>OrgAuditEntity</c> 再多放行 <c>IsShared == true</c> 的行。
 /// <para>不可变值对象——可安全放进缓存跨请求复用。用 <c>record</c> + <c>init</c> 属性,参数名与属性名对齐、
 /// 有公共构造器,这是 System.Text.Json 能把它正常往返序列化的前提——装 <c>RedisCacheProvider</c> 做多实例部署时依赖这一点。</para>
 /// </summary>
@@ -24,7 +25,23 @@ public sealed record DataScopeResult
     /// <summary>不受限(看全部)。系统/可信上下文与 All 范围用户共用此值。</summary>
     public static readonly DataScopeResult Unrestricted = new() { IsUnrestricted = true };
 
-    /// <summary>受限范围:给定机构集合 + 可选"仅本人"。两者皆空即"看不到任何数据"(默认拒绝)。</summary>
+    /// <summary>
+    /// 这个范围是否<b>拥有</b>(可写)归属为 <paramref name="createOrgId"/>、创建人为 <paramref name="createUserId"/> 的行。
+    /// 与查询过滤器的前三个分支(不受限 / 机构在范围内 / 仅本人且是创建人)含义一致,不含"共享"放行:
+    /// 共享行所有机构都看得到,但只有拥有它的范围才能写。归属机构为空的行没有机构可匹配,只剩"仅本人"与不受限能拥有。
+    /// <para>仓储的写守卫管不到的写,业务代码自己用它校验归属(比如写明细前校验主表)。
+    /// 不能用 <c>IDataScopeGuard.EnsureOrgInScope</c> 代替:它把 <c>null</c> 机构算在范围内,
+    /// <c>CreateOrgId</c> 为空的共享行会被任何人放行。</para>
+    /// </summary>
+    public bool Owns(long? createOrgId, long? createUserId) =>
+        IsUnrestricted
+        || (createOrgId is { } org && OrgIds.Contains(org))
+        || (IncludeSelf && createUserId == UserId);
+
+    /// <summary>
+    /// 受限范围:给定机构集合 + 可选"仅本人"。两者皆空时 <c>DataEntity</c> 表看不到任何数据(默认拒绝),
+    /// <c>OrgAuditEntity</c> 表仍看得到 <c>IsShared == true</c> 的行。
+    /// </summary>
     public static DataScopeResult Restricted(IReadOnlyCollection<long> orgIds, bool includeSelf, long userId) =>
         new() { IsUnrestricted = false, OrgIds = orgIds, IncludeSelf = includeSelf, UserId = userId };
 }

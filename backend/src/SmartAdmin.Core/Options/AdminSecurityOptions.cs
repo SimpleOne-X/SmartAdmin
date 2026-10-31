@@ -240,10 +240,10 @@ public class AdminPasswordOptions
 public class AdminSecurityOptions
 {
     /// <summary>
-    /// 认证请求未绑定数据范围时的回退策略。<b>默认 false = 空范围</b>(查不到任何受控行);
-    /// <c>true</c> = 不受限,看全库。
+    /// 认证请求未绑定数据范围时的回退策略。<b>默认 false = 空范围</b>(机构集为空、仅本人:只看得到自己创建的行,
+    /// <c>OrgAuditEntity</c> 的共享行也看得到);<c>true</c> = 不受限,看全库。
     /// <para>正常路径上范围总会在授权阶段绑好,这个开关只影响异常路径的兜底方向:一个漏绑的端点
-    /// 是"查不到数据"(能立刻发现)还是"看到全部机构的数据"(悄无声息)。匿名请求、后台任务、超管不受影响。</para>
+    /// 是"只看得到自己的数据"(能立刻发现)还是"看到全部机构的数据"(悄无声息)。匿名请求、后台任务、超管不受影响。</para>
     /// </summary>
     public bool DataScopeFailOpen { get; set; }
 

@@ -40,7 +40,7 @@ internal static class DataScopeRequestBinder
 /// <summary>
 /// 全局授权过滤器:已认证但没经过 <c>[RolePermission]</c> / <c>[ActiveSession]</c> 的请求,也把真实数据范围绑上。
 /// <para>没有它的话,消费者只挂 <c>[Authorize]</c> 的端点会落到 <see cref="HttpContextDataScopeContext"/> 的
-/// fail-closed 回退(空范围,查不到行)。绑定之后拿到的是用户真实范围——既不越权,也不会莫名其妙查不到数据。</para>
+/// fail-closed 回退(空范围,只看得到自己创建的行和共享行)。绑定之后拿到的是用户真实范围——既不越权,也不会莫名其妙查不到数据。</para>
 /// <para>幂等,故与两个授权特性叠挂时不会重复解析;匿名请求直接跳过,零开销。</para>
 /// </summary>
 internal sealed class DataScopeAutoBindFilter : IAsyncAuthorizationFilter

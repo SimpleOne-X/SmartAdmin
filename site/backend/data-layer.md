@@ -22,7 +22,10 @@ Field reference, pitfalls, and a minimal walkthrough: [Configure Multiple Databa
 
 ## Global query filters
 
-Both filters are registered against entities matched **by interface**. SqlSugar's `AddTableFilter<T>` only recognizes an interface or an exact type, not a base class — which is why the markers go through the interfaces `ISoftDelete` / `IOrgScoped` rather than the base classes `BaseEntity` / `DataEntity`.
+The filters are registered against entities matched **by interface**.
+SqlSugar's `AddTableFilter<T>` only recognizes an interface or an exact type, not a base class —
+which is why the markers go through the interfaces `ISoftDelete` / `IOrgScoped` / `IOrgShared`
+rather than the base classes `BaseEntity` / `DataEntity` / `OrgAuditEntity`.
 
 ### Soft delete
 
@@ -47,8 +50,20 @@ client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
 
 The three `scope.Current` properties in the expression are independent of the entity parameter, so SqlSugar evaluates them locally into constants first (the org set is rendered as a SQL `IN`), then splices them into the WHERE clause. When `IsUnrestricted`, the whole predicate is always true — no filtering happens.
 
+Tables inheriting `OrgAuditEntity` implement `IOrgShared` and get a second filter:
+the three branches above stay as they are, and rows with `IsShared == true` are let through as well.
+The full rules for shared rows live on the [Multi-Org Data Scope](./data-scope.md) page.
+
 ::: warning Data scope only applies to queries
-The global data-scope filter only applies to SELECT — not to primary-key-based `Updateable` / `Deleteable`. To cover this, `SqlSugarRepository<TEntity>` has a built-in write-path scope guard for `UpdateAsync` / `DeleteAsync` on `IOrgScoped` entities: before writing, it queries through the scope-filtered path to confirm the target row is within the current data scope; attempting to modify/delete a row from another org returns 0 rows — secure by default. Writes that bypass the repository via the `Db.Updateable` / `Deleteable` escape hatch aren't covered by this guard and must validate ownership themselves.
+The global data-scope filter only applies to SELECT — not to primary-key-based `Updateable` / `Deleteable`.
+To cover this, `SqlSugarRepository<TEntity>` has a built-in write-path scope guard
+for `UpdateAsync` / `DeleteAsync` on `IOrgScoped` and `IOrgShared` entities:
+before writing, it queries through the scope-filtered path
+to confirm the target row is within the current data scope.
+A row the user can't see (another org's private row) returns 0 rows;
+updating or deleting a shared row without owning it throws `ErrorCode.OrgOutOfScope` — secure by default.
+Writes that bypass the repository via the `Db.Updateable` / `Deleteable` escape hatch
+aren't covered by this guard and must validate ownership themselves.
 :::
 
 ## AOP auto-fills audit fields
@@ -60,7 +75,7 @@ The global data-scope filter only applies to SELECT — not to primary-key-based
 | `Id` | Insert | Filled with a snowflake Id when `Id == 0`; an explicitly given value (e.g. seed data) is preserved as-is |
 | `CreateTime` | Insert | Filled with the current time if unset |
 | `CreateUserId` | Insert | Filled from the current logged-in user; left empty for a system context |
-| `CreateOrgId` | Insert | Filled from the current user's owning org (only present on `DataEntity`) |
+| `CreateOrgId` | Insert | Filled from the current user's owning org (only present on `DataEntity` and `OrgAuditEntity`) |
 | `UpdateTime` | Update | Refreshed on every full-row update |
 | `UpdateUserId` | Update | Records the operator when a login context is present |
 
@@ -82,7 +97,14 @@ client.Aop.DataExecuting = (_, info) =>
 ```
 
 ::: warning `CreateOrgId` is the data-scope anchor
-`CreateOrgId` = the org the creator belonged to at creation time, auto-filled by the AOP hook from `ICurrentUser.OrgId` (the token's `org` claim) on insert. The data-scope filter uses exactly this field to decide row visibility. **If this field isn't filled, org-dimension data-scope queries will return 0 rows for a business table, always** — the data is in the database, but unreachable by query. `null` means the row isn't constrained by org scope (built-in system data, or a creator with no owning org).
+`CreateOrgId` = the org the creator belonged to at creation time,
+auto-filled by the AOP hook from `ICurrentUser.OrgId` (the token's `org` claim) on insert.
+The data-scope filter uses exactly this field to decide row visibility.
+**If this field isn't filled, org-dimension data-scope queries will return 0 rows for a business table, always** —
+the data is in the database, but unreachable by query.
+`null` means the row has no owning org (built-in system data, or a creator with no owning org):
+restricted users can't see such rows,
+only a creator whose scope includes "self only" and unrestricted users can.
 :::
 
 ## Entity base classes
@@ -94,7 +116,7 @@ PrimaryId          primary key Id only
   └─ AuditEntity   + the audit quartet (CreateTime / CreateUserId / UpdateTime / UpdateUserId)
        ├─ BaseEntity      + soft delete IsDelete         implements ISoftDelete
        │    └─ DataEntity      + org anchor CreateOrgId  implements IOrgScoped
-       └─ OrgAuditEntity  + org anchor CreateOrgId        implements IOrgScoped
+       └─ OrgAuditEntity  + org anchor CreateOrgId + share flag IsShared  implements IOrgShared
 ```
 
 | Base class | Audit | Soft delete | Org isolation | Used for |
@@ -103,11 +125,17 @@ PrimaryId          primary key Id only
 | `AuditEntity` | Yes | No | No | Tables that genuinely need real deletes but still want a paper trail: hard-deletable join tables, append-only log tables |
 | `BaseEntity` | Yes | Yes | No | Globally shared tables: dictionaries, config, the org tree itself |
 | `DataEntity` | Yes | Yes | Yes | Business tables needing "current org / current org and below / self only / custom" isolation |
-| `OrgAuditEntity` | Yes | No | Yes | Tables that need org isolation but also genuinely need real deletes |
+| `OrgAuditEntity` | Yes | No | Yes, rows can be shared individually | Tables that need org isolation but also genuinely need real deletes; tables where a few rows must be visible to every org |
 
 **For the two without soft delete, the repository's `DeleteAsync` is a physical delete** — the row is removed from the database, no recycle bin, no `RestoreAsync`. Ask whether a table needs a recycle bin before picking its base class.
 
-Both org-isolated base classes (`DataEntity` / `OrgAuditEntity`) get the write-path guard: the repository's `UpdateAsync`/`DeleteAsync` has a built-in scope check for `IOrgScoped` entities, and modifying/deleting a row from another org is rejected, returning 0 rows.
+Both org-isolated base classes (`DataEntity` / `OrgAuditEntity`) get the write-path guard:
+the repository's `UpdateAsync`/`DeleteAsync` has a built-in scope check
+for `IOrgScoped` and `IOrgShared` entities,
+and modifying/deleting another org's private row is rejected, returning 0 rows.
+Shared rows on an `OrgAuditEntity` are the exception:
+other orgs can read them,
+so an update or delete by a non-owner throws `ErrorCode.OrgOutOfScope` instead of silently returning 0 rows.
 
 ## Generic repository `IRepository<>`
 

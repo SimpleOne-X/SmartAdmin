@@ -52,7 +52,7 @@ public class OrgAuditEntityTests
         Assert.True(saved!.Id >= SmartSeedIds.SnowflakeFloor);   // 雪花 Id 由 AOP 按 PrimaryId 回填
         Assert.NotEqual(default, saved.CreateTime);              // CreateTime 按 AuditEntity 回填
         Assert.Equal(100, saved.CreateUserId);                  // CreateUserId 按 AuditEntity 回填
-        Assert.Equal(55, saved.CreateOrgId);                    // CreateOrgId 按 IOrgScoped 回填(非软删机构实体照样填)
+        Assert.Equal(55, saved.CreateOrgId);                    // CreateOrgId 按 IOrgShared 回填(非软删机构实体照样填)
 
         TestDb.Cleanup(id, dbFile);
     }
@@ -109,7 +109,7 @@ public class OrgAuditEntityTests
             org20Id = b.Id;
         }
 
-        // 越权写守卫仍在(IOrgScoped 未改):仅机构 10 时改/删机构 20 的行都被拒(OrgAuditEntity 文档承诺 Update+Delete 均受守卫)
+        // 越权写守卫同样覆盖 IOrgShared 实体:仅机构 10 时改/删机构 20 的行都被拒(OrgAuditEntity 文档承诺 Update+Delete 均受守卫)
         ctx.Current = DataScopeResult.Restricted([10], includeSelf: false, 0);
         using (var scope = sp.CreateScope())
         {
@@ -136,7 +136,7 @@ public class OrgAuditEntityTests
     [Fact]
     public async Task Plain_AuditEntity_physical_delete_fills_audit_and_frees_unique_constraint()
     {
-        // 非机构审计实体走物理删分支(InScopeAsync 对非 IOrgScoped 恒真短路),且物理删不做 _del_{id} 占位释放。
+        // 非机构审计实体走物理删分支(InScopeAsync 对非 IOrgScoped / IOrgShared 恒真短路),且物理删不做 _del_{id} 占位释放。
         var id = $"audit-uniq-{Guid.NewGuid():N}";
         var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
         await using var sp = BuildSp(id, dbFile, new StubCurrentUser(userId: 100, orgId: 55), typeof(FooAudit));

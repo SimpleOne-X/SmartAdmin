@@ -416,7 +416,7 @@ public class LdapAuthService : AuthService
 | `PrimaryId` | 雪花 `Id` | 明细表、关联表,不需要审计 |
 | `AuditEntity` | + `CreateTime`/`CreateUserId`/`UpdateTime`/`UpdateUserId` | 要留痕但不软删、不隔离 |
 | `BaseEntity` | + `IsDelete`(`ISoftDelete`,全局过滤) | 要回收站 / 软删 |
-| `OrgAuditEntity` | `AuditEntity` + `CreateOrgId`(`IOrgScoped`,数据范围过滤) | 要机构隔离但物理删 |
+| `OrgAuditEntity` | `AuditEntity` + `CreateOrgId` + `IsShared`(`IOrgShared`,数据范围过滤,共享行所有机构可读) | 要机构隔离但物理删 |
 | `DataEntity` | `BaseEntity` + `CreateOrgId` | 既软删又机构隔离(最常用) |
 
 审计字段由 AOP 自动填,业务代码只写业务字段。`CreateOrgId` 是数据范围的锚点——它没填上,机构范围查询就是 0 行。
