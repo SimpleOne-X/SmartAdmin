@@ -166,6 +166,10 @@ public static class ServicesSetup
 
         // 消息通知模块(消息中心):管理员广播发布 + 用户端我的通知/未读数/标记已读(轮询模型)
         services.TryAddScoped<INoticeService, NoticeService>();
+        // 通知推送到外部渠道(企业微信等):后台队列,发布只入队;没有能发送的渠道时入队即返回
+        services.TryAddSingleton<NoticeDispatcher>();
+        services.TryAddSingleton<INoticeDispatcher>(sp => sp.GetRequiredService<NoticeDispatcher>());
+        services.AddHostedService(sp => sp.GetRequiredService<NoticeDispatcher>());
 
         // 安全策略读取层:DB(SysConfig)优先、Options 兜底,收口锁定/会话时长/密码复杂度的取值
         services.TryAddScoped<ISecurityPolicyProvider, SecurityPolicyProvider>();

@@ -14,8 +14,8 @@ public enum ExternalUnboundPolicy
 
 /// <summary>
 /// 用户外部身份绑定服务。管 <c>sys_user_external</c> 表的增删查,并<b>收口</b>"运营配置"读取——
-/// 启用开关 / 未绑定策略 / 按账号自动关联 / 开户默认角色·机构,统一走 <c>sys_config</c> 键
-/// <c>sys.externalauth.{code}.{enabled|provisioning|linkByAccount|defaultRoleIds|defaultOrgId}</c>(运行时可改、无需重启)。
+/// 启用开关 / 通知推送开关 / 未绑定策略 / 按账号自动关联 / 开户默认角色·机构,统一走 <c>sys_config</c> 键
+/// <c>sys.externalauth.{code}.{enabled|notify|provisioning|linkByAccount|defaultRoleIds|defaultOrgId}</c>(运行时可改、无需重启)。
 /// <para>方法 <c>virtual</c>,<c>TryAddScoped</c> 注册。控制器与 AuthService 都只调本服务,不各自散读 sys_config 键。</para>
 /// </summary>
 public interface ISysUserExternalService
@@ -37,6 +37,12 @@ public interface ISysUserExternalService
 
     /// <summary>该 provider 是否启用(键 <c>sys.externalauth.{code}.enabled</c>,缺省 true = 配了连接即可用,此键作运行时 kill-switch)。</summary>
     Task<bool> IsEnabledAsync(string provider);
+
+    /// <summary>
+    /// 是否把站内通知同时推送到该 provider(键 <c>sys.externalauth.{code}.notify</c>,缺省 true)。
+    /// 只在 <see cref="IsEnabledAsync"/> 为 true 之后才有意义。默认实现恒为开,已有的消费者实现不用改。
+    /// </summary>
+    Task<bool> IsNotifyEnabledAsync(string provider) => Task.FromResult(true);
 
     /// <summary>该 provider 的未绑定策略(键 <c>...provisioning</c> = <c>reject|provision</c>,缺省 <see cref="ExternalUnboundPolicy.Reject"/>)。</summary>
     Task<ExternalUnboundPolicy> GetUnboundPolicyAsync(string provider);

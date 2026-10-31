@@ -23,7 +23,9 @@ public class NoticeService(
     IRepository<SysUser>? users = null,
     IRepository<SysRole>? roles = null,
     // 数据范围守卫;可选尾参,未注入时不收敛
-    IDataScopeGuard? scopeGuard = null) : INoticeService
+    IDataScopeGuard? scopeGuard = null,
+    // 外部渠道推送;可选尾参,未注入时只有站内信
+    INoticeDispatcher? dispatcher = null) : INoticeService
 {
     /// <summary>当前登录用户 Id(用户端端点均 <c>[ActiveSession]</c> 保证已认证;缺失按令牌失效处理)。</summary>
     private long CurrentUserId
@@ -54,6 +56,10 @@ public class NoticeService(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// 写完接收行后把通知快照交给 <see cref="INoticeDispatcher"/> 入队,由后台推送到外部渠道,不影响本方法的耗时与结果。
+    /// 在调用方的事务里调用时,事务回滚后外部消息可能已经发出;需要回滚安全的调用方应在事务提交之后再发布。
+    /// </remarks>
     public virtual async Task<long> PublishAsync(NoticePublishInput input)
     {
         // 定向发布(非全体广播)必须先过关:目标非空 + 全部真实存在(启用中、未删除)。
@@ -83,6 +89,7 @@ public class NoticeService(
                 .ToList();
             await receivers.InsertRangeAsync(rows);
         }
+        dispatcher?.Enqueue(new NoticeDispatchItem(entity.Id, input.Title, input.Content, input.ReceiverType, targetIds));
         // 实时推送(开启时):发布即广播 notice-changed,各端立刻自查未读角标(替代最长 30s 轮询延迟)。
         // ponytail: 广播让各端自查(client 再打 unread-count,2 条 COUNT 很便宜);定向精确唤醒 receiver(角色→用户)集,公告量大再优化。
         if (realtime is not null)

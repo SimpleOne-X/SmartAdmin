@@ -8,6 +8,7 @@ public class SysUserExternalService(IRepository<SysUserExternal> repo, IConfigSe
 {
     // 运营配置键:连接与密钥在 sys_external_auth_provider,这些开关走 sys_config({code} = provider 码)
     private static string EnabledKey(string code) => $"sys.externalauth.{code}.enabled";
+    private static string NotifyKey(string code) => $"sys.externalauth.{code}.notify";
     private static string ProvisioningKey(string code) => $"sys.externalauth.{code}.provisioning";
     private static string LinkByAccountKey(string code) => $"sys.externalauth.{code}.linkByAccount";
     private static string DefaultRoleIdsKey(string code) => $"sys.externalauth.{code}.defaultRoleIds";
@@ -65,6 +66,13 @@ public class SysUserExternalService(IRepository<SysUserExternal> repo, IConfigSe
     {
         var v = await config.GetValueByKeyAsync(EnabledKey(provider));
         return v is null || IsTrue(v);                                  // 缺省启用(配了连接就默认可用)
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<bool> IsNotifyEnabledAsync(string provider)
+    {
+        var v = await config.GetValueByKeyAsync(NotifyKey(provider));
+        return v is null || IsTrue(v);                                  // 缺省开:配好登录就自动推送
     }
 
     /// <inheritdoc />

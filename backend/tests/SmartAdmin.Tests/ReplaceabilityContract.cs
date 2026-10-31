@@ -99,6 +99,7 @@ public static class ReplaceabilityContract
         (typeof(IConfigService), ServiceLifetime.Scoped),
         (typeof(ISiteLogoService), ServiceLifetime.Scoped),
         (typeof(INoticeService), ServiceLifetime.Scoped),
+        (typeof(INoticeDispatcher), ServiceLifetime.Singleton),
         (typeof(ILogService), ServiceLifetime.Scoped),
         (typeof(IFileService), ServiceLifetime.Scoped),
         (typeof(IMonitorService), ServiceLifetime.Scoped),
