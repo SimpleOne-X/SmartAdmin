@@ -15,7 +15,7 @@ public class SysSchemaVersion : BaseEntity
     /// 不 bump 的话钉了版本号的消费方升级后不会重扫,第一次写那张表才炸在"列不存在"上。
     /// 消费方表继承的基类(如 <see cref="OrgAuditEntity"/>)加列时同样要 bump。</para>
     /// </summary>
-    public const string Current = "8";
+    public const string Current = "9";
 
     /// <summary>架构版本号,对应 <see cref="Current"/>。</summary>
     [SugarColumn(Length = 32, ColumnDescription = "架构版本")]
