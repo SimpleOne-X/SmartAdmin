@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.32.0 - 2026-10-31
+
 ### 升级说明
 
 **本版含破坏性变更：`OrgAuditEntity` 不再实现 `IOrgScoped`，改实现新增的 `IOrgShared`。**
