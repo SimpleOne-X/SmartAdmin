@@ -24,6 +24,7 @@
 
 - 定义在 `Services/Entities/`，系统内核表命名 `Sys*`。
 - 选基类：普通表继承 `BaseEntity`（主键+审计四件套+软删）；需按机构隔离的继承 `DataEntity`（多带 `CreateOrgId` 锚点，见下文「数据访问」）。
+- 机构隔离又确需真删的表，或个别行要共享给所有机构的表，继承 `OrgAuditEntity`：没有软删，多带一列可空的 `IsShared`。共享行的读写规则归 [多组织数据权限](/zh/backend/data-scope) 讲。
 - 主键统一 `Id`（雪花，AOP 填，不手赋）。软删统一 `IsDelete`，查已删数据要显式 `.ClearFilter<ISoftDelete>()`。
 - 表结构没预留的额外信息塞 `ExtJson`，不新开列。
 - 特性照 `Entities/SysDictType.cs`：`[SugarTable]` / 唯一索引 `[SugarIndex(IsUnique=true)]` / `[SugarColumn(Length, ColumnDescription, IsNullable)]`。
@@ -52,12 +53,13 @@
 
 - 注入 `IRepository<T>`；复杂查询走 `.AsQueryable()`，逃生走 `.Db`(`Db.Deleteable<>()` / `Db.Ado.UseTranAsync`)。
 - 软删与数据范围是全局过滤器，业务代码不重复写过滤条件。
+- 要绕过机构范围，写 `.ClearFilter<IOrgScoped, IOrgShared>()`。只写 `IOrgScoped` 清不掉 `OrgAuditEntity` 的过滤器，编译不报错，查询却仍受机构范围限制。
 - 唯一性查重要带上软删行：`.ClearFilter<ISoftDelete>().AnyAsync(...)`，否则会撞库唯一索引抛原生 500。
 - 多写操作包事务 `Db.Ado.UseTranAsync`，失败整体回滚；缓存失效放事务提交之后，提前清了而事务回滚，缓存和库就对不上。
 - 审计字段（`Id` 雪花、`CreateTime`/`User`/`Org`、`UpdateTime`/`User`）由 AOP 填，只设业务字段。
 
 ::: danger CreateOrgId 是数据范围锚点
-`DataEntity` 行的 `CreateOrgId` 不填，机构范围查询里恒为 0 行。它由 AOP 自动填，绝不手动绕过赋值。原理见 [多组织数据权限](/zh/backend/data-scope)。
+`DataEntity` / `OrgAuditEntity` 行的 `CreateOrgId` 不填，机构范围查询里恒为 0 行（`OrgAuditEntity` 上标成共享的行除外）。它由 AOP 自动填，绝不手动绕过赋值。原理见 [多组织数据权限](/zh/backend/data-scope)。
 :::
 
 ## 缓存

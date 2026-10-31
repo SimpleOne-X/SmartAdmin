@@ -22,7 +22,7 @@ return new SqlSugarScope(mainConfig, client => { /* 挂过滤器 + AOP + 日志 
 
 ## 全局查询过滤器
 
-两条过滤器按**接口**匹配实体注册。SqlSugar 的 `AddTableFilter<T>` 只认接口或精确类型，不匹配基类。所以这里的标记走的是接口 `ISoftDelete` / `IOrgScoped`，而不是基类 `BaseEntity` / `DataEntity`。
+过滤器按**接口**匹配实体注册。SqlSugar 的 `AddTableFilter<T>` 只认接口或精确类型，不匹配基类。所以这里的标记走的是接口 `ISoftDelete` / `IOrgScoped` / `IOrgShared`，而不是基类 `BaseEntity` / `DataEntity` / `OrgAuditEntity`。
 
 ### 软删除
 
@@ -47,8 +47,10 @@ client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
 
 `scope.Current` 的三个属性都与实体参数无关，SqlSugar 会先把它们在本地求值成常量，再拼进 WHERE。机构集合会被渲染成 SQL 的 `IN`。`IsUnrestricted` 为真时整体恒真，不过滤。
 
+继承 `OrgAuditEntity` 的表实现 `IOrgShared`，另挂一个过滤器：上面三个分支原样保留，再多放行 `IsShared == true` 的行。共享行的完整规则归 [多组织数据权限](./data-scope.md) 那页。
+
 ::: warning 数据范围只作用于查询
-全局数据范围过滤器只作用于 SELECT，不作用于按主键的 `Updateable` / `Deleteable`。为此，`SqlSugarRepository<TEntity>` 对 `IOrgScoped` 实体的 `UpdateAsync` / `DeleteAsync` 内置了写路径范围守卫。写之前，会先经过带范围过滤器的查询，确认目标行在当前数据范围内。越权改删他机构的行，返回 0 行，默认就是安全的。绕过仓储、直接走 `Db.Updateable` / `Deleteable` 这类逃生舱口的写，不受此守卫保护，需要自行校验归属。
+全局数据范围过滤器只作用于 SELECT，不作用于按主键的 `Updateable` / `Deleteable`。为此，`SqlSugarRepository<TEntity>` 对 `IOrgScoped` 与 `IOrgShared` 实体的 `UpdateAsync` / `DeleteAsync` 内置了写路径范围守卫。写之前，会先经过带范围过滤器的查询，确认目标行在当前数据范围内。越权改删他机构的行，返回 0 行，默认就是安全的。绕过仓储、直接走 `Db.Updateable` / `Deleteable` 这类逃生舱口的写，不受此守卫保护，需要自行校验归属。
 :::
 
 ## AOP 自动填审计字段
@@ -60,7 +62,7 @@ client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
 | `Id` | 插入 | `Id == 0` 时填雪花号；显式给定（如种子数据）原样保留 |
 | `CreateTime` | 插入 | 未设置时填当前时间 |
 | `CreateUserId` | 插入 | 从当前登录用户填；系统上下文为 null 则留空 |
-| `CreateOrgId` | 插入 | 从当前用户归属机构填（仅 `DataEntity` 有此列） |
+| `CreateOrgId` | 插入 | 从当前用户归属机构填（仅 `DataEntity` 与 `OrgAuditEntity` 有此列） |
 | `UpdateTime` | 更新 | 每次整行更新都刷新 |
 | `UpdateUserId` | 更新 | 有登录上下文时记录操作人 |
 
@@ -82,7 +84,7 @@ client.Aop.DataExecuting = (_, info) =>
 ```
 
 ::: warning `CreateOrgId` 是数据范围锚点
-`CreateOrgId` 就是创建者当时所属的机构。插入时由 AOP 从 `ICurrentUser.OrgId` 自动填充，这个值来自令牌里的 org claim。数据范围过滤器正是按它决定行可见性。**若这个字段没被填上，按机构维度的数据范围查询会对业务表恒返回 0 行**。数据在库里，却查不出来。为 null 表示不受机构范围约束（系统内建数据、或创建者无归属机构）。
+`CreateOrgId` 就是创建者当时所属的机构。插入时由 AOP 从 `ICurrentUser.OrgId` 自动填充，这个值来自令牌里的 org claim。数据范围过滤器正是按它决定行可见性。**若这个字段没被填上，按机构维度的数据范围查询会对业务表恒返回 0 行**。数据在库里，却查不出来。为 null 表示行没有归属机构（系统内建数据、或创建者无归属机构）：受限用户看不到这些行，只有范围含「仅本人」的创建人和不受限用户能看到。
 :::
 
 ## 实体基类
@@ -94,7 +96,7 @@ PrimaryId          只有主键 Id
   └─ AuditEntity   + 审计四件套(CreateTime / CreateUserId / UpdateTime / UpdateUserId)
        ├─ BaseEntity     + 软删除 IsDelete            实现 ISoftDelete
        │    └─ DataEntity     + 机构锚点 CreateOrgId  实现 IOrgScoped
-       └─ OrgAuditEntity + 机构锚点 CreateOrgId       实现 IOrgScoped
+       └─ OrgAuditEntity + 机构锚点 CreateOrgId + 共享标记 IsShared  实现 IOrgShared
 ```
 
 | 基类 | 审计 | 软删除 | 机构隔离 | 用在哪 |
@@ -103,11 +105,11 @@ PrimaryId          只有主键 Id
 | `AuditEntity` | 有 | 无 | 无 | 确需真删又要留痕的表：可真删的关联表、只增日志表 |
 | `BaseEntity` | 有 | 有 | 无 | 全局共享表：字典、配置、机构树自身 |
 | `DataEntity` | 有 | 有 | 有 | 需要「本机构 / 本机构及以下 / 仅本人 / 自定义」隔离的业务表 |
-| `OrgAuditEntity` | 有 | 无 | 有 | 要机构隔离、又确需真删的表 |
+| `OrgAuditEntity` | 有 | 无 | 有，可按行共享 | 要机构隔离、又确需真删的表；个别行要让所有机构都看到的表 |
 
 **没有软删除的那两个，仓储 `DeleteAsync` 是物理删除**，行从库里移除，没有回收站，也没有 `RestoreAsync`。挑基类前先问这张表要不要回收站。
 
-机构隔离的两个基类（`DataEntity` / `OrgAuditEntity`）都吃写路径守卫。仓储的 `UpdateAsync`/`DeleteAsync` 对 `IOrgScoped` 实体内置了范围检查，越权改删他机构的行会被拒，返回 0 行。
+机构隔离的两个基类（`DataEntity` / `OrgAuditEntity`）都吃写路径守卫。仓储的 `UpdateAsync`/`DeleteAsync` 对 `IOrgScoped` 与 `IOrgShared` 实体内置了范围检查，越权改删他机构的行会被拒，返回 0 行。`OrgAuditEntity` 的共享行是例外：别的机构能读到它，所以写入抛 `ErrorCode.OrgOutOfScope`，不静默返回 0 行。
 
 ## 泛型仓储 `IRepository<>`
 

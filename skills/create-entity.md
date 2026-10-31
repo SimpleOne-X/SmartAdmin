@@ -13,6 +13,9 @@
 |---|---|---|
 | `BaseEntity` (命名空间 `SmartAdmin.SqlSugar`) | 无需按组织隔离的表（字典、配置、全局数据） | `Id`, `CreateTime`, `CreateUserId`, `UpdateTime`, `UpdateUserId`, `IsDelete` |
 | `DataEntity` (命名空间 `SmartAdmin.SqlSugar`) | 需要按组织数据权限隔离的业务表 | 继承 BaseEntity 全部 + `CreateOrgId`（归属机构锚点） |
+| `OrgAuditEntity` (命名空间 `SmartAdmin.SqlSugar`) | 需要按组织隔离、又确需物理删除的业务表；或个别行要共享给所有机构的表 | `Id` + 审计四件套 + `CreateOrgId` + `IsShared`（共享标记，可空），**没有** `IsDelete`，`DeleteAsync` 是物理删除 |
+
+`DataEntity` 不带共享能力，也没有 `IsShared` 列；要按行共享就继承 `OrgAuditEntity`。
 
 **注意：以上审计字段由 SqlSugar AOP 自动填充，实体类中不要重复定义。**
 
@@ -144,6 +147,16 @@ public OrderStatus Status { get; set; }
 ### DataEntity 的写路径守卫
 
 继承 `DataEntity` 的实体，`IRepository` 的 `UpdateAsync`/`DeleteAsync` 已内置数据范围守卫——越权改删他机构行会被拒。业务服务仍建议改/删前先 `GetAsync`（经范围过滤），以返回准确的"未找到"错误。
+
+### OrgAuditEntity 的共享行
+
+继承 `OrgAuditEntity` 的表，把某一行的 `IsShared` 设为 `true`，所有机构的用户都能查到它；`null` 与 `false` 都表示不共享，可见性同普通机构数据。基类和角色的数据范围都不用改。
+
+- 只有数据范围含归属机构的用户能写共享行；别的机构写入抛 `ErrorCode.OrgOutOfScope`（不是返回 0 行）。私有行被越权写入仍返回 0 行。
+- 写守卫要读当前数据范围，仓储必须带 `IDataScopeContext`。DI 注入的仓储自带；自己 `new`、或写 `: SqlSugarRepository<T>(db)` 的子类要补传这个参数，缺了写入时抛 `InvalidOperationException`。
+- 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），读写明细的接口先校验主表。
+- 共享行不要引用某个机构的私有数据（如共享路线引用了某机构的私有工作中心），内核不知道业务外键，由业务保存时校验。
+- 清掉机构范围过滤要写 `.ClearFilter<IOrgScoped, IOrgShared>()`；只写 `IOrgScoped` 清不掉 `OrgAuditEntity` 的过滤器，编译不报错，查询却仍受机构范围限制。
 
 ## 已有表加列（演进列 / 升级补列）
 

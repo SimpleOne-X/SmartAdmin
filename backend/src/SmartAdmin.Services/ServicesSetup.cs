@@ -129,7 +129,7 @@ public static class ServicesSetup
 
         // 数据范围解析(招牌能力):合并用户多角色范围,结果按用户缓存
         services.TryAddScoped<IDataScopeProvider, DataScopeProvider>();
-        // 系统表(Sys*)上的范围收口:全局过滤器只认 IOrgScoped,内核自己的表得靠它
+        // 系统表(Sys*)上的范围收口:全局过滤器只认 IOrgScoped / IOrgShared,内核自己的表得靠它
         services.TryAddScoped<IDataScopeGuard, DataScopeGuard>();
 
         // 密码历史防重用:开关 sys.security.password.historyCount(默认 0=关);改密/重置挂点调用

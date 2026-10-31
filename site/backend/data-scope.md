@@ -43,7 +43,7 @@ protected virtual async Task<DataScopeResult> ComputeAsync(long userId)
 ```
 
 ::: tip Secure by default
-No roles, or roles with no scope configured, both collapse to "self only" — never widened. When both are empty (org set empty + self not included), that means "sees no data at all" — deny by default, not allow by default.
+No roles, or roles with no scope configured, both collapse to "self only" — never widened. When both are empty (org set empty + self not included), that means "sees no data at all" (rows marked shared on an `OrgAuditEntity` excepted) — deny by default, not allow by default.
 :::
 
 `DataScopeResult` (`Core/Security/DataScopeResult.cs`) is an immutable value object, safe to cache across requests:
@@ -93,7 +93,7 @@ If `CreateOrgId` isn't filled (e.g. the kernel's token flow was bypassed, or the
 
 ## Global filter: zero filter conditions in business code
 
-The filter is registered once in `SqlSugarSetup.cs` against entities implementing `IOrgScoped` (`DataEntity` and its subclasses), and takes effect on every query:
+The filter is registered once in `SqlSugarSetup.cs` against entities implementing `IOrgScoped` (`DataEntity` and its subclasses), and takes effect on every query. Tables inheriting `OrgAuditEntity` implement `IOrgShared` instead: same org-scope rule, handled by a second filter (see "Sharing rows" below):
 
 ```csharp
 client.QueryFilter.AddTableFilter<IOrgScoped>(e =>
@@ -123,8 +123,81 @@ var orders = await orderRepo.AsQueryable()
 With the exact same code, a user with `All` scope sees every pending order, a user with `Org` scope sees only their own org's, and a `Self`-scoped user sees only what they created — the difference comes entirely from the `DataScopeResult` resolved earlier in the request; not a single line of business logic changes.
 
 ::: warning Write-path guard
-The global filter only applies to **queries (SELECT)** — not to primary-key-based `Updateable` / `Deleteable`. To cover this, the `SqlSugarRepository` repository has a built-in write-path guard for `UpdateAsync` / `DeleteAsync` on `IOrgScoped` entities: before writing, it queries through the scope-filtered path to confirm the target row is within the current scope; attempting to modify/delete a row from another org is rejected (returns 0 rows). Writes that bypass the repository via the `Db.Updateable/Deleteable` escape hatch aren't covered by this guard and must validate ownership themselves.
+The global filter only applies to **queries (SELECT)** — not to primary-key-based `Updateable` / `Deleteable`. To cover this, the `SqlSugarRepository` repository has a built-in write-path guard for `UpdateAsync` / `DeleteAsync` on `IOrgScoped` and `IOrgShared` entities: before writing, it queries through the scope-filtered path to confirm the target row is within the current scope; attempting to modify/delete a row from another org is rejected (returns 0 rows). Writes that bypass the repository via the `Db.Updateable/Deleteable` escape hatch aren't covered by this guard and must validate ownership themselves.
 :::
+
+## Sharing rows: `IsShared`
+
+Most rows in a table belong privately to their own org, but a few have to be visible to every org: the auxiliary-materials process route, say, is common to all business units. For a table inheriting `OrgAuditEntity`, set a row's `IsShared` to `true` and that's it; neither the base class nor any role's data scope needs to change.
+
+```csharp
+public class ProcessRoute : OrgAuditEntity { /* business fields */ }
+
+route.IsShared = true;   // every org can query this row
+```
+
+### Query rules
+
+`OrgAuditEntity` implements `IOrgShared`, and its filter lets one more branch through beyond the org scope:
+
+```csharp
+client.QueryFilter.AddTableFilter<IOrgShared>(e =>
+    scope.Current.IsUnrestricted == true
+    || (e.CreateOrgId != null && scope.Current.OrgIds.Contains(e.CreateOrgId.Value))
+    || (scope.Current.IncludeSelf == true && e.CreateUserId == scope.Current.UserId)
+    || e.IsShared == true);
+```
+
+For a restricted user, whether a row is returned depends only on four combinations of `IsShared` and `CreateOrgId`:
+
+| `IsShared` | `CreateOrgId` | Returned? |
+| --- | --- | --- |
+| `true` | set or empty | Yes, to users of every org |
+| `null` or `false` | inside the user's org scope | Yes |
+| `null` or `false` | outside the scope | No, except for the creator when the scope includes "self only" |
+| `null` or `false` | empty | No, only a creator whose scope includes "self only" |
+
+`null` and `false` both mean not shared, so adding the column to a table that already holds data does not change what any row shows. The "all" scope and super admins are unrestricted and see every row.
+
+A shared row is visible under a "self only" scope, and also under the empty scope that an unbound request falls back to. Endpoint permissions are still checked as usual; sharing relaxes only the data-scope layer. So "an empty scope sees no data" holds only for tables inheriting `DataEntity`.
+
+### Who can write a shared row
+
+Other orgs can view and reference a shared row but not change it. The users who can write it are those whose data scope contains the row's owning org, the same rule as ordinary org data:
+
+| Operation | Users whose scope contains the owning org | Other restricted users |
+| --- | --- | --- |
+| Query a shared row | Visible | Visible |
+| Update or delete a shared row | Allowed | Throws `ErrorCode.OrgOutOfScope` (`42030`) |
+| Update or delete a private row | Allowed | Returns 0 rows |
+| Turn the share flag on or off | Allowed | Same as update, rejected |
+
+A shared row throws and a private row returns 0 because other orgs can read the shared one. If `UpdateAsync` silently returned 0 there too, business code that ignores the return value would think the save succeeded. A private row is already invisible to other orgs, so it keeps the existing return-0 behavior.
+
+A shared row with an empty `CreateOrgId` has no owning org: among restricted users only a creator whose scope includes "self only" can write it, and anyone else gets `OrgOutOfScope` as well. Calls with no HTTP context, such as background jobs and startup, are unrestricted.
+
+Ownership is decided in `DataScopeResult.Owns(createOrgId, createUserId)`. The write guard uses it, and a business service can use it too, to compute an "editable" flag on a DTO. It matches the first three branches of the filter, without the shared allowance.
+
+The write guard has to read the current data scope, so a repository for an `OrgAuditEntity` must carry an `IDataScopeContext`. A repository injected through DI already does; one you `new` yourself, or a subclass written as `: SqlSugarRepository<T>(db)`, has to pass it on to the constructor, otherwise a write throws `InvalidOperationException` instead of passing silently.
+
+Writes that bypass the repository through `Db.Updateable` / `Deleteable` are not covered by this guard, and shared rows need their ownership checked by hand too. `OrgAuditEntity` deletes physically with no recycle bin: once a shared row is deleted, no org sees it any more, and it cannot be restored.
+
+### Conventions when adopting it
+
+The kernel can't enforce these, so business code has to:
+
+- Detail tables carry no org field (inherit `PrimaryId` or `BaseEntity`), and the endpoints that read or write details check the parent table first. Filters take effect per table; if a detail table carried an org field too, another org could see the parent row but not its details.
+- A shared row must not reference one org's private data. If a shared route points at A's private work center, B sees nothing for that part when opening the route. The kernel doesn't know the business foreign keys, so the business must check at save time.
+
+### Clearing the filter
+
+A query that must bypass the org scope (a database-wide duplicate check, for example) uses `ClearFilter`. It matches exactly the interface a filter was registered against, and the `OrgAuditEntity` filter is registered on `IOrgShared`, so both interfaces have to be cleared together:
+
+```csharp
+db.Queryable<ProcessRoute>().ClearFilter<IOrgScoped, IOrgShared>()
+```
+
+This form works on `DataEntity` tables as well. Writing only `ClearFilter<IOrgScoped>()` does not clear the `OrgAuditEntity` filter: it compiles fine, and the query is quietly still restricted by org scope.
 
 ## Context carrier: why not `AsyncLocal`
 
@@ -163,7 +236,7 @@ Set to `true` and an unbound request falls back to unrestricted instead. The swi
 
 ## System tables: the half the filter can't reach
 
-The global filter only matches `IOrgScoped`, and the kernel's own `Sys*` tables all inherit `BaseEntity`, so not a single row of theirs is filtered. Which means "who can see which logs, which sessions" has to be decided by each service.
+The global filters only match `IOrgScoped` and `IOrgShared`, and the kernel's own `Sys*` tables all inherit `BaseEntity`, so not a single row of theirs is filtered. Which means "who can see which logs, which sessions" has to be decided by each service.
 
 These tables show a non-super-admin only the rows produced by users inside their scope:
 

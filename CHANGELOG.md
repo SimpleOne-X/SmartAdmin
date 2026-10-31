@@ -14,6 +14,51 @@
 
 ## Unreleased
 
+### 升级说明
+
+**本版含破坏性变更：`OrgAuditEntity` 不再实现 `IOrgScoped`，改实现新增的 `IOrgShared`。** 继承了 `OrgAuditEntity` 的应用，升级前先读这一节。只用 `BaseEntity`、`DataEntity` 的应用不受影响。
+前四条是要做的事，漏改都不会有编译错误，各自会怎样写在每条里；最后一条是行为变化，不用改代码。
+
+- **把 `.ClearFilter<IOrgScoped>()` 全局替换成 `.ClearFilter<IOrgScoped, IOrgShared>()`。**
+  - `ClearFilter` 按过滤器注册的接口精确匹配。`OrgAuditEntity` 的机构范围过滤器现在注册在 `IOrgShared` 上，旧写法清不掉它。
+  - **漏改编译照常通过，也不报错，查询结果却悄悄受机构范围限制**，比如全库判重查不到别的机构的行。
+  - 已经写成 `ClearFilter<ISoftDelete, IOrgScoped>()` 的，同样把 `IOrgShared` 加进去，写成 `ClearFilter<ISoftDelete, IOrgScoped, IOrgShared>()`。
+  - 新写法用在 `DataEntity` 上也无害，可以不加区分地全局替换。
+- **给所有 `OrgAuditEntity` 表加一个可空布尔列 `IsShared`。** 存量行补出来都是 `NULL`，等同不共享，可见范围不变。
+  - 启动时 CodeFirst 开着的环境（`Development` 默认开）自动加列。
+    内核架构版本由 `7` 升到 `8`，钉了 `CodeFirstVersion` 的应用升级后会因此重扫一次，不用改它。
+  - CodeFirst 关着的环境（生产默认关）要先手工 `ALTER TABLE` 加列，再启动新版本。
+    不加的话，主库上的表会被启动期的缺列检查拦下，错误点名表和列；本次启动配 `SmartAdmin:Database:EnableCodeFirstInProduction=true`，也能让应用自己补列。
+  - **CodeFirst 只扫主库。** `SmartAdmin:AdditionalDatabases` 副库上的 `OrgAuditEntity` 表同样要手工加列。
+    副库不在启动检查的范围内，漏了要到第一次查询才报缺列。
+  - 不确定列定义时，在预发库用新版本开闸门启动一次（SQL 日志默认关，先配 `SmartAdmin:Database:SqlLog:Enabled=true`），把日志里的补列语句照抄到生产库。
+- **测试宿主里自己注册的 `AddTableFilter<IOrgScoped>(...)` 不再作用于 `OrgAuditEntity`，要再注册一个 `AddTableFilter<IOrgShared>(...)`。**
+  表达式照 `IOrgScoped` 那条写，末尾多一个 `|| e.IsShared == true` 分支。
+  不补的话，涉及 `OrgAuditEntity` 的隔离测试测的就不是真实行为。
+- **只传 `db` 的 `: SqlSugarRepository<T>(db)` 子类，用在 `OrgAuditEntity` 上时，要把 `IDataScopeContext` 传给构造函数。**
+  构造函数新增的是可选参数 `IDataScopeContext? dataScope = null`，不传编译照常通过，写入这类实体时却抛 `InvalidOperationException`。
+  DI 注入的 `IRepository<>` 自带它，不受影响。
+- **升级后存量行的可见范围不变。开始用共享之后，有两处行为要知道。**
+  - 别的机构写共享行抛 `ErrorCode.OrgOutOfScope`（`42030`），不是返回 0 行。私有行被越权写入仍返回 0 行。
+  - 共享行对「仅本人」范围和空范围的用户也可见，所以「空范围查不到任何数据」今后只对继承 `DataEntity` 的表成立。接口权限照常校验。
+
+### Added
+
+- **`OrgAuditEntity` 的行可以按行共享给所有机构。**
+  新增接口 `IOrgShared` 和可空列 `IsShared`。把某一行的 `IsShared` 设成 `true`，所有机构的用户都能查到它，包括范围为「仅本人」和空范围的用户；`null` 与 `false` 都表示不共享。
+  同一张表里私有行和共享行并存，基类不用换，也不用改任何角色的数据范围。
+  - 共享行所有机构可读，只有归属机构能写：数据范围含归属机构的用户可以更新、删除、打开或关闭共享标记，别的机构抛 `ErrorCode.OrgOutOfScope`。
+    `CreateOrgId` 为空的共享行没有归属机构，受限用户里只有范围含「仅本人」的创建人能写。
+  - 新增 `DataScopeResult.Owns(createOrgId, createUserId)`。写守卫用它判断归属，业务服务也可以用它给 DTO 算「能否编辑」。
+  - 种子升级同步不会覆盖 `IsShared`。
+  - 共享行是物理删除，没有回收站。`DataEntity` 不带共享能力，表结构和行为都不变。
+  - 内核拦不了的两条约定：明细表不带机构字段、接口先校验主表；共享行不要引用某个机构的私有数据。写法见文档站「多组织数据权限」一页的「按行共享」一节。
+
+### Fixed
+
+- **数据层文档和实体注释把 `CreateOrgId` 为 `null` 的行说成「不受机构范围约束」，实际受限用户看不到这些行。**
+  行为本来如此，没有改，只改了说明：这类行只有范围含「仅本人」的创建人和不受限用户能看到。
+
 ## 10.31.1 - 2026-10-29
 
 ### Added

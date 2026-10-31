@@ -27,7 +27,7 @@ public class AdminDatabaseConnectionOptions
     public bool ApplySoftDeleteFilter { get; set; }
 
     /// <summary>
-    /// 是否挂机构数据范围过滤器(<c>IOrgScoped</c>)。
+    /// 是否挂机构数据范围过滤器(<c>IOrgScoped</c> 与 <c>IOrgShared</c> 各一个)。
     /// <para><b>默认 false</b>:外部库通常不按 CreateOrgId 建模。</para>
     /// </summary>
     public bool ApplyDataScopeFilter { get; set; }

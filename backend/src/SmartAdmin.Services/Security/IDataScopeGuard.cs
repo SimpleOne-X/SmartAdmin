@@ -6,7 +6,7 @@ namespace SmartAdmin.Services;
 
 /// <summary>
 /// 数据范围在<b>系统表</b>上的收口点。
-/// <para>为什么需要它:全局查询过滤器只认 <c>IOrgScoped</c>(业务表继承 <c>DataEntity</c> 即自动受控),
+/// <para>为什么需要它:全局查询过滤器只认 <c>IOrgScoped</c> 与 <c>IOrgShared</c>(业务表继承 <c>DataEntity</c> 或 <c>OrgAuditEntity</c> 即自动受控),
 /// 而内核自己的 <c>Sys*</c> 表一律继承 <c>BaseEntity</c>——过滤器对它们一行都不生效。于是"谁能看见哪些用户/
 /// 哪些日志/哪些会话"只能各服务手写,写漏一个就是一处越权面——操作日志、在线会话、通知列表都经它收口。</para>
 /// <para>超管与不受限范围一律放行;<c>null</c> 机构视为在范围内(根级/未分配,沿用既有语义)。
