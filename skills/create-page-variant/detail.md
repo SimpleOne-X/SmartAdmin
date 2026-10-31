@@ -47,7 +47,7 @@ const uid = computed(() => Number(props.id ?? route.params.id))
 
 - **命名固定 `detail.vue`、参数固定 `:id`**；要自定义参数名 / 一页多详情，退回显式静态路由：系统模块写进 `web/packages/admin/src/router/routes.ts` 的 `layout` 子路由；业务模块在 `createSmartAdmin({ install })` 里调 `router.addRoute('layout', { path, name, component: namedPage(name, loader), meta })`（`router`、`namedPage` 从 `'smart-admin-web'` 导入）。
 - **无路由级权限门**：守卫默认放行详情路由，管控靠行操作 `hasPerm` + 后端 API `[RolePermission]`；手敲 URL 仍命中被授权 API，取不到走错误态。
-- **多应用且无默认 / 记忆应用**时，F5 深链详情会先落应用选择器（与菜单页深链同行为），进应用后即可达。
+- **多应用且无默认 / 记忆应用**时，F5 深链详情会先落应用选择器（与菜单页深链同行为），选完应用回到这个详情页。
 - 记录名含 `.` 时 `TabsBar` 会把它当 i18n key（缺键原样打印），既有小怪癖。
 
 **基建源码：** `web/packages/admin/src/router/detailRoutes.ts`、`web/packages/admin/src/components/DetailPage/`、`web/packages/admin/src/composables/useTabTitle.ts`（内核未内置示例页；按上面骨架在你的模块下丢一个 `detail.vue` 即可）

@@ -164,6 +164,13 @@ test('没记住应用的用户点卡片深链 → 选应用后落到卡片指向
       body: JSON.stringify({ code: 0, data: session }),
     }),
   )
+  // 后端是各用例共享的,module-switch 可能已给这个账号设了默认应用,有默认就不会进选应用页
+  await page.route('**/api/v1/personal/modules', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    body.data.defaultModuleId = null
+    await route.fulfill({ response, json: body })
+  })
 
   await page.goto('/personal/notice')
 

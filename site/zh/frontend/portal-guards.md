@@ -93,7 +93,11 @@ router.beforeEach(async to => {
       if (res.chooser)
         return to.name === 'module' || isFullscreenPath(to.path)
           ? true
-          : { path: '/module', replace: true }
+          : {
+              path: '/module',
+              query: to.path === '/' ? undefined : { redirect: to.fullPath },
+              replace: true,
+            }
       if (to.name === 'module') return true
       if (to.path === '/') return { path: auth.homePath, replace: true }
       return to.fullPath
