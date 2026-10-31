@@ -220,12 +220,13 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 
 多应用的部署有一个限制：既没有默认应用、也没有记住上次所在应用的用户，点卡片会落在应用选择页，而不是卡片指向的页面。
 登录态已过期的用户通常也在此列，因为记住的应用随会话一起清掉了。
-给这些用户设好默认应用就能避开：顶栏点「切换应用」进入应用选择页，再点某个应用卡片上的「设为默认」。
+设好默认应用就能避开，但只能由每个用户自己设：顶栏点「切换应用」进入应用选择页，再点某个应用卡片上的「设为默认」。
+管理员没有办法替用户预设，可以做的是通知这些用户各自设一次。
 只有一个应用的部署，以及设了默认应用的用户，会直接进到卡片指向的页面。
 
 ### 自定义渠道和替换
 
-内核只认接口，不认企业微信。同时实现了 `IExternalAuthProvider` 和 `IExternalNoticeSender` 的 provider 都会收到推送，企业微信包里的 `WeComExternalAuthProvider` 就是这么做的。
+内核只认接口，不认企业微信。provider 在实现 `IExternalAuthProvider` 之外再实现 `IExternalNoticeSender`，就能成为推送渠道，企业微信包里的 `WeComExternalAuthProvider` 就是这么做的。条件因 provider 的来源而异，见代码块后面。
 
 ```csharp
 public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
@@ -244,7 +245,13 @@ public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
 ```
 
 `ExternalNoticeException` 的消息会原样写进内核日志，别带含令牌的请求地址。
-要让「登录方式」页给这种类型显示推送开关和测试按钮，类型描述 `IExternalAuthProviderType` 的 `SupportsNotice` 要返回 `true`，默认是 `false`。
+
+provider 的来源不同，内核判断「有没有渠道能发」的依据也不同：
+
+- 在代码里注册的 `IExternalAuthProvider`（依赖注入里能解析到），实现了 `IExternalNoticeSender` 就够了。
+- 管理员在「登录方式」页配出来的 provider，是类型描述 `IExternalAuthProviderType.Create` 现建的，不在依赖注入里。这种类型的 `SupportsNotice` 必须返回 `true`，默认是 `false`。
+  它返回 `false` 时，内核认为没有任何渠道能发，发布通知时根本不入队，也不报错。`SupportsNotice` 为 `true` 的类型，「登录方式」页同时会显示推送开关和测试按钮。
+
 `notify` 对每个 provider 一视同仁，缺省开。
 
 要换掉默认行为时：

@@ -205,11 +205,11 @@ The card's title is the notice's title, and its body is the notice content as pl
 
 When the card is tapped and the person is still signed in, the page simply opens. If not, the flow from the previous section takes over: silent authorization inside the WeCom client, then back to the page the card points at. Once the trusted domain is configured, nothing extra is needed.
 
-Multi-app deployments have one limitation: a user with neither a default app nor a remembered last app lands on the app chooser when tapping a card, not on the page the card points at. A user whose sign-in has expired is usually in that group too, because the remembered app is cleared along with the session. Setting a default app for those users avoids it: click "Switch app" in the top bar to open the app chooser, then click "Set default" on an app's card. Single-app deployments, and users who have a default app, go straight to the page the card points at.
+Multi-app deployments have one limitation: a user with neither a default app nor a remembered last app lands on the app chooser when tapping a card, not on the page the card points at. A user whose sign-in has expired is usually in that group too, because the remembered app is cleared along with the session. Setting a default app avoids it, but each user can only set their own: click "Switch app" in the top bar to open the app chooser, then click "Set default" on an app's card. An admin cannot preset it for users; what an admin can do is ask those users to set it once each. Single-app deployments, and users who have a default app, go straight to the page the card points at.
 
 ### Custom channels and replacement
 
-The kernel knows interfaces, not WeCom. Any provider that implements both `IExternalAuthProvider` and `IExternalNoticeSender` receives pushes, and `WeComExternalAuthProvider` in the WeCom package does exactly that.
+The kernel knows interfaces, not WeCom. A provider that implements `IExternalNoticeSender` on top of `IExternalAuthProvider` can be a push channel, and `WeComExternalAuthProvider` in the WeCom package does exactly that. The condition depends on where the provider comes from; see after the code block.
 
 ```csharp
 public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
@@ -227,7 +227,14 @@ public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
 }
 ```
 
-The message of an `ExternalNoticeException` is written to the kernel log as is, so keep request URLs that carry tokens out of it. For the Login methods page to show the push switch and the test button for a type, its type descriptor `IExternalAuthProviderType` must return `true` from `SupportsNotice`, which defaults to `false`. `notify` applies to every provider alike and is on when unset.
+The message of an `ExternalNoticeException` is written to the kernel log as is, so keep request URLs that carry tokens out of it.
+
+How the kernel decides that some channel can send depends on where the provider comes from:
+
+- An `IExternalAuthProvider` registered in code (resolvable from dependency injection) only needs to implement `IExternalNoticeSender`.
+- A provider the admin configured on the Login methods page is built on demand by `IExternalAuthProviderType.Create` and is not in dependency injection. That type's `SupportsNotice` must return `true`; it defaults to `false`. While it returns `false`, the kernel concludes that no channel can send, so publishing a notice never enqueues anything and raises no error. For a type with `SupportsNotice` set to `true`, the Login methods page also shows the push switch and the test button.
+
+`notify` applies to every provider alike and is on when unset.
 
 To replace the default behavior:
 

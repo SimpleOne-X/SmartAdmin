@@ -31,8 +31,9 @@
   - 没装企业微信包、或没有任何 provider 能发送的应用，发布通知时不入队，没有额外开销。
   - 卡片链接用 `SmartAdmin:ExternalAuth:CallbackBaseUrl` 拼接，前后端不同源的部署要让这个地址能打开前端。没配这一项时跳过推送并记 Warning。
 - **新增 `IExternalNoticeSender`，让外部登录 provider 成为推送渠道。**
-  同时实现 `IExternalAuthProvider` 和它的 provider 都会收到推送；`WeComExternalAuthProvider` 已实现。
-  配套新增 `ExternalNoticeMessage`、`ExternalNoticeResult`、`ExternalNoticeException`，以及 `IExternalAuthProviderType.SupportsNotice`（默认 `false`）。
+  在代码里注册的 `IExternalAuthProvider` 同时实现它就会收到推送；`WeComExternalAuthProvider` 已实现。
+  管理员在「登录方式」页配出来的 provider 由 `IExternalAuthProviderType.Create` 现建、不在依赖注入里，它的类型描述必须让新增的 `SupportsNotice`（默认 `false`）返回 `true`，否则发布通知时不入队，也不报错。
+  配套新增 `ExternalNoticeMessage`、`ExternalNoticeResult`、`ExternalNoticeException`。
 - **新增 `INoticeDispatcher`，默认实现 `NoticeDispatcher`。** 用 `TryAddSingleton` 注册，可整体替换；`BuildMessage`、`ResolveSubjectsAsync` 是 `protected virtual`，可以只改消息或接收人。
   `NoticeService` 新增可选尾参 `INoticeDispatcher? dispatcher = null`，子类不用改。
   完全替换 `INoticeService` 的应用不会自动推送，要自己调 `INoticeDispatcher.Enqueue`。
