@@ -5,6 +5,7 @@ import { useEventBus } from '@vueuse/core'
 import { HubConnectionBuilder, LogLevel, type HubConnection } from '@microsoft/signalr'
 import { useUserStore } from '#/stores/user'
 import { runtime } from '#/lib/runtime'
+import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 
 /**
  * 未读通知刷新总线:useRealtime 收到后端 `notice-changed` 推送后 emit,NoticeBell 订阅后立即重拉未读角标。
@@ -105,6 +106,8 @@ export function useRealtime() {
       const silent = voluntaryLogout
       voluntaryLogout = false
       void stopConnection()
+      // 被踢下线后不能在企业微信里又静默登录回来
+      suppressWeComAutoLogin()
       useUserStore().clear()
       void import('#/stores/auth').then(({ useAuthStore }) => useAuthStore().reset())
       void import('#/router').then(({ resetRouter }) => resetRouter())

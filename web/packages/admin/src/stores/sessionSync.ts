@@ -1,6 +1,7 @@
 // 同一浏览器的多个标签页共用 localStorage 里的那份会话(默认 body 模式)。刷新令牌每次续期都轮换,
 // 所以别的标签页续期后,本页内存里的旧令牌必须跟上;别的标签页退出后,本页也要跟着回登录页。
 import { loginLocation, safeRedirect } from '#/router/loginRedirect'
+import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 import { USER_STORAGE_KEY, parseStoredUser, useUserStore } from './user'
 
 /** 服务端:刷新令牌刚被轮换(同一浏览器另一标签页抢先续期),本次只拒绝、不吊销会话(ErrorCode.RefreshTokenSuperseded)。 */
@@ -43,7 +44,11 @@ function onStorage(e: StorageEvent) {
     return
   }
   // 本页本来就没有会话(停在公开页)时不去动它。
-  if (user.accessToken || user.refreshToken || user.cookieSession) void endLocalSession()
+  if (user.accessToken || user.refreshToken || user.cookieSession) {
+    // sessionStorage 每个标签页一份,退出那一页写下的标记这里看不到
+    suppressWeComAutoLogin()
+    void endLocalSession()
+  }
 }
 
 let installed = false
