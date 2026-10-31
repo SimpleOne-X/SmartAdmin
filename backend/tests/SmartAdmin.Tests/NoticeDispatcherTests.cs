@@ -1,7 +1,8 @@
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
@@ -133,8 +134,8 @@ public class NoticeDispatcherTests
     }
 
     /// <summary>可调的分发器子类:快速重试、固定的接收人、计数。</summary>
-    internal sealed class TestDispatcher(IServiceScopeFactory scopes, AdminExternalAuthOptions options, ILogger<NoticeDispatcher> logger)
-        : NoticeDispatcher(scopes, options, logger)
+    internal sealed class TestDispatcher(IServiceScopeFactory scopes, ILogger<NoticeDispatcher> logger, AdminExternalAuthOptions? options = null)
+        : NoticeDispatcher(scopes, logger, options)
     {
         public bool FastRetry { get; init; } = true;
         public Func<string, List<string>>? Subjects { get; init; }
@@ -217,8 +218,8 @@ public class NoticeDispatcherTests
     };
 
     private static TestDispatcher NewTestDispatcher(IServiceProvider sp, bool fastRetry = true, Func<string, List<string>>? subjects = null) =>
-        new(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<AdminExternalAuthOptions>(),
-            sp.GetRequiredService<ILogger<NoticeDispatcher>>())
+        new(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<ILogger<NoticeDispatcher>>(),
+            sp.GetRequiredService<AdminExternalAuthOptions>())
         { FastRetry = fastRetry, Subjects = subjects };
 
     private static async Task<long> BoundUser(AdminAppFactory f, string provider, string subject)
@@ -246,7 +247,7 @@ public class NoticeDispatcherTests
     }
 
     private static NoticeDispatcher Direct(CapturingLoggerProvider log, IServiceScopeFactory scopes) =>
-        new(scopes, new AdminExternalAuthOptions(), new LoggerFactory([log]).CreateLogger<NoticeDispatcher>());
+        new(scopes, new LoggerFactory([log]).CreateLogger<NoticeDispatcher>());
 
     private static IServiceScopeFactory ScopesWith(params IExternalAuthProvider[] providers)
     {
@@ -515,6 +516,52 @@ public class NoticeDispatcherTests
     }
 
     // ── 入队 ─────────────────────────────────────────────────────────────
+
+    /// <summary>只调 AddSmartAdminServices 的精简宿主没有外部登录配置:通知照常能解析、照常写入。</summary>
+    [Fact]
+    public async Task Services_only_host_without_external_auth_options_still_publishes()
+    {
+        var id = $"notice-lean-{Guid.NewGuid():N}";
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-{id}.db");
+        var clock = new MutableTime(new DateTimeOffset(2026, 7, 26, 0, 0, 0, TimeSpan.Zero));
+        try
+        {
+            await using var host = new JobEngineHost(id, dbFile, "node-a", clock);
+            host.InitTables();
+
+            await using (var scope = host.Sp.CreateAsyncScope())
+                await scope.ServiceProvider.GetRequiredService<INoticeService>().PublishAsync(new NoticePublishInput { Title = "精简宿主" });
+
+            Assert.Equal("精简宿主", Assert.Single(await host.Db.Queryable<SysNotice>().ToListAsync()).Title);
+        }
+        finally
+        {
+            TestDb.Cleanup(id, dbFile);
+        }
+    }
+
+    /// <summary>真实的 Worker 宿主(Generic Host + AddSmartAdminWorker):启动时解析托管服务,解析不出分发器整个宿主都起不来。</summary>
+    [Fact]
+    public void Worker_host_resolves_the_dispatcher_as_hosted_service_without_external_auth_options()
+    {
+        var dbFile = Path.Combine(Path.GetTempPath(), $"smart-notice-worker-{Guid.NewGuid():N}.db");
+        var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["SmartAdmin:Database:DbType"] = "Sqlite",
+            ["SmartAdmin:Database:ConnectionString"] = $"Data Source={dbFile}",
+            ["SmartAdmin:Database:EnableCodeFirst"] = "false",
+            ["SmartAdmin:Database:EnableSeed"] = "false",
+            ["SmartAdmin:Id:WorkerId"] = "7",
+        });
+        builder.Services.AddSmartAdminWorker(builder.Configuration);
+
+        using var host = builder.Build();
+        var hosted = host.Services.GetServices<IHostedService>().OfType<NoticeDispatcher>();
+
+        Assert.Same(host.Services.GetRequiredService<INoticeDispatcher>(), Assert.Single(hosted));
+        TestDb.Cleanup(dbFile, dbFile);
+    }
 
     [Fact]
     public void Full_queue_drops_without_throwing()

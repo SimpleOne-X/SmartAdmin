@@ -13,8 +13,8 @@ namespace SmartAdmin.Tests;
 /// </summary>
 public class NoticeRecipientTests
 {
-    private sealed class Exposed(IServiceScopeFactory scopes, AdminExternalAuthOptions options, ILogger<NoticeDispatcher> logger)
-        : NoticeDispatcher(scopes, options, logger)
+    private sealed class Exposed(IServiceScopeFactory scopes, ILogger<NoticeDispatcher> logger)
+        : NoticeDispatcher(scopes, logger)
     {
         public Task<List<string>> Resolve(IServiceProvider services, NoticeDispatchItem item, string provider) =>
             ResolveSubjectsAsync(services, item, provider, CancellationToken.None);
@@ -24,7 +24,7 @@ public class NoticeRecipientTests
         AdminAppFactory f, ReceiverType type, IReadOnlyList<long>? targets = null, string provider = "wecom")
     {
         var dispatcher = new Exposed(
-            f.Services.GetRequiredService<IServiceScopeFactory>(), new AdminExternalAuthOptions(), NullLogger<NoticeDispatcher>.Instance);
+            f.Services.GetRequiredService<IServiceScopeFactory>(), NullLogger<NoticeDispatcher>.Instance);
         using var scope = f.Services.CreateScope();
         var subjects = await dispatcher.Resolve(scope.ServiceProvider, new NoticeDispatchItem(1, "t", null, type, targets ?? []), provider);
         return [.. subjects.Order()];

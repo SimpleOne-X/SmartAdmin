@@ -15,7 +15,7 @@ namespace SmartAdmin.Services;
 /// 队列是单消费者:一条消息重试期间后面的消息等待。进程重启时队列里还没发的消息会丢,站内信不受影响。</para>
 /// <para>没有任何 provider 能发送时 <see cref="Enqueue"/> 直接返回,没装外部渠道包的应用不付任何代价。</para>
 /// </summary>
-public class NoticeDispatcher(IServiceScopeFactory scopes, AdminExternalAuthOptions options, ILogger<NoticeDispatcher> logger)
+public class NoticeDispatcher(IServiceScopeFactory scopes, ILogger<NoticeDispatcher> logger, AdminExternalAuthOptions? options = null)
     : BackgroundService, INoticeDispatcher
 {
     private const int QueueCapacity = 10000;
@@ -227,7 +227,7 @@ public class NoticeDispatcher(IServiceScopeFactory scopes, AdminExternalAuthOpti
     /// </summary>
     private string? AbsoluteUrl(string path)
     {
-        var baseUrl = options.CallbackBaseUrl?.TrimEnd('/');
+        var baseUrl = options?.CallbackBaseUrl?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl)
             || !Uri.TryCreate(baseUrl + "/", UriKind.Absolute, out var root)
             || !Uri.TryCreate(baseUrl + path, UriKind.Absolute, out var uri))
