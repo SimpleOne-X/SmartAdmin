@@ -220,18 +220,8 @@ public class NoticeService(
         return json;
     }
 
-    /// <summary>
-    /// 只接受以<b>单个</b> <c>/</c> 开头的站内相对路径。<c>//host</c> 与 <c>/\host</c> 是协议相对 URL,
-    /// 浏览器会跳出站;控制字符与空白也拒绝,免得存进去的 url 在前端拼不出请求。
-    /// </summary>
-    protected virtual bool IsSiteRelativeUrl(string url)
-    {
-        if (url.Length < 1 || url[0] != '/') return false;
-        if (url.Length > 1 && url[1] is '/' or '\\') return false;
-        foreach (var ch in url)
-            if (char.IsWhiteSpace(ch) || char.IsControl(ch) || ch == '\\') return false;
-        return true;
-    }
+    /// <summary>动作 url 是否是站内相对路径,规则见 <see cref="NoticeText.IsSiteRelativeUrl"/>。</summary>
+    protected virtual bool IsSiteRelativeUrl(string url) => NoticeText.IsSiteRelativeUrl(url);
 
     /// <summary>反序列化动作列表;空或坏 JSON 一律读作"没有动作",不让一行脏数据拖垮整页列表。</summary>
     protected virtual IReadOnlyList<NoticeAction>? DeserializeActions(string? json)
