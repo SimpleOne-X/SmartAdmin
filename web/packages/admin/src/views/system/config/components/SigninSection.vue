@@ -14,6 +14,7 @@ import { useAppStore } from '#/stores/app'
 import { translateError } from '#/utils/error'
 import type { ConfigProviderRow } from '#/utils/oauthBrand'
 import { SMS_LOGIN_KEY } from '../groups'
+import { noticeTestText } from '../noticeTest'
 import {
   enabledKey,
   hasLinkSwitch,
@@ -100,9 +101,7 @@ async function testNotice(p: ConfigProviderRow) {
   testing.value = p.code
   try {
     const r = await externalAuthApi.testNotice(p.code)
-    const key = `config.externalAuth.noticeTest.${r.status}`
-    // 后端新增的状态码前端还没翻译时,原样显示状态码,不要露出 i18n 键
-    const text = te(key) ? t(key, { detail: r.detail ?? '' }) : r.status
+    const text = noticeTestText(r, { te, t })
     if (r.status === 'ok') message.success(text)
     else message.error(text)
   } catch (e) {

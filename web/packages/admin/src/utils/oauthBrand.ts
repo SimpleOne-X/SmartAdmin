@@ -118,7 +118,7 @@ export function buildConfigProviderRows(
       registered,
       enabled: registered && !!a?.enabled,
       linkByAccount: registered && !!a?.linkByAccount,
-      // 代码注册的 provider 没有类型,也就没有推送能力
+      // 代码注册的 provider 没有类型,这里判不出它能不能推送:它照样能发,只是页面不给开关和按钮,要在「高级设置」页设
       supportsNotice: catalog.types.some(x => x.type === type && x.supportsNotice),
       // 后端缺省为开:管理端条目没带 notify 就按开
       notify: registered && (a?.notify ?? true),
