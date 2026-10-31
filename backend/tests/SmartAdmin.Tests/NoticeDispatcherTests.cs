@@ -40,6 +40,9 @@ public class NoticeDispatcherTests
 
         public ExternalNoticeResult Result { get; set; } = new([]);
 
+        /// <summary>给了就挂起到它完成才返回,模拟对方不响应。</summary>
+        public Task? Hang { get; set; }
+
         public int CallCount => _calls.Count;
         public IReadOnlyList<Call> Calls => [.. _calls];
 
@@ -57,7 +60,7 @@ public class NoticeDispatcherTests
             _signal.Release();
             var ex = Fail(n);
             if (ex is not null) throw ex;
-            return Task.FromResult(Result);
+            return Hang is null ? Task.FromResult(Result) : Hang.ContinueWith(_ => Result, TaskScheduler.Default);
         }
 
         /// <summary>等到累计收到 <paramref name="count"/> 次调用(等的是"发生"这件事,超时只是兜底,不是断言)。</summary>
@@ -188,6 +191,15 @@ public class NoticeDispatcherTests
 
         public Task<ExternalNoticeTestView> SendTestAsync(string providerCode, long userId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new ExternalNoticeTestView("unsupported"));
+    }
+
+    private sealed class ThrowingRegistry : IExternalAuthProviderRegistry
+    {
+        public Task<IExternalAuthProvider?> FindAsync(string code, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("库连不上");
+
+        public Task<IReadOnlyList<IExternalAuthProvider>> ListAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("库连不上");
     }
 
     private sealed class ThrowingScopeFactory : IServiceScopeFactory
@@ -497,6 +509,31 @@ public class NoticeDispatcherTests
         Assert.Equal("发送方坏了", notice?.Title);
     }
 
+    /// <summary>对方不响应时,发布照常立即返回、站内信照常写入:发送只发生在后台循环里。</summary>
+    [Fact]
+    public async Task Publish_returns_immediately_while_sender_hangs()
+    {
+        var gate = new TaskCompletionSource();
+        var fake = new FakeSenderProvider("fake") { Hang = gate.Task };
+        using var f = Host(new CapturingLoggerProvider(), [fake]);
+        try
+        {
+            await BoundUser(f, "fake", "s-1");
+
+            await Publish(f, "第一条").WaitAsync(TimeSpan.FromSeconds(5));
+            await fake.WaitForCallsAsync();   // 第一条已经进了发送方,挂在里面
+            var id = await Publish(f, "第二条").WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var scope = f.Services.CreateScope();
+            Assert.NotNull(await scope.ServiceProvider.GetRequiredService<IRepository<SysNotice>>().GetByIdAsync(id));
+            Assert.Equal(1, fake.CallCount);
+        }
+        finally
+        {
+            gate.TrySetResult();
+        }
+    }
+
     [Fact]
     public async Task Shutdown_during_retry_wait_ends_promptly()
     {
@@ -774,5 +811,47 @@ public class NoticeDispatcherTests
         Assert.Equal("60020", view.ProviderCode);
         Assert.Equal("IP 不可信", view.Detail);
         Assert.Equal(1, fake.CallCount);   // 即便 Retryable 也只发一次
+    }
+
+    /// <summary>发送方自己超时抛的取消异常不是调用方取消,折成失败状态。</summary>
+    [Fact]
+    public async Task SendTest_third_party_timeout_returns_failed()
+    {
+        var fake = new FakeSenderProvider("fake") { Fail = _ => new TaskCanceledException("HttpClient 超时") };
+        using var f = Host(new CapturingLoggerProvider(), [fake]);
+        var userId = await BoundUser(f, "fake", "s-1");
+
+        var view = await f.Services.GetRequiredService<INoticeDispatcher>().SendTestAsync("fake", userId);
+
+        Assert.Equal("failed", view.Status);
+        Assert.Equal(nameof(TaskCanceledException), view.Detail);
+    }
+
+    [Fact]
+    public async Task SendTest_caller_cancellation_still_propagates()
+    {
+        var fake = new FakeSenderProvider("fake") { Fail = _ => new OperationCanceledException() };
+        using var f = Host(new CapturingLoggerProvider(), [fake]);
+        var userId = await BoundUser(f, "fake", "s-1");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            f.Services.GetRequiredService<INoticeDispatcher>().SendTestAsync("fake", userId, cts.Token));
+    }
+
+    /// <summary>注册表查询失败(库连不上)也按"返回状态、不抛"的约定走。</summary>
+    [Fact]
+    public async Task SendTest_query_failure_returns_failed()
+    {
+        var log = new CapturingLoggerProvider();
+        var s = new ServiceCollection();
+        s.AddSingleton<IExternalAuthProviderRegistry>(new ThrowingRegistry());
+        var scopes = s.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+
+        var view = await Direct(log, scopes).SendTestAsync("fake", 1);
+
+        Assert.Equal("failed", view.Status);
+        Assert.Single(log.Of(LogLevel.Error));
     }
 }

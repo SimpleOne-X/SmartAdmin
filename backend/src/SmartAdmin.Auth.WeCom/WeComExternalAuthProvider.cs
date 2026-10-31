@@ -231,6 +231,7 @@ public class WeComExternalAuthProvider : IExternalAuthProvider, IExternalNoticeS
 
         var text = $"企业微信 {ex.Api} errcode={code} {ex.ErrMsg}";
         if (code == 60020) text += "(把服务器出口 IP 加入应用的企业可信 IP)";
+        if (code == 81013) text += "(接收人不在应用可见范围内,到企业微信管理后台调整)";
         // -1 是企业微信「系统繁忙」,稍后重试;其余错误码重试也不会变
         return new(text, retryable: code == -1, code.ToString(CultureInfo.InvariantCulture));
     }

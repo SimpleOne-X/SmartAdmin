@@ -239,22 +239,22 @@ public class NoticeDispatcher(IServiceScopeFactory scopes, ILogger<NoticeDispatc
     public virtual async Task<ExternalNoticeTestView> SendTestAsync(
         string providerCode, long userId, CancellationToken cancellationToken = default)
     {
-        using var scope = scopes.CreateScope();
-        var services = scope.ServiceProvider;
-        var provider = await services.GetRequiredService<IExternalAuthProviderRegistry>().FindAsync(providerCode, cancellationToken);
-        if (provider is not IExternalNoticeSender sender) return new ExternalNoticeTestView("unsupported");
-
-        var binding = (await services.GetRequiredService<ISysUserExternalService>().ListByUserAsync(userId))
-            .FirstOrDefault(x => x.Provider == providerCode);
-        if (binding is null) return new ExternalNoticeTestView("notBound");
-
-        var url = AbsoluteUrl(NoticePagePath);
-        if (url is null) return new ExternalNoticeTestView("noBaseUrl");
-
-        // 正文带发送时间:渠道的重复消息检查会吞掉短时间内内容相同的第二次测试
-        var message = new ExternalNoticeMessage(0, "测试消息", $"这是一条测试消息,发送时间 {DateTime.Now:yyyy-MM-dd HH:mm:ss}。", url);
         try
         {
+            using var scope = scopes.CreateScope();
+            var services = scope.ServiceProvider;
+            var provider = await services.GetRequiredService<IExternalAuthProviderRegistry>().FindAsync(providerCode, cancellationToken);
+            if (provider is not IExternalNoticeSender sender) return new ExternalNoticeTestView("unsupported");
+
+            var binding = (await services.GetRequiredService<ISysUserExternalService>().ListByUserAsync(userId))
+                .FirstOrDefault(x => x.Provider == providerCode);
+            if (binding is null) return new ExternalNoticeTestView("notBound");
+
+            var url = AbsoluteUrl(NoticePagePath);
+            if (url is null) return new ExternalNoticeTestView("noBaseUrl");
+
+            // 正文带发送时间:渠道的重复消息检查会吞掉短时间内内容相同的第二次测试
+            var message = new ExternalNoticeMessage(0, "测试消息", $"这是一条测试消息,发送时间 {DateTime.Now:yyyy-MM-dd HH:mm:ss}。", url);
             var result = await sender.SendAsync(message, [binding.Subject], cancellationToken);
             return result.Rejected.Count > 0
                 ? new ExternalNoticeTestView("rejected", null, string.Join(",", result.Rejected))
@@ -264,7 +264,8 @@ public class NoticeDispatcher(IServiceScopeFactory scopes, ILogger<NoticeDispatc
         {
             return new ExternalNoticeTestView("failed", ex.ProviderCode, ex.Message);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // 只放过调用方取消:发送方自己的超时也抛取消异常,那是一次失败,要折成状态返回
+        catch (Exception ex) when (!(ex is OperationCanceledException && cancellationToken.IsCancellationRequested))
         {
             logger.LogError(ex, "向 {Provider} 发送测试消息失败", providerCode);
             return new ExternalNoticeTestView("failed", null, ex.GetType().Name);

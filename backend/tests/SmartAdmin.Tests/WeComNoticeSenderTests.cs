@@ -227,6 +227,19 @@ public class WeComNoticeSenderTests
     }
 
     [Fact]
+    public async Task Send_81013_message_mentions_visible_range()
+    {
+        var h = new SeqHandler();
+        h.Enqueue(HttpStatusCode.OK, TokenJson());
+        h.Enqueue(HttpStatusCode.OK, Err(81013, "user & party & tag all invalid"));
+
+        var ex = await Assert.ThrowsAsync<ExternalNoticeException>(() => Make(h).SendAsync(Msg, ["u1"]));
+
+        Assert.Contains("可见范围", ex.Message);
+        Assert.Equal("81013", ex.ProviderCode);
+    }
+
+    [Fact]
     public async Task Send_never_leaks_token_or_secret()
     {
         var token = "TOKEN-" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
