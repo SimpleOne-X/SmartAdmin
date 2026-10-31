@@ -186,7 +186,7 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 推送在后台进行。发布通知的请求只把它放进内存队列就返回，所以企业微信慢或者不通，不会拖慢发布，也不会影响调用方的请求。
 发送失败只记日志，不向调用方抛错，并按下面的规则重试：
 
-- 网络错误、超时、HTTP 5xx 和企业微信的 `-1`（系统繁忙）：最多发 3 次，第一次失败后等 5 秒，第二次失败后等 30 秒。
+- 网络错误、超时、HTTP 5xx、408、429 和企业微信的 `-1`（系统繁忙）：最多发 3 次，第一次失败后等 5 秒，第二次失败后等 30 秒。
 - `access_token` 失效（`40014`、`42001`）：清掉缓存，换新 token 重发一次，不占上面的次数。
 - 其余错误码（`60020`、`81013`、凭据错误等）：不重试，记 Error 日志。
 
@@ -211,18 +211,15 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 
 卡片的标题是通知标题，正文是通知内容去掉 Markdown 标记后的纯文本。
 点开的地址是 `CallbackBaseUrl` 加一个站内相对路径：通知正文里的第一个站内相对链接，没有就用 `/personal/notice`。
-没配 `CallbackBaseUrl` 时（只可能在开发环境）拼不出地址，这条通知不推送，日志记一条 Warning。
+没配 `CallbackBaseUrl` 时拼不出地址，这条通知不推送，日志记一条 Warning。
+生产环境的外部登录本来就要求配它，所以通常只在开发环境碰到。
 
 `CallbackBaseUrl` 填的是后端对外的根地址，所以前后端不同源的部署，要让这个地址下的页面路径（比如 `/personal/notice`）能打开前端。
 前后端同源的部署不用管。
 
 点开卡片时，登录态还在就直接打开页面。没有登录就沿用上一节的流程：企业微信客户端里静默授权，登录后回到卡片指向的页面。可信域名配好即可，不用另配。
 
-多应用的部署有一个限制：既没有默认应用、也没有记住上次所在应用的用户，点卡片会落在应用选择页，而不是卡片指向的页面。
-登录态已过期的用户通常也在此列，因为记住的应用随会话一起清掉了。
-设好默认应用就能避开，但只能由每个用户自己设：顶栏点「切换应用」进入应用选择页，再点某个应用卡片上的「设为默认」。
-管理员没有办法替用户预设，可以做的是通知这些用户各自设一次。
-只有一个应用的部署，以及设了默认应用的用户，会直接进到卡片指向的页面。
+多应用的部署里，既没有默认应用、也没有记住上次所在应用的用户，会先落到应用选择页，选完再回到卡片指向的页面。
 
 ### 自定义渠道和替换
 
@@ -249,15 +246,18 @@ public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
 provider 的来源不同，内核判断「有没有渠道能发」的依据也不同：
 
 - 在代码里注册的 `IExternalAuthProvider`（依赖注入里能解析到），实现了 `IExternalNoticeSender` 就够了。
-- 管理员在「登录方式」页配出来的 provider，是类型描述 `IExternalAuthProviderType.Create` 现建的，不在依赖注入里。这种类型的 `SupportsNotice` 必须返回 `true`，默认是 `false`。
-  它返回 `false` 时，内核认为没有任何渠道能发，发布通知时根本不入队，也不报错。`SupportsNotice` 为 `true` 的类型，「登录方式」页同时会显示推送开关和测试按钮。
+- 管理员在「登录方式」页配出来的 provider，是类型描述 `IExternalAuthProviderType.Create` 现建的，不在依赖注入里。这种类型要让 `SupportsNotice` 返回 `true`，默认是 `false`。
+  它返回 `false`、又没有其他渠道时，内核判定没有渠道能发，发布通知时不入队，也不报错。
+  装了企业微信等其他渠道时通知照常入队，之后只看 provider 实现没实现 `IExternalNoticeSender`，不再看 `SupportsNotice`。
+  `SupportsNotice` 为 `true` 的类型，「登录方式」页同时会显示推送开关和测试按钮。
 
 `notify` 对每个 provider 一视同仁，缺省开。
 
 要换掉默认行为时：
 
 - `INoticeDispatcher` 用 `TryAddSingleton` 注册，在 `AddSmartAdmin()` 之前注册自己的实现就整体替换。
-- 只想改消息的样子，继承 `NoticeDispatcher` 覆写 `BuildMessage`（标题、正文、链接都在这一步生成），覆写 `ResolveSubjectsAsync` 能改发给谁。把子类注册成 `NoticeDispatcher`，写在 `AddSmartAdmin()` 之前。
+  与 `NoticeDispatcher` 无关的实现没有后台循环，队列的消费和 `SendTestAsync` 都要自己写。
+- 只想改消息的样子，继承 `NoticeDispatcher` 覆写 `BuildMessage`（标题、正文、链接都在这一步生成），覆写 `ResolveSubjectsAsync` 能改发给谁。把子类注册成 `NoticeDispatcher` 或 `INoticeDispatcher` 都行，写在 `AddSmartAdmin()` 之前，后台循环跟着它启动。
 - 完全替换 `INoticeService` 的应用不会自动推送。推送是 `NoticeService.PublishAsync` 发布后调用 `INoticeDispatcher.Enqueue` 触发的，自己的实现要自己调。
 
 ## 端点

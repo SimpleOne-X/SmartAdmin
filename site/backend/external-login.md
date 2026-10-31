@@ -115,7 +115,7 @@ Operational settings go through `sys_config`, changeable at runtime from the con
 | `sys.externalauth.{code}.linkByAccount` | Off | Whether an unbound identity is linked to the local account with the same name |
 | `sys.externalauth.{code}.defaultRoleIds` | Empty | Roles granted on auto-provisioning |
 | `sys.externalauth.{code}.defaultOrgId` | Empty | Org assigned on auto-provisioning |
-| `sys.externalauth.{code}.notify` | On | Whether in-site notices are also pushed to this provider; nothing is pushed while `enabled` is off either, see [Pushing notices to WeCom](#pushing-notices-to-wecom) |
+| `sys.externalauth.{code}.notify` | On | Whether in-site notices are also pushed to this provider; nothing is pushed while `enabled` is off either. See [Pushing notices to WeCom](#pushing-notices-to-wecom) |
 
 Leave every key unset and the default behavior is **enabled + deny provisioning**: once the connection is configured, you have a working, binding-first SSO setup. `wecom` also pushes notices on top of that.
 
@@ -180,7 +180,7 @@ Recipients are the enabled users in the notice's audience (everyone, by role, or
 
 Pushing happens in the background. The publish request only puts the notice on an in-memory queue and returns, so a slow or unreachable WeCom neither slows down publishing nor affects the caller's request. A failed send is only logged, never thrown to the caller, and is retried by these rules:
 
-- Network errors, timeouts, HTTP 5xx and WeCom's `-1` (system busy): up to 3 attempts, waiting 5 seconds after the first failure and 30 seconds after the second.
+- Network errors, timeouts, HTTP 5xx, 408, 429 and WeCom's `-1` (system busy): up to 3 attempts, waiting 5 seconds after the first failure and 30 seconds after the second.
 - An invalid `access_token` (`40014`, `42001`): the cache is cleared and the message is resent once with a fresh token, without using up the attempts above.
 - Any other error code (`60020`, `81013`, bad credentials and so on): no retry, logged at Error.
 
@@ -199,13 +199,13 @@ The queue lives in memory and is processed in order. When the process restarts, 
 
 ### The card link and what happens on tap
 
-The card's title is the notice's title, and its body is the notice content as plain text with the Markdown markup stripped. The address it opens is `CallbackBaseUrl` plus a site-relative path: the first site-relative link in the notice body, or `/personal/notice` if there is none. Without `CallbackBaseUrl` (which can only happen in development) no address can be built, so the notice isn't pushed and one Warning is logged.
+The card's title is the notice's title, and its body is the notice content as plain text with the Markdown markup stripped. The address it opens is `CallbackBaseUrl` plus a site-relative path: the first site-relative link in the notice body, or `/personal/notice` if there is none. Without `CallbackBaseUrl` no address can be built, so the notice isn't pushed and one Warning is logged. External login in production already requires it, so this usually only comes up in development.
 
 `CallbackBaseUrl` is the backend's public root address, so a deployment where frontend and backend have different origins must make page paths under that address (such as `/personal/notice`) open the frontend. Same-origin deployments need nothing.
 
 When the card is tapped and the person is still signed in, the page simply opens. If not, the flow from the previous section takes over: silent authorization inside the WeCom client, then back to the page the card points at. Once the trusted domain is configured, nothing extra is needed.
 
-Multi-app deployments have one limitation: a user with neither a default app nor a remembered last app lands on the app chooser when tapping a card, not on the page the card points at. A user whose sign-in has expired is usually in that group too, because the remembered app is cleared along with the session. Setting a default app avoids it, but each user can only set their own: click "Switch app" in the top bar to open the app chooser, then click "Set default" on an app's card. An admin cannot preset it for users; what an admin can do is ask those users to set it once each. Single-app deployments, and users who have a default app, go straight to the page the card points at.
+In a multi-app deployment, a user with neither a default app nor a remembered last app lands on the app chooser first, then goes on to the page the card points at after picking an app.
 
 ### Custom channels and replacement
 
@@ -232,14 +232,14 @@ The message of an `ExternalNoticeException` is written to the kernel log as is, 
 How the kernel decides that some channel can send depends on where the provider comes from:
 
 - An `IExternalAuthProvider` registered in code (resolvable from dependency injection) only needs to implement `IExternalNoticeSender`.
-- A provider the admin configured on the Login methods page is built on demand by `IExternalAuthProviderType.Create` and is not in dependency injection. That type's `SupportsNotice` must return `true`; it defaults to `false`. While it returns `false`, the kernel concludes that no channel can send, so publishing a notice never enqueues anything and raises no error. For a type with `SupportsNotice` set to `true`, the Login methods page also shows the push switch and the test button.
+- A provider the admin configured on the Login methods page is built on demand by `IExternalAuthProviderType.Create` and is not in dependency injection. That type should return `true` from `SupportsNotice`, which defaults to `false`. If it returns `false` and there is no other channel, the kernel concludes that nothing can send, so publishing a notice doesn't enqueue anything and raises no error. With another channel such as WeCom installed the notice is enqueued as usual, and from then on only whether a provider implements `IExternalNoticeSender` matters, not `SupportsNotice`. For a type with `SupportsNotice` set to `true`, the Login methods page also shows the push switch and the test button.
 
 `notify` applies to every provider alike and is on when unset.
 
 To replace the default behavior:
 
-- `INoticeDispatcher` is registered with `TryAddSingleton`, so registering your own implementation before `AddSmartAdmin()` replaces it entirely.
-- To change only how a message looks, subclass `NoticeDispatcher` and override `BuildMessage` (title, body and link are all produced there); overriding `ResolveSubjectsAsync` changes who receives it. Register the subclass as `NoticeDispatcher`, before `AddSmartAdmin()`.
+- `INoticeDispatcher` is registered with `TryAddSingleton`, so registering your own implementation before `AddSmartAdmin()` replaces it entirely. An implementation unrelated to `NoticeDispatcher` has no background loop, so consuming the queue and `SendTestAsync` are both yours to write.
+- To change only how a message looks, subclass `NoticeDispatcher` and override `BuildMessage` (title, body and link are all produced there); overriding `ResolveSubjectsAsync` changes who receives it. Register the subclass as either `NoticeDispatcher` or `INoticeDispatcher`, before `AddSmartAdmin()`, and the background loop starts with it.
 - An app that replaces `INoticeService` outright gets no automatic pushing. The push is triggered by `NoticeService.PublishAsync` calling `INoticeDispatcher.Enqueue` after publishing, so your own implementation has to make that call.
 
 ## Endpoints
