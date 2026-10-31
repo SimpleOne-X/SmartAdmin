@@ -150,13 +150,21 @@ public OrderStatus Status { get; set; }
 
 ### OrgAuditEntity 的共享行
 
-继承 `OrgAuditEntity` 的表，把某一行的 `IsShared` 设为 `true`，所有机构的用户都能查到它；`null` 与 `false` 都表示不共享，可见性同普通机构数据。基类和角色的数据范围都不用改。
+继承 `OrgAuditEntity` 的表，把某一行的 `IsShared` 设为 `true`，所有机构的用户都能查到它。
+`null` 与 `false` 都表示不共享，可见性同普通机构数据。
+基类和角色的数据范围都不用改。
 
-- 只有数据范围含归属机构的用户能写共享行；别的机构写入抛 `ErrorCode.OrgOutOfScope`（不是返回 0 行）。私有行被越权写入仍返回 0 行。
-- 写守卫要读当前数据范围，仓储必须带 `IDataScopeContext`。DI 注入的仓储自带；自己 `new`、或写 `: SqlSugarRepository<T>(db)` 的子类要补传这个参数，缺了写入时抛 `InvalidOperationException`。
+- 能写共享行的是数据范围含归属机构的用户，以及范围含「仅本人」的创建人。
+  别的用户更新或删除抛 `ErrorCode.OrgOutOfScope`（不是返回 0 行）。
+  私有行被越权更新或删除仍返回 0 行。
+- 写守卫要读当前数据范围，仓储必须带 `IDataScopeContext`。
+  DI 注入的仓储自带；自己 `new`、或写 `: SqlSugarRepository<T>(db)` 的子类要补传这个参数，
+  缺了更新或删除时抛 `InvalidOperationException`。
 - 明细表不带机构字段（继承 `PrimaryId` 或 `BaseEntity`），读写明细的接口先校验主表。
-- 共享行不要引用某个机构的私有数据（如共享路线引用了某机构的私有工作中心），内核不知道业务外键，由业务保存时校验。
-- 清掉机构范围过滤要写 `.ClearFilter<IOrgScoped, IOrgShared>()`；只写 `IOrgScoped` 清不掉 `OrgAuditEntity` 的过滤器，编译不报错，查询却仍受机构范围限制。
+- 共享行不要引用某个机构的私有数据（如共享路线引用了某机构的私有工作中心），
+  内核不知道业务外键，由业务保存时校验。
+- 清掉机构范围过滤要写 `.ClearFilter<IOrgScoped, IOrgShared>()`。
+  只写 `IOrgScoped` 清不掉 `OrgAuditEntity` 的过滤器，编译不报错，查询却仍受机构范围限制。
 
 ## 已有表加列（演进列 / 升级补列）
 

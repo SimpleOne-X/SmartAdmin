@@ -15,7 +15,7 @@ namespace SmartAdmin.SqlSugar;
 /// public 类型(ReplaceabilityContract 扩展点契约),加必需构造参数就是源码破坏性变更——现有 <c>: SqlSugarRepository&lt;T&gt;(db)</c>
 /// 的子类会编译不过。<paramref name="time"/> / <paramref name="currentUser"/> 只在软删审计留痕时用到,缺省即回退系统时钟 / 无操作人;
 /// <paramref name="dataScope"/> 只有 <see cref="IOrgShared"/> 实体(<c>OrgAuditEntity</c>)的写守卫要读当前范围,
-/// 其余实体不用,缺省时 <see cref="IOrgShared"/> 实体的写操作抛 <see cref="InvalidOperationException"/>,不会静默放行。</para>
+/// 其余实体不用,缺省时 <see cref="IOrgShared"/> 实体的更新、删除抛 <see cref="InvalidOperationException"/>,不会静默放行。</para>
 /// </summary>
 public class SqlSugarRepository<TEntity>(
     ISqlSugarClient db, TimeProvider? time = null, ICurrentUser? currentUser = null, IDataScopeContext? dataScope = null)
@@ -49,7 +49,7 @@ public class SqlSugarRepository<TEntity>(
     /// <list type="bullet">
     /// <item><b>IOrgScoped</b>:目标行经过滤器查不到(不在范围内或不存在)即返回 false,调用方返回 0 行。</item>
     /// <item><b>IOrgShared</b>:过滤器查不到返回 false(私有行对他机构不可见,同样返回 0 行);
-    /// 查到且 <see cref="DataScopeResult.Owns"/> 为真返回 true;查到但不归属(共享行被非归属方写入)抛
+    /// 查到且 <see cref="DataScopeResult.Owns"/> 为真返回 true;查到但不归属(共享行被非归属方更新、删除)抛
     /// <see cref="Core.ErrorCode.OrgOutOfScope"/>。这里不能返回 false:共享行能通过 <c>GetByIdAsync</c> 读到,
     /// 静默返回 0 会让忽略返回值的业务代码以为保存成功。</item>
     /// </list>
@@ -97,7 +97,7 @@ public class SqlSugarRepository<TEntity>(
     /// <inheritdoc />
     public virtual async Task<int> UpdateAsync(TEntity entity)
     {
-        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅机构实体触发实际检查;共享行被非归属方写入会抛 OrgOutOfScope)
+        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅机构实体触发实际检查;共享行被非归属方更新会抛 OrgOutOfScope)
         return await db.Updateable(entity).ExecuteCommandAsync();
     }
 

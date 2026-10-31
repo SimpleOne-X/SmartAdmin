@@ -163,8 +163,8 @@ public bool Owns(long? createOrgId, long? createUserId) =>
 ### 2. 给所有 `OrgAuditEntity` 表加列
 
 开了 CodeFirst 的环境启动时自动加列。
-关了 CodeFirst 的环境（生产默认关闭）**必须先手工执行 `ALTER TABLE`**，否则这些表的查询会因为缺列而报错。
-CodeFirst 只扫主库，副库上的 `OrgAuditEntity` 表同样要手工加列。
+关了 CodeFirst 的环境（生产默认关闭）**必须先手工执行 `ALTER TABLE`**，否则主库会被启动期的缺列检查拦下。
+CodeFirst 只扫主库，副库上的 `OrgAuditEntity` 表同样要手工加列，副库不在启动检查范围内，漏了要到第一次查询才报错。
 
 ### 3. 更新测试宿主
 

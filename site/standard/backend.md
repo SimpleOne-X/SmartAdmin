@@ -24,7 +24,9 @@ The kernel ships as NuGet packages, so a consumer can replace any part without t
 
 - Defined under `Services/Entities/`; kernel system tables are named `Sys*`.
 - Pick a base class: ordinary tables inherit `BaseEntity` (primary key + the four audit fields + soft delete); tables that need org-level isolation inherit `DataEntity` (which also carries the `CreateOrgId` anchor — see "Data access" below for what that means).
-- Org-isolated tables that genuinely need real deletes, or tables where a few rows must be shared with every org, inherit `OrgAuditEntity`: no soft delete, plus one nullable `IsShared` column. The read and write rules for shared rows are covered in [multi-org data permissions](/backend/data-scope).
+- Org-isolated tables that genuinely need real deletes,
+  or tables where a few rows must be shared with every org, inherit `OrgAuditEntity`: no soft delete, plus one nullable `IsShared` column.
+  The read and write rules for shared rows are covered in [multi-org data permissions](/backend/data-scope).
 - The primary key is always `Id` (snowflake, filled by AOP, never assigned by hand); soft delete is always `IsDelete`, and querying deleted rows needs an explicit `.ClearFilter<ISoftDelete>()`.
 - Extra information not reserved in the table schema goes into `ExtJson` — don't add a new column.
 - Follow `Entities/SysDictType.cs` for attributes: `[SugarTable]` / unique index `[SugarIndex(IsUnique=true)]` / `[SugarColumn(Length, ColumnDescription, IsNullable)]`.
@@ -53,13 +55,18 @@ The kernel ships as NuGet packages, so a consumer can replace any part without t
 
 - Inject `IRepository<T>`; go through `.AsQueryable()` for complex queries, and drop to `.Db` for escape hatches (`Db.Deleteable<>()` / `Db.Ado.UseTranAsync`).
 - Soft delete and data scope are **global filters** — business code doesn't repeat the filter conditions.
-- To bypass the org scope, write `.ClearFilter<IOrgScoped, IOrgShared>()`. `IOrgScoped` alone doesn't clear the `OrgAuditEntity` filter: it compiles, and the query is quietly still restricted by org scope.
+- To bypass the org scope, write `.ClearFilter<IOrgScoped, IOrgShared>()`.
+  `IOrgScoped` alone doesn't clear the `OrgAuditEntity` filter:
+  it compiles, and the query is quietly still restricted by org scope.
 - Uniqueness checks must include soft-deleted rows: `.ClearFilter<ISoftDelete>().AnyAsync(...)`, or you'll collide with the DB's unique index and throw a raw 500.
 - Wrap multi-write operations in a `Db.Ado.UseTranAsync` transaction, rolling everything back on failure; **cache invalidation goes after the transaction commits**.
 - Audit fields (`Id` snowflake, `CreateTime`/`User`/`Org`, `UpdateTime`/`User`) are filled by AOP; set only business fields.
 
 ::: danger CreateOrgId is the data-scope anchor
-If a `DataEntity` / `OrgAuditEntity` row's `CreateOrgId` isn't set, org-scoped queries always return 0 rows for it (rows marked shared on an `OrgAuditEntity` excepted) — AOP fills it automatically; never bypass that to assign it by hand. See [multi-org data permissions](/backend/data-scope) for how it works.
+If a `DataEntity` / `OrgAuditEntity` row's `CreateOrgId` isn't set,
+org-scoped queries always return 0 rows for it (rows marked shared on an `OrgAuditEntity` excepted) —
+AOP fills it automatically; never bypass that to assign it by hand.
+See [multi-org data permissions](/backend/data-scope) for how it works.
 :::
 
 ## Caching
