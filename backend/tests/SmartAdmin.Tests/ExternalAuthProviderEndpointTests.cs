@@ -39,22 +39,25 @@ public class ExternalAuthProviderEndpointTests
         Assert.Equal("api/v1/sys/external-auth/providers", type.GetCustomAttribute<RouteAttribute>()!.Template);
 
         MethodInfo M(string name) => type.GetMethod(name)!;
-        foreach (var name in new[] { "Get", "Save", "Delete", "Test" })
+        foreach (var name in new[] { "Get", "Save", "Delete", "Test", "TestNotice" })
             Assert.NotNull(M(name).GetCustomAttribute<RolePermissionAttribute>());
 
-        // 写操作(决定谁能登录系统)要近期重新验证身份;连接测试不落库,不要求
+        // 写操作(决定谁能登录系统)要近期重新验证身份;连接测试与测试消息不落库,不要求
         Assert.NotNull(M("Save").GetCustomAttribute<RequireReauthAttribute>());
         Assert.NotNull(M("Delete").GetCustomAttribute<RequireReauthAttribute>());
         Assert.Null(M("Test").GetCustomAttribute<RequireReauthAttribute>());
+        Assert.Null(M("TestNotice").GetCustomAttribute<RequireReauthAttribute>());
         Assert.Null(M("Get").GetCustomAttribute<RequireReauthAttribute>());
 
         Assert.NotNull(M("Save").GetCustomAttribute<OperationLogAttribute>());
         Assert.NotNull(M("Delete").GetCustomAttribute<OperationLogAttribute>());
         Assert.NotNull(M("Test").GetCustomAttribute<OperationLogAttribute>());
+        Assert.NotNull(M("TestNotice").GetCustomAttribute<OperationLogAttribute>());
 
         Assert.Equal("{code}", M("Save").GetCustomAttribute<HttpPutAttribute>()!.Template);
         Assert.Equal("{code}", M("Delete").GetCustomAttribute<HttpDeleteAttribute>()!.Template);
         Assert.Equal("test", M("Test").GetCustomAttribute<HttpPostAttribute>()!.Template);
+        Assert.Equal("{code}/test-notice", M("TestNotice").GetCustomAttribute<HttpPostAttribute>()!.Template);
         Assert.NotNull(M("Get").GetCustomAttribute<HttpGetAttribute>());
     }
 
@@ -80,6 +83,7 @@ public class ExternalAuthProviderEndpointTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await c.PutJson($"{Route}/acme", AcmeBody())).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await c.DeleteAsync($"{Route}/acme")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await c.PostJson($"{Route}/test", AcmeBody())).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.PostJson($"{Route}/acme/test-notice", new { })).StatusCode);
     }
 
     // ── 响应形状与机密不外露 ─────────────────────────────────────────
@@ -278,6 +282,118 @@ public class ExternalAuthProviderEndpointTests
         Assert.Equal(0, saved.GetProperty("code").GetInt32());
     }
 
+    // ── 推送开关与测试消息 ───────────────────────────────────────────
+
+    /// <summary>声明能推送通知的假类型;只用来出现在目录里,不会被造出实例。</summary>
+    private sealed class NoticeCapableType : IExternalAuthProviderType
+    {
+        public string Type => "noticey";
+        public string DefaultDisplayName => "Noticey";
+        public string? DefaultIcon => null;
+        public bool AllowMultiple => false;
+        public IReadOnlyList<ExternalAuthField> Fields { get; } = [new("appId")];
+        public bool SupportsNotice => true;
+
+        public IExternalAuthProvider Create(ExternalAuthProviderConfig config, IServiceProvider services) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalAuthTestResult> TestAsync(ExternalAuthProviderConfig config, IServiceProvider services, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    [Fact]
+    public async Task Catalog_reports_supports_notice()
+    {
+        using var f = Factory(new AcmeAuthProviderType(), more: s => s.AddSingleton<IExternalAuthProviderType>(new NoticeCapableType()));
+        var admin = await SuperAdminClientAsync(f);
+
+        var types = (await (await admin.GetAsync(Route)).ReadEnvelope()).GetProperty("data").GetProperty("types").EnumerateArray().ToList();
+
+        Assert.False(types.Single(t => t.GetProperty("type").GetString() == "acme").GetProperty("supportsNotice").GetBoolean());
+        Assert.False(types.Single(t => t.GetProperty("type").GetString() == "oidc").GetProperty("supportsNotice").GetBoolean());
+        Assert.True(types.Single(t => t.GetProperty("type").GetString() == "noticey").GetProperty("supportsNotice").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ProvidersAll_reports_notify_default_true_and_saved_value()
+    {
+        using var f = Factory(new AcmeAuthProviderType());
+        var admin = await SuperAdminClientAsync(f);
+        await admin.PutJson($"{Route}/acme", AcmeBody());
+
+        async Task<bool> NotifyAsync()
+        {
+            var env = await (await admin.GetAsync("/api/v1/auth/external/providers/all")).ReadEnvelope();
+            return Assert.Single(env.GetProperty("data").EnumerateArray(), p => p.GetProperty("code").GetString() == "acme")
+                .GetProperty("notify").GetBoolean();
+        }
+
+        Assert.True(await NotifyAsync());   // 没存过键:缺省开
+
+        var save = await admin.PutJson("/api/v1/sys/config/batch", new object[]
+        {
+            new { configKey = "sys.externalauth.acme.notify", configValue = "false" },
+        });
+        Assert.Equal(0, (await save.ReadEnvelope()).GetProperty("code").GetInt32());
+        Assert.False(await NotifyAsync());
+    }
+
+    [Fact]
+    public async Task TestNotice_requires_permission()
+    {
+        using var f = Factory(new AcmeAuthProviderType());
+
+        async Task<HttpResponseMessage> CallAsync(long menuId)
+        {
+            var (account, password) = await SeedUserWithPermissionAsync(f, menuId);
+            var c = f.CreateClient();
+            c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await c.LoginToken(account, password));
+            return await c.PostJson($"{Route}/acme/test-notice", new { });
+        }
+
+        // 配置-查询(311)授不到
+        var denied = await CallAsync(311);
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal((int)ErrorCode.NoPermission, (await denied.ReadEnvelope()).GetProperty("code").GetInt32());
+
+        // 种子按钮 312(配置-新增)带着这条路由
+        var granted = await CallAsync(312);
+        Assert.NotEqual(HttpStatusCode.Forbidden, granted.StatusCode);
+        Assert.Equal(0, (await granted.ReadEnvelope()).GetProperty("code").GetInt32());
+    }
+
+    [Fact]
+    public async Task TestNotice_returns_status_in_body_not_error()
+    {
+        var sender = new NoticeDispatcherTests.FakeSenderProvider("corp-notice");
+        using var f = Factory(new AcmeAuthProviderType(),
+            new Dictionary<string, string?> { ["SmartAdmin:ExternalAuth:CallbackBaseUrl"] = "https://admin.example.com/app/" },
+            s => s.AddSingleton<IExternalAuthProvider>(sender));
+        var admin = await SuperAdminClientAsync(f);
+
+        async Task<JsonElement> PostAsync(string code)
+        {
+            var env = await (await admin.PostJson($"{Route}/{code}/test-notice", new { })).ReadEnvelope();
+            Assert.Equal(0, env.GetProperty("code").GetInt32());   // 业务结果在 data.status,不是信封错误码
+            return env.GetProperty("data");
+        }
+
+        Assert.Equal("unsupported", (await PostAsync("no-such-provider")).GetProperty("status").GetString());
+        Assert.Equal("notBound", (await PostAsync("corp-notice")).GetProperty("status").GetString());
+        Assert.Equal(0, sender.CallCount);
+
+        // 绑上当前登录的超管:消息只发给他自己绑定的那个账号
+        using (var scope = f.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            var superAdmin = await sp.GetRequiredService<IRepository<SysUser>>().GetFirstAsync(u => u.Account == "superAdmin");
+            await sp.GetRequiredService<ISysUserExternalService>().BindAsync(superAdmin!.Id, new ExternalIdentity("corp-notice", "wx-admin"));
+        }
+        Assert.Equal("ok", (await PostAsync("corp-notice")).GetProperty("status").GetString());
+        var call = Assert.Single(sender.Calls);
+        Assert.Equal(["wx-admin"], call.Subjects);
+    }
+
     // ── 种子按钮 ─────────────────────────────────────────────────────
 
     [Theory]
@@ -311,11 +427,11 @@ public class ExternalAuthProviderEndpointTests
     {
         using var scope = f.Services.CreateScope();
         var sp = scope.ServiceProvider;
-        var role = new SysRole { Name = "登录方式配置", Code = "extauth-" + Guid.CreateVersion7().ToString("N")[..8], Enabled = true };
+        var role = new SysRole { Name = "登录方式配置", Code = "extauth-" + Guid.NewGuid().ToString("N")[..8], Enabled = true };
         await sp.GetRequiredService<IRepository<SysRole>>().InsertAsync(role);
         await sp.GetRequiredService<IRbacService>().SetRoleMenusAsync(role.Id, [menuId]);
 
-        var account = "extauth-" + Guid.CreateVersion7().ToString("N")[..8];
+        var account = "extauth-" + Guid.NewGuid().ToString("N")[..8];
         const string password = "Limited@123456";
         await sp.GetRequiredService<IUserService>().AddAsync(new AddUserInput
         {

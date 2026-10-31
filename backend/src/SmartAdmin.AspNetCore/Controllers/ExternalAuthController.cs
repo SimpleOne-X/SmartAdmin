@@ -53,7 +53,7 @@ public class ExternalAuthController(
     }
 
     /// <summary>
-    /// 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
+    /// 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount / notify 三个运营开关,
     /// 供系统配置「第三方登录」Tab 的卡片开关。权限码 = 本路由;种子挂在系统配置菜单下。
     /// </summary>
     [HttpGet("providers/all")]
@@ -70,6 +70,7 @@ public class ExternalAuthController(
                 Icon = p.Icon,
                 Enabled = await externalBindings.IsEnabledAsync(p.Code),
                 LinkByAccount = await externalBindings.IsLinkByAccountAsync(p.Code),
+                Notify = await externalBindings.IsNotifyEnabledAsync(p.Code),
             });
         }
         return Result<IReadOnlyList<ExternalProviderAdminItem>>.Ok(items);

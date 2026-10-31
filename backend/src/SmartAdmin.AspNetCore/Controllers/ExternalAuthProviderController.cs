@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using SmartAdmin.Core;
 using SmartAdmin.Services;
 
@@ -70,6 +71,21 @@ public class ExternalAuthProviderController(
     [OperationLog("测试登录方式连接")]
     public async Task<Result<ExternalAuthTestView>> Test(ExternalAuthProviderTestInput input) =>
         Result<ExternalAuthTestView>.Ok(await service.TestAsync(input, HttpContext.RequestAborted));
+
+    /// <summary>
+    /// 向当前登录用户在该 provider 下绑定的账号发一条测试消息。各种失败(没绑定、没配回调基址、渠道拒收或报错)
+    /// 都折成返回体里的 <c>status</c>,信封码仍是 0;详情只含渠道错误码与失败原因,不含凭据。
+    /// </summary>
+    [HttpPost("{code}/test-notice")]
+    [RolePermission]
+    [OperationLog("发送登录方式测试消息")]
+    public async Task<Result<ExternalNoticeTestView>> TestNotice(string code)
+    {
+        var userId = HttpContext.RequestServices.GetRequiredService<ICurrentUser>().UserId
+            ?? throw new AdminException(ErrorCode.TokenInvalid);
+        return Result<ExternalNoticeTestView>.Ok(await HttpContext.RequestServices
+            .GetRequiredService<INoticeDispatcher>().SendTestAsync(code, userId, HttpContext.RequestAborted));
+    }
 }
 
 /// <summary>「登录方式」目录出参:在服务层目录之上加上页面级的回调基址告警。</summary>

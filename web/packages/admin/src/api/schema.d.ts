@@ -725,7 +725,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount 两个运营开关,
+         * 管理端:全部已配置完整的 provider(含已禁用)+ enabled / linkByAccount / notify 三个运营开关,
          *     供系统配置「第三方登录」Tab 的卡片开关。权限码 = 本路由;种子挂在系统配置菜单下。
          */
         get: operations["ExternalAuth_ProvidersAll"];
@@ -908,6 +908,26 @@ export interface paths {
         put?: never;
         /** 连接测试:用表单里的值测,机密留空则用已保存的;不落库。结果逐项列出,失败原因在返回体里,不抛异常。 */
         post: operations["ExternalAuthProvider_Test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/external-auth/providers/{code}/test-notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 向当前登录用户在该 provider 下绑定的账号发一条测试消息。各种失败(没绑定、没配回调基址、渠道拒收或报错)
+         *     都折成返回体里的 `status`,信封码仍是 0;详情只含渠道错误码与失败原因,不含凭据。
+         */
+        post: operations["ExternalAuthProvider_TestNotice"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3716,11 +3736,21 @@ export interface components {
         };
         /** @description 已安装的 provider 类型(出参):管理页据此渲染「添加」入口与设置面板的字段。 */
         ExternalAuthTypeView: {
+            /** @description 类型码 */
             type: string;
+            /** @description 默认展示名 */
             defaultDisplayName: string;
+            /** @description 默认图标 */
             defaultIcon: null | string;
+            /** @description 允许配置多条(标准 OIDC);`false` 时只能有一份,标识就是类型码 */
             allowMultiple: boolean;
+            /** @description 字段清单 */
             fields: components["schemas"]["ExternalAuthFieldView"][];
+            /**
+             * @description 该类型能把站内通知推到外部渠道;管理页据此显示推送开关与测试消息按钮
+             * @default false
+             */
+            supportsNotice: boolean;
         };
         /** @description 个人中心"账号绑定"列表项(只回展示所需,不回 Subject 等原始标识)。 */
         ExternalBindingItem: {
@@ -3743,6 +3773,15 @@ export interface components {
         ExternalExchangeInput: {
             ticket?: string;
         };
+        /** @description 测试消息的结果。 */
+        ExternalNoticeTestView: {
+            /** @description ok / rejected / failed / notBound / noBaseUrl / unsupported */
+            status: string;
+            /** @description 渠道返回的错误码(只有 failed 时可能有) */
+            providerCode?: null | string;
+            /** @description 给管理员看的说明:failed 是失败原因,rejected 是被拒收的接收人 */
+            detail?: null | string;
+        };
         /** @description 管理端:全部已注册 provider + 当前运营启用状态(含已禁用,供配置中心开关)。 */
         ExternalProviderAdminItem: {
             /** @description provider 码(如 `github`/`wechat`),即登录方式配置里的 Code。 */
@@ -3753,6 +3792,8 @@ export interface components {
             enabled?: boolean;
             /** @description 对应 `sys.externalauth.{code}.linkByAccount`(未绑定的外部身份按账号名关联同名本地账号);缺省 false。 */
             linkByAccount?: boolean;
+            /** @description 对应 `sys.externalauth.{code}.notify`(发布站内通知时是否同时推到该渠道);缺省 true。 */
+            notify?: boolean;
         };
         /** @description 登录页可用的外部登录方式(仅非密钥字段;点亮 SSO 按钮用)。 */
         ExternalProviderItem: {
@@ -5494,6 +5535,27 @@ export interface components {
             /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
             message?: null | string;
             data?: null | components["schemas"]["ExternalBindStartOutput"];
+        };
+        /**
+         * @description 统一返回模型——所有接口的响应外壳。
+         *     字段分工:Code 给机器判断;MsgKey+Args 给前端 i18n 渲染;
+         *     Message 是后端兜底文案(非浏览器调用方降级用,浏览器端应忽略它);Data 为业务载荷。<example>
+         *     成功:`{ "code": 0, "msgKey": "common.success", "data": {...} }`<br />
+         *     失败:`{ "code": 40001, "msgKey": "error.auth.passwordWrong", "args": {}, "message": "...", "data": null }`</example>
+         */
+        ResultOfExternalNoticeTestView: {
+            /**
+             * Format: int32
+             * @description 业务码,0 为成功,其余见 ErrorCode 分段
+             */
+            code?: number | string;
+            /** @description 语义键(前端 i18n 语言包的键),如 `error.auth.passwordWrong` */
+            msgKey?: null | string;
+            /** @description 文案插值参数,与语言包模板占位符对应;无参数时为 null(序列化省略) */
+            args?: null | Record<string, never>;
+            /** @description 兜底文案(仅降级用途,浏览器端一律走 MsgKey 翻译) */
+            message?: null | string;
+            data?: null | components["schemas"]["ExternalNoticeTestView"];
         };
         /**
          * @description 统一返回模型——所有接口的响应外壳。
@@ -10183,6 +10245,30 @@ export interface operations {
                     "text/plain": components["schemas"]["ResultOfExternalAuthTestView"];
                     "application/json": components["schemas"]["ResultOfExternalAuthTestView"];
                     "text/json": components["schemas"]["ResultOfExternalAuthTestView"];
+                };
+            };
+        };
+    };
+    ExternalAuthProvider_TestNotice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ResultOfExternalNoticeTestView"];
+                    "application/json": components["schemas"]["ResultOfExternalNoticeTestView"];
+                    "text/json": components["schemas"]["ResultOfExternalNoticeTestView"];
                 };
             };
         };

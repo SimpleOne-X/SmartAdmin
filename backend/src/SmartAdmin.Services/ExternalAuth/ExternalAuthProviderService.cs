@@ -256,7 +256,8 @@ public class ExternalAuthProviderService(
 
     private static ExternalAuthTypeView ToTypeView(IExternalAuthProviderType t) => new(
         t.Type, t.DefaultDisplayName, t.DefaultIcon, t.AllowMultiple,
-        [.. t.Fields.Select(f => new ExternalAuthFieldView(f.Name, f.Secret, f.Required, f.Default, f.DefinesEndpoint))]);
+        [.. t.Fields.Select(f => new ExternalAuthFieldView(f.Name, f.Secret, f.Required, f.Default, f.DefinesEndpoint))],
+        t.SupportsNotice);
 
     /// <summary>库里的行 → 视图。类型没装时仍列出(管理员能看到并清除),只是不可用。</summary>
     protected virtual ExternalAuthProviderView ToProviderView(SysExternalAuthProvider row)
