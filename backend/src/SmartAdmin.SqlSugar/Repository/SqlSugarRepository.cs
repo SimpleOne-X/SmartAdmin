@@ -22,9 +22,13 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     /// <inheritdoc />
     public ISqlSugarClient Db => db;
 
-    // 编译期判定实体是否受机构数据范围约束(实现 IOrgScoped,即 DataEntity / OrgAuditEntity 子类)。
+    // 编译期判定实体是否受机构数据范围约束(实现 IOrgScoped,即 DataEntity 子类)。
     // 用于写路径越权兜底:全局范围过滤器只作用于查询(SELECT),不作用于按主键的 Update/Delete。
     private static readonly bool IsOrgScoped = typeof(IOrgScoped).IsAssignableFrom(typeof(TEntity));
+
+    // 同上,但针对可共享的机构实体(实现 IOrgShared,即 OrgAuditEntity 子类):它走另一个过滤器,
+    // 不实现 IOrgScoped,所以要单独判定才能让写守卫继续覆盖它。
+    private static readonly bool IsOrgShared = typeof(IOrgShared).IsAssignableFrom(typeof(TEntity));
 
     // 编译期判定实体是否软删除(实现 ISoftDelete,即 BaseEntity 子类)。DeleteAsync 据此分流软删/物理删,
     // RestoreAsync 据此拒绝非软删实体。用反射而非 `default(TEntity) is ISoftDelete`——引用类型 default 为 null,恒 false。
@@ -37,13 +41,13 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     public virtual ISugarQueryable<TEntity> AsQueryable() => db.Queryable<TEntity>();
 
     /// <summary>
-    /// IOrgScoped 实体的写前范围守卫:经带全局范围过滤器的查询确认目标行在当前数据范围内。
-    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c>),
+    /// 机构实体(IOrgScoped / IOrgShared)的写前范围守卫:经带全局范围过滤器的查询确认目标行在当前数据范围内。
+    /// 复用已注册的查询过滤器(<c>SqlSugarSetup</c> 的 <c>AddTableFilter&lt;IOrgScoped&gt;</c> / <c>AddTableFilter&lt;IOrgShared&gt;</c>),
     /// 不在范围内(或不存在)即返回 false,调用方据此拒写——堵住按主键改删他机构行的 IDOR。
-    /// 普通 BaseEntity(<c>IsOrgScoped==false</c>)恒真短路,无额外查询、行为不变。
+    /// 普通 BaseEntity(两个标记都不实现)恒真短路,无额外查询、行为不变。
     /// </summary>
     protected virtual async Task<bool> InScopeAsync(long id) =>
-        !IsOrgScoped || await db.Queryable<TEntity>().Where(e => e.Id == id).AnyAsync();
+        !(IsOrgScoped || IsOrgShared) || await db.Queryable<TEntity>().Where(e => e.Id == id).AnyAsync();
 
     /// <inheritdoc />
     public virtual Task<TEntity?> GetByIdAsync(long id) =>
@@ -68,14 +72,14 @@ public class SqlSugarRepository<TEntity>(ISqlSugarClient db, TimeProvider? time 
     /// <inheritdoc />
     public virtual async Task<int> UpdateAsync(TEntity entity)
     {
-        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅 IOrgScoped 实体触发实际检查)
+        if (!await InScopeAsync(entity.Id)) return 0;   // 越权改防护(仅机构实体触发实际检查)
         return await db.Updateable(entity).ExecuteCommandAsync();
     }
 
     /// <inheritdoc />
     public virtual async Task<int> DeleteAsync(long id)
     {
-        if (!await InScopeAsync(id)) return 0;   // 越权删防护(仅 IOrgScoped 实体触发实际检查)
+        if (!await InScopeAsync(id)) return 0;   // 越权删防护(仅机构实体触发实际检查)
 
         // 非软删实体(AuditEntity 系,如 OrgAuditEntity)→ 物理删除。已过 InScope 守卫,不再走 HardDeleteAsync 二次查询。
         // 物理删后行消失,唯一约束自然释放,无需软删那套 _del_{id} 占位释放。

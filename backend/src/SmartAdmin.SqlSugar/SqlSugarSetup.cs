@@ -134,7 +134,8 @@ public static class SqlSugarSetup
 
                 if (policy.ApplyDataScopeFilter)
                 {
-                    // 全局数据范围过滤器(招牌能力):对 IOrgScoped 实体(DataEntity 及其子类)按当前请求生效范围过滤。
+                    // 全局数据范围过滤器(招牌能力):对 IOrgScoped 实体(DataEntity 及其子类)按当前请求生效范围过滤;
+                    // OrgAuditEntity 实现 IOrgShared,由下面第二个过滤器负责(范围相同,另放行 IsShared 的行)。
                     // 按接口匹配(SqlSugar 不对基类生效,只认接口/精确类型,与软删过滤器一致)。
                     // 表达式里 dataScope.Current 的三个属性都与实体参数无关,SqlSugar 先本地求值成常量(机构集合 → SQL IN),
                     // 再与实体相关的部分拼成 WHERE;Unrestricted 时整体恒真(不过滤)。
@@ -144,6 +145,16 @@ public static class SqlSugarSetup
                         dataScope.Current.IsUnrestricted == true
                         || (e.CreateOrgId != null && dataScope.Current.OrgIds.Contains(e.CreateOrgId.Value))
                         || (dataScope.Current.IncludeSelf == true && e.CreateUserId == dataScope.Current.UserId));
+
+                    // 可共享实体(OrgAuditEntity)的过滤器:机构范围同上,另放行 IsShared == true 的行(不管归属机构是否为空)。
+                    // 必须独立于 IOrgScoped:同一实体上的多个过滤器是 AND,两个接口并存则共享行会先被机构过滤器挡掉。
+                    // IsShared 是 bool?,同样写成比较式;null 与 false 都不命中,不共享的行可见范围与普通机构数据一致。
+                    // 清除时要写 ClearFilter<IOrgScoped, IOrgShared>():ClearFilter 按注册的接口精确匹配。
+                    client.QueryFilter.AddTableFilter<IOrgShared>(e =>
+                        dataScope.Current.IsUnrestricted == true
+                        || (e.CreateOrgId != null && dataScope.Current.OrgIds.Contains(e.CreateOrgId.Value))
+                        || (dataScope.Current.IncludeSelf == true && e.CreateUserId == dataScope.Current.UserId)
+                        || e.IsShared == true);
                 }
 
                 if (policy.ApplyAuditAop)
@@ -165,11 +176,14 @@ public static class SqlSugarSetup
                                 // CreateUserId 未指定 → 填当前登录用户(系统上下文为 null 则留空,不硬塞)
                                 else if (info is { PropertyName: nameof(AuditEntity.CreateUserId), EntityValue: AuditEntity { CreateUserId: null } } && currentUser.UserId is { } insUid)
                                     info.SetValue(insUid);
-                                // CreateOrgId 未指定(实现 IOrgScoped 的实体有此列:DataEntity / OrgAuditEntity)→ 填当前用户归属机构(数据范围锚点);
+                                // CreateOrgId 未指定(IOrgScoped / IOrgShared 的实体有此列:DataEntity / OrgAuditEntity)→ 填当前用户归属机构(数据范围锚点);
                                 // 无机构上下文(系统/无 org 用户)则留空。缺此填充则机构维度数据范围对业务表恒 0 行。
                                 // 按接口而非 DataEntity 基类匹配,故不软删的机构实体(OrgAuditEntity)同样自动填充。
+                                // 两个接口各占一个分支:OrgAuditEntity 只实现 IOrgShared,不会命中 IOrgScoped 的那条。
                                 else if (info is { PropertyName: nameof(IOrgScoped.CreateOrgId), EntityValue: IOrgScoped { CreateOrgId: null } } && currentUser.OrgId is { } insOrgId)
                                     info.SetValue(insOrgId);
+                                else if (info is { PropertyName: nameof(IOrgShared.CreateOrgId), EntityValue: IOrgShared { CreateOrgId: null } } && currentUser.OrgId is { } insSharedOrgId)
+                                    info.SetValue(insSharedOrgId);
                                 break;
 
                             case DataFilterType.UpdateByObject:
