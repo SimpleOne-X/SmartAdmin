@@ -31,7 +31,7 @@ public class NoticeDispatcher(IServiceScopeFactory scopes, AdminExternalAuthOpti
     private int _hasSender;
 
     /// <inheritdoc />
-    public void Enqueue(NoticeDispatchItem item)
+    public virtual void Enqueue(NoticeDispatchItem item)
     {
         try
         {
@@ -220,12 +220,20 @@ public class NoticeDispatcher(IServiceScopeFactory scopes, AdminExternalAuthOpti
     protected virtual TimeSpan GetRetryDelay(int failedAttempts) =>
         failedAttempts <= 1 ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(30);
 
-    /// <summary><c>CallbackBaseUrl</c> 加站内相对路径;没配置或拼不出合法地址返回 <c>null</c>。</summary>
-    private string? AbsoluteUrl(string path) =>
-        !string.IsNullOrWhiteSpace(options.CallbackBaseUrl)
-        && Uri.TryCreate(options.CallbackBaseUrl.TrimEnd('/') + path, UriKind.Absolute, out var uri)
-            ? uri.AbsoluteUri
-            : null;
+    /// <summary>
+    /// <c>CallbackBaseUrl</c> 加站内相对路径;没配置、拼不出合法地址,或规范化后跳出了基址所在路径时返回 <c>null</c>。
+    /// 网关子路径部署下基址带路径(如 <c>https://gw.example.com/app/</c>),而 <c>Uri</c> 会折叠点段,
+    /// <c>/../other</c> 与 <c>/%2e%2e/other</c> 都会落到 <c>/other</c>,所以必须在规范化之后再比一次前缀。
+    /// </summary>
+    private string? AbsoluteUrl(string path)
+    {
+        var baseUrl = options.CallbackBaseUrl?.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(baseUrl)
+            || !Uri.TryCreate(baseUrl + "/", UriKind.Absolute, out var root)
+            || !Uri.TryCreate(baseUrl + path, UriKind.Absolute, out var uri))
+            return null;
+        return uri.AbsolutePath.StartsWith(root.AbsolutePath, StringComparison.Ordinal) ? uri.AbsoluteUri : null;
+    }
 
     /// <inheritdoc />
     public virtual async Task<ExternalNoticeTestView> SendTestAsync(

@@ -169,7 +169,9 @@ public static class ServicesSetup
         // 通知推送到外部渠道(企业微信等):后台队列,发布只入队;没有能发送的渠道时入队即返回
         services.TryAddSingleton<NoticeDispatcher>();
         services.TryAddSingleton<INoticeDispatcher>(sp => sp.GetRequiredService<NoticeDispatcher>());
-        services.AddHostedService(sp => sp.GetRequiredService<NoticeDispatcher>());
+        // 拉起的必须是 INoticeDispatcher 当前解析到的那个实例:消费者按接口注册子类时,否则它的循环永远不启动。
+        // 接口被换成与 NoticeDispatcher 无关的实现时,退回默认实现(空转,不抛)。
+        services.AddHostedService(sp => sp.GetService<INoticeDispatcher>() as NoticeDispatcher ?? sp.GetRequiredService<NoticeDispatcher>());
 
         // 安全策略读取层:DB(SysConfig)优先、Options 兜底,收口锁定/会话时长/密码复杂度的取值
         services.TryAddScoped<ISecurityPolicyProvider, SecurityPolicyProvider>();

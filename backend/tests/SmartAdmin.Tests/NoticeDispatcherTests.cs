@@ -139,6 +139,13 @@ public class NoticeDispatcherTests
         public bool FastRetry { get; init; } = true;
         public Func<string, List<string>>? Subjects { get; init; }
         public int ResolveCalls;
+        public int Enqueued;
+
+        public override void Enqueue(NoticeDispatchItem item)
+        {
+            Interlocked.Increment(ref Enqueued);
+            base.Enqueue(item);
+        }
 
         public TimeSpan DefaultRetryDelay(int failedAttempts) => base.GetRetryDelay(failedAttempts);
 
@@ -154,6 +161,34 @@ public class NoticeDispatcherTests
         protected override TimeSpan GetRetryDelay(int failedAttempts) => FastRetry ? TimeSpan.Zero : base.GetRetryDelay(failedAttempts);
     }
 
+    /// <summary>声明"能推送通知"的 provider 类型;实例由注册表按库里的配置现建,不在 DI 的 provider 集合里(企业微信的形态)。</summary>
+    private sealed class NoticeCapableType(IExternalAuthProvider created) : IExternalAuthProviderType
+    {
+        public string Type => created.Code;
+        public string DefaultDisplayName => created.Code;
+        public string? DefaultIcon => null;
+        public bool AllowMultiple => false;
+        public IReadOnlyList<ExternalAuthField> Fields { get; } = [new("appId")];
+        public bool SupportsNotice => true;
+
+        public IExternalAuthProvider Create(ExternalAuthProviderConfig config, IServiceProvider services) => created;
+
+        public Task<ExternalAuthTestResult> TestAsync(
+            ExternalAuthProviderConfig config, IServiceProvider services, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ExternalAuthTestResult([]));
+    }
+
+    /// <summary>与 <see cref="NoticeDispatcher"/> 无关的 <see cref="INoticeDispatcher"/> 实现(消费者完全替换的形态)。</summary>
+    private sealed class UnrelatedDispatcher : INoticeDispatcher
+    {
+        public int Enqueued;
+
+        public void Enqueue(NoticeDispatchItem item) => Interlocked.Increment(ref Enqueued);
+
+        public Task<ExternalNoticeTestView> SendTestAsync(string providerCode, long userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ExternalNoticeTestView("unsupported"));
+    }
+
     private sealed class ThrowingScopeFactory : IServiceScopeFactory
     {
         public IServiceScope CreateScope() => throw new InvalidOperationException("探测失败");
@@ -163,9 +198,12 @@ public class NoticeDispatcherTests
         CapturingLoggerProvider log,
         IReadOnlyList<IExternalAuthProvider> providers,
         bool baseUrl = true,
-        Func<IServiceProvider, TestDispatcher>? dispatcher = null) => new()
+        Func<IServiceProvider, TestDispatcher>? dispatcher = null,
+        string? callbackBaseUrl = null) => new()
     {
-        Settings = baseUrl ? WithBaseUrl : null,
+        Settings = !baseUrl ? null
+            : callbackBaseUrl is null ? WithBaseUrl
+            : new Dictionary<string, string?> { ["SmartAdmin:ExternalAuth:CallbackBaseUrl"] = callbackBaseUrl },
         Overrides = s =>
         {
             foreach (var p in providers) s.AddSingleton(p);
@@ -214,6 +252,13 @@ public class NoticeDispatcherTests
     {
         var s = new ServiceCollection();
         foreach (var p in providers) s.AddSingleton(p);
+        return s.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+    }
+
+    private static IServiceScopeFactory ScopesWithType(IExternalAuthProviderType type)
+    {
+        var s = new ServiceCollection();
+        s.AddSingleton(type);
         return s.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
@@ -286,6 +331,36 @@ public class NoticeDispatcherTests
         await Publish(f, "太长", $"[看](/a?name={new string('张', 400)})");
         await fake.WaitForCallsAsync();
         Assert.Equal("https://admin.example.com/app/personal/notice", fake.Calls[1].Message.Url);
+    }
+
+    [Theory]
+    [InlineData("/../other/x")]
+    [InlineData("/%2e%2e/other/x")]
+    [InlineData("/a/../../other")]
+    public async Task Publish_link_cannot_climb_out_of_the_base_path(string link)
+    {
+        var fake = new FakeSenderProvider("fake");
+        using var f = Host(new CapturingLoggerProvider(), [fake], callbackBaseUrl: "https://gw.example.com/app/");
+        await BoundUser(f, "fake", "s-1");
+
+        await Publish(f, "越界", $"[看]({link})");
+        await fake.WaitForCallsAsync();
+
+        // 点段折叠后会落在 /other,不在网关给本应用的 /app/ 之下:退回通知页
+        Assert.Equal("https://gw.example.com/app/personal/notice", Assert.Single(fake.Calls).Message.Url);
+    }
+
+    [Fact]
+    public async Task Publish_link_with_dot_segments_that_stay_inside_the_base_path_is_kept()
+    {
+        var fake = new FakeSenderProvider("fake");
+        using var f = Host(new CapturingLoggerProvider(), [fake], callbackBaseUrl: "https://gw.example.com/app/");
+        await BoundUser(f, "fake", "s-1");
+
+        await Publish(f, "站内", "[看](/a/../b?x=1)");
+        await fake.WaitForCallsAsync();
+
+        Assert.Equal("https://gw.example.com/app/b?x=1", Assert.Single(fake.Calls).Message.Url);
     }
 
     [Fact]
@@ -488,6 +563,87 @@ public class NoticeDispatcherTests
         dispatcher.Enqueue(Item(1));
 
         Assert.Single(log.Of(LogLevel.Error));
+    }
+
+    [Fact]
+    public async Task Subclass_registered_as_INoticeDispatcher_consumes_the_queue()
+    {
+        var fake = new FakeSenderProvider("fake");
+        using var f = new AdminAppFactory
+        {
+            Settings = WithBaseUrl,
+            Overrides = s =>
+            {
+                s.AddSingleton<IExternalAuthProvider>(fake);
+                s.RemoveAll<INoticeDispatcher>();
+                s.AddSingleton<INoticeDispatcher, TestDispatcher>();   // 消费者最常见的写法:只按接口注册子类
+            },
+        };
+        await BoundUser(f, "fake", "s-1");
+
+        await Publish(f, "子类");
+        await fake.WaitForCallsAsync();
+
+        // 循环是子类自己的那个实例在跑,不是另起的基类实例
+        var dispatcher = Assert.IsType<TestDispatcher>(f.Services.GetRequiredService<INoticeDispatcher>());
+        Assert.Equal(1, dispatcher.Enqueued);
+        Assert.Equal(1, dispatcher.ResolveCalls);
+    }
+
+    [Fact]
+    public async Task Unrelated_INoticeDispatcher_replacement_does_not_break_host_start_or_publish()
+    {
+        var unrelated = new UnrelatedDispatcher();
+        using var f = new AdminAppFactory
+        {
+            Settings = WithBaseUrl,
+            Overrides = s =>
+            {
+                s.RemoveAll<INoticeDispatcher>();
+                s.AddSingleton<INoticeDispatcher>(unrelated);
+            },
+        };
+
+        var id = await Publish(f, "完全替换");
+
+        Assert.True(id > 0);
+        Assert.Equal(1, unrelated.Enqueued);
+    }
+
+    [Fact]
+    public void Type_that_supports_notice_queues_even_without_a_provider_instance()
+    {
+        var log = new CapturingLoggerProvider();
+        var dispatcher = Direct(log, ScopesWithType(new NoticeCapableType(new FakeSenderProvider("cap"))));
+
+        // 入了队,第 10001 条才会撑爆队列;DI 里没有任何 provider 实例,只能靠类型的 SupportsNotice 判断
+        for (var i = 1; i <= 10001; i++) dispatcher.Enqueue(Item(i));
+
+        Assert.Single(log.Of(LogLevel.Error));
+    }
+
+    [Fact]
+    public async Task Database_configured_provider_reaches_the_sender()
+    {
+        var fake = new FakeSenderProvider("noticecap");
+        using var f = new AdminAppFactory
+        {
+            Settings = WithBaseUrl,
+            Overrides = s => s.AddSingleton<IExternalAuthProviderType>(new NoticeCapableType(fake)),
+        };
+        using (var scope = f.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IExternalAuthProviderService>().SaveAsync(
+                "noticecap",
+                new ExternalAuthProviderSaveInput("noticecap", null, null, new Dictionary<string, string?> { ["appId"] = "app-1" }, null));
+        await BoundUser(f, "noticecap", "s-1");
+
+        // 生产里企业微信就是这个形态:实例由注册表按库里的配置现建,DI 的 provider 集合里没有它
+        await Publish(f, "库里配的", "[去看](/flow/todo)");
+        await fake.WaitForCallsAsync();
+
+        var call = Assert.Single(fake.Calls);
+        Assert.Equal(["s-1"], call.Subjects);
+        Assert.Equal("https://admin.example.com/app/flow/todo", call.Message.Url);
     }
 
     // ── 测试消息 ─────────────────────────────────────────────────────────
