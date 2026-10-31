@@ -14,6 +14,42 @@
 
 ## Unreleased
 
+### 升级说明
+
+- **已配好企业微信登录的应用，升级后马上开始把站内通知推到企业微信，包括发给全体的公告。**
+  不想要就在升级前把 `sys.externalauth.wecom.notify` 设成 `false`：到「系统配置 → 高级」新增这个键，分组填 `externalauth`。
+  升级后也可以在「登录方式」页关掉企业微信那一行的「同时推送消息」。
+- 企业微信那边的应用可见范围、「企业可信 IP」没配好时，推送会失败并记日志，不影响站内信和登录。
+  不新增表和列，不新增依赖。
+
+### Added
+
+- **站内通知同时推送到企业微信。** 经 `INoticeService.PublishAsync` 发布的通知，推给接收人里已绑定企业微信的用户，消息是一张文字卡片，点开进入系统对应页面；没登录就先静默登录，再回到卡片指向的页面。
+  - 推送在后台进行：发布只把通知放进内存队列就返回，企业微信慢或不通不影响发布。
+    失败只记日志；网络错误、超时、5xx 和系统繁忙最多发 3 次，请求带 10 分钟重复消息检查，重试不会让人收到两条。
+    进程重启会丢还没发出的推送，站内信不受影响。
+  - 没装企业微信包、或没有任何 provider 能发送的应用，发布通知时不入队，没有额外开销。
+  - 卡片链接用 `SmartAdmin:ExternalAuth:CallbackBaseUrl` 拼接，前后端不同源的部署要让这个地址能打开前端。没配这一项时跳过推送并记 Warning。
+- **新增 `IExternalNoticeSender`，让外部登录 provider 成为推送渠道。**
+  同时实现 `IExternalAuthProvider` 和它的 provider 都会收到推送；`WeComExternalAuthProvider` 已实现。
+  配套新增 `ExternalNoticeMessage`、`ExternalNoticeResult`、`ExternalNoticeException`，以及 `IExternalAuthProviderType.SupportsNotice`（默认 `false`）。
+- **新增 `INoticeDispatcher`，默认实现 `NoticeDispatcher`。** 用 `TryAddSingleton` 注册，可整体替换；`BuildMessage`、`ResolveSubjectsAsync` 是 `protected virtual`，可以只改消息或接收人。
+  `NoticeService` 新增可选尾参 `INoticeDispatcher? dispatcher = null`，子类不用改。
+  完全替换 `INoticeService` 的应用不会自动推送，要自己调 `INoticeDispatcher.Enqueue`。
+  在调用方的事务里调用 `PublishAsync`，事务回滚后推送可能已经发出，需要回滚安全的调用方应在事务提交之后再发布。
+- **新增运营项 `sys.externalauth.{code}.notify`（默认开）和「登录方式」页的「同时推送消息」开关。**
+  `enabled` 关着时同样不推送。
+- **新增「发送测试消息」按钮和接口 `POST /api/v1/sys/external-auth/providers/{code}/test-notice`。** 在「登录方式」页发给当前管理员自己绑定的企业微信账号，直接发一次、不重试，结果页面上显示，失败带企业微信的错误码和说明。
+  用来验证应用可见范围和「企业可信 IP」，「测试连接」查不出这两项。
+  接口的权限挂在「测试连接」所在的「配置-新增」按钮下。
+
+### Fixed
+
+- **本地有登录态时在企业微信里主动退出，会被立刻自动登录回去。**
+  带着本地保存的登录态直接进应用时，本次会话没进过登录页，「每个浏览器会话只自动登录一次」的标记还没写，退出后回到登录页被当成第一次，又静默登录回去。
+  现在顶栏、应用选择页、改密后重登这三处主动退出，在跳登录页前先写入这个标记。
+  登录态过期被清掉时不受影响，企业微信里点开卡片仍会静默登录回原页面。
+
 ## 10.32.0 - 2026-10-31
 
 ### 升级说明

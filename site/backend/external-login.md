@@ -115,10 +115,11 @@ Operational settings go through `sys_config`, changeable at runtime from the con
 | `sys.externalauth.{code}.linkByAccount` | Off | Whether an unbound identity is linked to the local account with the same name |
 | `sys.externalauth.{code}.defaultRoleIds` | Empty | Roles granted on auto-provisioning |
 | `sys.externalauth.{code}.defaultOrgId` | Empty | Org assigned on auto-provisioning |
+| `sys.externalauth.{code}.notify` | On | Whether in-site notices are also pushed to this provider; nothing is pushed while `enabled` is off either, see [Pushing notices to WeCom](#pushing-notices-to-wecom) |
 
-Leave every key unset and the default behavior is **enabled + deny provisioning**: once the connection is configured, you have a working, binding-first SSO setup.
+Leave every key unset and the default behavior is **enabled + deny provisioning**: once the connection is configured, you have a working, binding-first SSO setup. `wecom` also pushes notices on top of that.
 
-`enabled` is the switch at the right of each row on the Login methods page, independent of the connection configuration: the switches go through the save bar at the bottom of the page, while Save in the settings panel writes directly. The WeCom row has one more switch, "Link by account", for its `linkByAccount`. None of the other keys are seeded, and that includes `linkByAccount` for any other provider. Add them from the Advanced tab when you need them, with the group set to `externalauth`.
+`enabled` is the switch at the right of each row on the Login methods page, independent of the connection configuration: the switches go through the save bar at the bottom of the page, while Save in the settings panel writes directly. The WeCom row has two more switches: "Link by account" for its `linkByAccount`, and "Push messages too" for `notify`. None of the other keys are seeded, and that includes `linkByAccount` for any other provider. Add them from the Advanced tab when you need them, with the group set to `externalauth`.
 
 Reading these keys is consolidated in `ISysUserExternalService` — both the controller and `AuthService` call through it rather than each reading config keys on their own.
 
@@ -157,6 +158,83 @@ Inside the WeCom client, the frontend package's built-in login page starts a WeC
 
 The first login still has to get past the unbound check. With the default deny, the employee lands back on the login page to go through the pending-link claim. If the local accounts are the WeCom accounts, turn on "Link by account" on the WeCom row of the Login methods page. Employees then get straight in the first time they open the app, with no password claim. If they have no local account yet, turn on auto-provisioning.
 
+## Pushing notices to WeCom
+
+Once WeCom login is configured, in-site notices are pushed to WeCom as well, with nothing else to set up. Announcements from admins, scheduled-job alerts, and notices that business modules publish through `INoticeService.PublishAsync` are all covered.
+
+### Setup steps
+
+1. Install `SmartAdmin.Auth.WeCom` and call `AddSmartAdminWeComAuth()` before `AddSmartAdmin()`.
+2. Configure WeCom under System config → Login methods, and set `CallbackBaseUrl` in production.
+3. In the WeCom admin console, check two things: the app's visibility range includes the members who should receive messages, and the deployment server's egress IP is listed under "Trusted enterprise IP".
+4. Members have a WeCom account bound: they have signed in through WeCom successfully, or bound one in the personal center. That binding is how the system knows which `userid` a notice goes to.
+5. On the WeCom row of the Login methods page, click "Send test message" and check in WeCom that the card arrived.
+
+The test message goes only to the WeCom account the current admin has bound, using the saved configuration, so save first and then click. It is sent once, directly: not queued, not retried, and the result comes back within seconds. No binding, no `CallbackBaseUrl`, a rejection by WeCom, or a send failure each show up as a message on the page, and a failure carries WeCom's error code and description. "Test connection" doesn't actually send anything, so it can't catch visibility-range problems. That is what this button is for.
+
+The "Push messages too" switch on that row maps to `notify` and is on by default. Turn it off and notices stop being pushed; in-site notices are unaffected.
+
+### Who receives it, and what happens on failure
+
+Recipients are the enabled users in the notice's audience (everyone, by role, or specific users) who have a WeCom account bound. Anyone without a binding gets the in-site notice only, with no error.
+
+Pushing happens in the background. The publish request only puts the notice on an in-memory queue and returns, so a slow or unreachable WeCom neither slows down publishing nor affects the caller's request. A failed send is only logged, never thrown to the caller, and is retried by these rules:
+
+- Network errors, timeouts, HTTP 5xx and WeCom's `-1` (system busy): up to 3 attempts, waiting 5 seconds after the first failure and 30 seconds after the second.
+- An invalid `access_token` (`40014`, `42001`): the cache is cleared and the message is resent once with a fresh token, without using up the attempts above.
+- Any other error code (`60020`, `81013`, bad credentials and so on): no retry, logged at Error.
+
+Requests carry WeCom's duplicate-message check (10 minutes). A request that timed out but actually went through won't reach the user twice when it is retried. As a result, two messages with identical content within 10 minutes arrive as one.
+
+The queue lives in memory and is processed in order. When the process restarts, pushes that haven't gone out yet are lost; in-site notices are unaffected. While one message is being retried, those behind it wait. A full queue (capacity 10000) drops new messages and logs at Error. With multiple replicas, only the instance that published the notice sends it, so nothing is duplicated.
+
+`PublishAsync` hands the notice to the queue before it returns. If a caller invokes it inside its own transaction and the transaction rolls back, the push may already have gone out. A caller that needs rollback safety should publish the notice after the transaction commits. The kernel's own two call sites (an admin publishing an announcement, a scheduled-job alert) both run outside a transaction.
+
+### Limits on the WeCom side
+
+- **Rate**: no more than 30 messages per minute and 1000 per hour to the same member through one app. WeCom drops anything above that without returning an error, so the log shows no failure. When many notices go out in a short burst, the later cards may never arrive, while the in-site notices are all there. See the official [rate limits](https://developer.work.weixin.qq.com/document/path/90312).
+- **Trusted enterprise IP**: a self-built app needs "Trusted enterprise IP" set on its detail page, with the deployment server's egress IP entered. Without it, sending fails with `60020`. The background log records it at Error, and the failure message of the test button carries it too. Apps created long ago may not have this requirement. See the official [article](https://developer.work.weixin.qq.com/community/article/detail?content_id=16393566093602657085).
+- **App visibility range**: a recipient outside the app's visibility range is rejected by WeCom. If all recipients are outside it, the error is `81013`; if only some are, the message still goes out and the ones left out are written to the log at Warning.
+- **Card length**: the title is capped at 128 characters and the body at 512. Anything longer is truncated, and a truncated body ends with an ellipsis.
+
+### The card link and what happens on tap
+
+The card's title is the notice's title, and its body is the notice content as plain text with the Markdown markup stripped. The address it opens is `CallbackBaseUrl` plus a site-relative path: the first site-relative link in the notice body, or `/personal/notice` if there is none. Without `CallbackBaseUrl` (which can only happen in development) no address can be built, so the notice isn't pushed and one Warning is logged.
+
+`CallbackBaseUrl` is the backend's public root address, so a deployment where frontend and backend have different origins must make page paths under that address (such as `/personal/notice`) open the frontend. Same-origin deployments need nothing.
+
+When the card is tapped and the person is still signed in, the page simply opens. If not, the flow from the previous section takes over: silent authorization inside the WeCom client, then back to the page the card points at. Once the trusted domain is configured, nothing extra is needed.
+
+Multi-app deployments have one limitation: a user with neither a default app nor a remembered last app lands on the app chooser when tapping a card, not on the page the card points at. A user whose sign-in has expired is usually in that group too, because the remembered app is cleared along with the session. Setting a default app for those users avoids it: click "Switch app" in the top bar to open the app chooser, then click "Set default" on an app's card. Single-app deployments, and users who have a default app, go straight to the page the card points at.
+
+### Custom channels and replacement
+
+The kernel knows interfaces, not WeCom. Any provider that implements both `IExternalAuthProvider` and `IExternalNoticeSender` receives pushes, and `WeComExternalAuthProvider` in the WeCom package does exactly that.
+
+```csharp
+public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
+{
+    // members of IExternalAuthProvider omitted
+
+    public Task<ExternalNoticeResult> SendAsync(
+        ExternalNoticeMessage message, IReadOnlyList<string> subjects, CancellationToken cancellationToken = default)
+    {
+        // subjects are the recipients' identifiers on the channel, the same value as Subject in the binding table, at most 1000 per batch
+        // throw ExternalNoticeException when the whole send fails; its retryable flag tells the kernel whether to retry
+        // put recipients the channel refuses into Rejected; the kernel only logs them
+        return Task.FromResult(new ExternalNoticeResult([]));
+    }
+}
+```
+
+The message of an `ExternalNoticeException` is written to the kernel log as is, so keep request URLs that carry tokens out of it. For the Login methods page to show the push switch and the test button for a type, its type descriptor `IExternalAuthProviderType` must return `true` from `SupportsNotice`, which defaults to `false`. `notify` applies to every provider alike and is on when unset.
+
+To replace the default behavior:
+
+- `INoticeDispatcher` is registered with `TryAddSingleton`, so registering your own implementation before `AddSmartAdmin()` replaces it entirely.
+- To change only how a message looks, subclass `NoticeDispatcher` and override `BuildMessage` (title, body and link are all produced there); overriding `ResolveSubjectsAsync` changes who receives it. Register the subclass as `NoticeDispatcher`, before `AddSmartAdmin()`.
+- An app that replaces `INoticeService` outright gets no automatic pushing. The push is triggered by `NoticeService.PublishAsync` calling `INoticeDispatcher.Enqueue` after publishing, so your own implementation has to make that call.
+
 ## Endpoints
 
 The login, callback and binding endpoints are mounted under `api/v1/auth/external`:
@@ -181,6 +259,7 @@ The endpoints that manage provider configuration for the Login methods page are 
 | `PUT {code}` | Create or update a configuration; the request carries `type`; an empty secret field means keep the saved value; requires a recent identity re-verification |
 | `DELETE {code}` | Clear a configuration without deleting the external accounts users have bound; requires a recent identity re-verification |
 | `POST test` | Test the connection with the values in the form; an empty secret uses the saved one |
+| `POST {code}/test-notice` | Send a test message: push one card to the account the current admin has bound for this provider, using the saved configuration. The outcome is in the response body's `status` (`ok`, `rejected`, `failed`, `notBound`, `noBaseUrl`, `unsupported`), and the envelope code stays 0 |
 
 Both `state` and the one-time ticket reuse the same pattern as SMS verification codes: stored in the cache, consumed via an atomic `GetAndRemoveAsync`, valid exactly once. `state` uses only letters and digits, the only characters WeCom's and WeChat's OAuth accept.
 

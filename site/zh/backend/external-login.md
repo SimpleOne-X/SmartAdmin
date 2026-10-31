@@ -115,10 +115,11 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 | `sys.externalauth.{code}.linkByAccount` | 关 | 未绑定的外部身份按账号名关联同名本地账号 |
 | `sys.externalauth.{code}.defaultRoleIds` | 空 | 自动开户时给什么角色 |
 | `sys.externalauth.{code}.defaultOrgId` | 空 | 自动开户时落哪个机构 |
+| `sys.externalauth.{code}.notify` | 开 | 站内通知要不要同时推送到这个 provider，`enabled` 关着时同样不推，详见[推送消息到企业微信](#推送消息到企业微信) |
 
-一个键都不配，默认行为就是**启用 + 拒绝开户**：连接配好，就是一套绑定优先的 SSO。
+一个键都不配，默认行为就是**启用 + 拒绝开户**：连接配好，就是一套绑定优先的 SSO。`wecom` 在此之外还会推送通知。
 
-`enabled` 是「登录方式」页每一行右侧的开关，和连接配置无关：开关走页面底部的保存条，设置面板里的保存则直接写库。企业微信的行还多一个「按账号自动关联」，对应它的 `linkByAccount`。其余的键不预置，别的 provider 的 `linkByAccount` 也算在内。要用时到「高级」页新增，分组填 `externalauth`。
+`enabled` 是「登录方式」页每一行右侧的开关，和连接配置无关：开关走页面底部的保存条，设置面板里的保存则直接写库。企业微信的行还多两个开关：「按账号自动关联」对应它的 `linkByAccount`，「同时推送消息」对应 `notify`。其余的键不预置，别的 provider 的 `linkByAccount` 也算在内。要用时到「高级」页新增，分组填 `externalauth`。
 
 这几个键的读取收口在 `ISysUserExternalService`，控制器和 `AuthService` 都只调它，不各自散读配置键。
 
@@ -157,6 +158,101 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 
 首次登录照样要过未绑定这一关。默认拒绝，员工会落回登录页走待认领。本地账号就是企业微信账号的，到「登录方式」页，在企业微信那一行打开「按账号自动关联」。员工第一次点开就进，不用拿密码认领。本地还没有账号的，打开自动开户。
 
+## 推送消息到企业微信
+
+配好企业微信登录，站内通知就会同时推到企业微信，不用再配一套。
+管理员发的公告、定时任务的告警，以及业务模块经 `INoticeService.PublishAsync` 发布的通知，都在其中。
+
+### 接通步骤
+
+1. 装好 `SmartAdmin.Auth.WeCom`，并在 `AddSmartAdmin()` 之前调用 `AddSmartAdminWeComAuth()`。
+2. 在 系统配置 → 登录方式 里配好企业微信，生产环境同时配好 `CallbackBaseUrl`。
+3. 在企业微信管理后台确认两处：应用的可见范围包含要接收的成员，部署服务器的出口 IP 在「企业可信 IP」里。
+4. 成员已经绑定企业微信账号：通过企业微信成功登录过，或在个人中心绑定过。系统靠这条绑定才知道通知该发给哪个 `userid`。
+5. 在「登录方式」页企业微信那一行点「发送测试消息」，到企业微信里确认收到了卡片。
+
+测试消息只发给当前管理员自己绑定的企业微信账号，用的是已保存的配置，所以要先保存再点。
+它直接发一次，不入队、不重试，几秒内就有结果。
+没绑定、没配 `CallbackBaseUrl`、被企业微信拒收和发送失败，都在页面上给出提示，失败的还带着企业微信的错误码和说明。
+「测试连接」不真发消息，查不出应用可见范围的问题，所以才需要这个按钮。
+
+那一行的「同时推送消息」开关对应 `notify`，默认开。关掉以后通知不再推送，站内信照常发。
+
+### 发给谁，失败怎么办
+
+接收人是通知范围（全体、按角色、指定用户）里启用的用户中，已绑定企业微信的那些。
+没绑定的人只收站内信，不报错。
+
+推送在后台进行。发布通知的请求只把它放进内存队列就返回，所以企业微信慢或者不通，不会拖慢发布，也不会影响调用方的请求。
+发送失败只记日志，不向调用方抛错，并按下面的规则重试：
+
+- 网络错误、超时、HTTP 5xx 和企业微信的 `-1`（系统繁忙）：最多发 3 次，第一次失败后等 5 秒，第二次失败后等 30 秒。
+- `access_token` 失效（`40014`、`42001`）：清掉缓存，换新 token 重发一次，不占上面的次数。
+- 其余错误码（`60020`、`81013`、凭据错误等）：不重试，记 Error 日志。
+
+请求带着企业微信的重复消息检查（10 分钟）。超时了但其实已经发成功的请求，重试时用户不会收到两条。
+因此 10 分钟内内容完全相同的两条消息，用户只会收到一条。
+
+队列放在内存里，按序处理。进程重启时还没发出的推送会丢，站内信不受影响。
+一条消息在重试的那段时间，后面的消息排队等着。队列满了（容量 10000）会丢弃新的并记 Error。
+多副本部署时，只有发布通知的那个实例会发，不会重复。
+
+`PublishAsync` 在方法返回前就把通知交给队列。调用方如果在自己的事务里调用它，事务回滚了，推送可能已经发出。
+需要回滚安全的调用方，在事务提交之后再发布通知。内核自己的两处调用（管理员发公告、定时任务告警）都在事务外。
+
+### 企业微信侧的限制
+
+- **频率**：同一成员在每个应用上不超过 30 次/分钟、1000 次/小时，超出的企业微信直接丢弃，也不返回错误，所以日志里看不到失败。短时间连发很多条通知时，后面的卡片可能收不到，站内信都在。官方说明见[频率限制](https://developer.work.weixin.qq.com/document/path/90312)。
+- **企业可信 IP**：自建应用要在应用详情页配「企业可信 IP」，把部署服务器的出口 IP 填进去，否则发送报 `60020`。后台日志会以 Error 记下它，测试消息的失败提示里也带着。较早创建的应用可能没有这条要求。官方说明见[这篇文章](https://developer.work.weixin.qq.com/community/article/detail?content_id=16393566093602657085)。
+- **应用可见范围**：接收人不在应用的可见范围里，企业微信就拒收这个人。全部接收人都不在时报 `81013`，只有部分不在时消息照发，不在的人记进 Warning 日志。
+- **卡片长度**：标题最多 128 个字符，正文最多 512 个字符，超出的部分被截断，正文截断处加省略号。
+
+### 卡片链接与点开后的行为
+
+卡片的标题是通知标题，正文是通知内容去掉 Markdown 标记后的纯文本。
+点开的地址是 `CallbackBaseUrl` 加一个站内相对路径：通知正文里的第一个站内相对链接，没有就用 `/personal/notice`。
+没配 `CallbackBaseUrl` 时（只可能在开发环境）拼不出地址，这条通知不推送，日志记一条 Warning。
+
+`CallbackBaseUrl` 填的是后端对外的根地址，所以前后端不同源的部署，要让这个地址下的页面路径（比如 `/personal/notice`）能打开前端。
+前后端同源的部署不用管。
+
+点开卡片时，登录态还在就直接打开页面。没有登录就沿用上一节的流程：企业微信客户端里静默授权，登录后回到卡片指向的页面。可信域名配好即可，不用另配。
+
+多应用的部署有一个限制：既没有默认应用、也没有记住上次所在应用的用户，点卡片会落在应用选择页，而不是卡片指向的页面。
+登录态已过期的用户通常也在此列，因为记住的应用随会话一起清掉了。
+给这些用户设好默认应用就能避开：顶栏点「切换应用」进入应用选择页，再点某个应用卡片上的「设为默认」。
+只有一个应用的部署，以及设了默认应用的用户，会直接进到卡片指向的页面。
+
+### 自定义渠道和替换
+
+内核只认接口，不认企业微信。同时实现了 `IExternalAuthProvider` 和 `IExternalNoticeSender` 的 provider 都会收到推送，企业微信包里的 `WeComExternalAuthProvider` 就是这么做的。
+
+```csharp
+public class MyProvider : IExternalAuthProvider, IExternalNoticeSender
+{
+    // IExternalAuthProvider 的成员省略
+
+    public Task<ExternalNoticeResult> SendAsync(
+        ExternalNoticeMessage message, IReadOnlyList<string> subjects, CancellationToken cancellationToken = default)
+    {
+        // subjects 是这批接收人在渠道里的标识，和绑定表里的 Subject 同值，每批最多 1000 个
+        // 整次发送失败就抛 ExternalNoticeException，retryable 决定内核要不要重试
+        // 渠道拒收的人放进 Rejected，内核只记日志
+        return Task.FromResult(new ExternalNoticeResult([]));
+    }
+}
+```
+
+`ExternalNoticeException` 的消息会原样写进内核日志，别带含令牌的请求地址。
+要让「登录方式」页给这种类型显示推送开关和测试按钮，类型描述 `IExternalAuthProviderType` 的 `SupportsNotice` 要返回 `true`，默认是 `false`。
+`notify` 对每个 provider 一视同仁，缺省开。
+
+要换掉默认行为时：
+
+- `INoticeDispatcher` 用 `TryAddSingleton` 注册，在 `AddSmartAdmin()` 之前注册自己的实现就整体替换。
+- 只想改消息的样子，继承 `NoticeDispatcher` 覆写 `BuildMessage`（标题、正文、链接都在这一步生成），覆写 `ResolveSubjectsAsync` 能改发给谁。把子类注册成 `NoticeDispatcher`，写在 `AddSmartAdmin()` 之前。
+- 完全替换 `INoticeService` 的应用不会自动推送。推送是 `NoticeService.PublishAsync` 发布后调用 `INoticeDispatcher.Enqueue` 触发的，自己的实现要自己调。
+
 ## 端点
 
 登录、回调、绑定的端点挂在 `api/v1/auth/external` 下：
@@ -181,6 +277,7 @@ OIDC 的 Client Secret 验证不了，是因为标准协议没有不带用户就
 | `PUT {code}` | 新增或更新一条配置，请求带 `type`；机密字段留空表示不修改，要求近期重新验证身份 |
 | `DELETE {code}` | 清除一条配置，不删除用户已绑定的外部账号，要求近期重新验证身份 |
 | `POST test` | 测试连接，用表单里的值，机密留空则用已保存的 |
+| `POST {code}/test-notice` | 发送测试消息：向当前管理员在该 provider 下绑定的账号发一张卡片，用已保存的配置。结果在返回体的 `status` 里（`ok`、`rejected`、`failed`、`notBound`、`noBaseUrl`、`unsupported`），信封码仍是 0 |
 
 `state` 和一次性票据都复用短信验证码那套成法：进缓存、`GetAndRemoveAsync` 原子取删，单次有效。`state` 只用字母和数字，企业微信和微信的 OAuth 只收这个字符集。
 
