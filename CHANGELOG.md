@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+## 10.33.0 - 2026-10-31
+
 ### 升级说明
 
 - **已配好企业微信登录的应用，升级后马上开始把站内通知推到企业微信，包括发给全体的公告。**
@@ -29,6 +31,7 @@
     失败只记日志；网络错误、超时、5xx、408、429 和系统繁忙最多发 3 次，请求带 10 分钟重复消息检查，重试不会让人收到两条。
     进程重启会丢还没发出的推送，站内信不受影响。
   - 没装企业微信包、或没有任何 provider 能发送的应用，发布通知时不入队，没有额外开销。
+    只调 `AddSmartAdminServices` 的 Worker 宿主通常属于这种情况，任务告警只写站内信。
   - 卡片链接用 `SmartAdmin:ExternalAuth:CallbackBaseUrl` 拼接，前后端不同源的部署要让这个地址能打开前端。没配这一项时跳过推送并记 Warning。
 - **新增 `IExternalNoticeSender`，让外部登录 provider 成为推送渠道。**
   在代码里注册的 `IExternalAuthProvider` 同时实现它就会收到推送；`WeComExternalAuthProvider` 已实现。
