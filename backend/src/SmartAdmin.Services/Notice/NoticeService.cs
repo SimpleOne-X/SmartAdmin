@@ -23,7 +23,9 @@ public class NoticeService(
     IRepository<SysUser>? users = null,
     IRepository<SysRole>? roles = null,
     // 数据范围守卫;可选尾参,未注入时不收敛
-    IDataScopeGuard? scopeGuard = null) : INoticeService
+    IDataScopeGuard? scopeGuard = null,
+    // 外部渠道推送;可选尾参,未注入时只有站内信
+    INoticeDispatcher? dispatcher = null) : INoticeService
 {
     /// <summary>当前登录用户 Id(用户端端点均 <c>[ActiveSession]</c> 保证已认证;缺失按令牌失效处理)。</summary>
     private long CurrentUserId
@@ -54,6 +56,10 @@ public class NoticeService(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// 写完接收行后把通知快照交给 <see cref="INoticeDispatcher"/> 入队,由后台推送到外部渠道,不影响本方法的耗时与结果。
+    /// 在调用方的事务里调用时,事务回滚后外部消息可能已经发出;需要回滚安全的调用方应在事务提交之后再发布。
+    /// </remarks>
     public virtual async Task<long> PublishAsync(NoticePublishInput input)
     {
         // 定向发布(非全体广播)必须先过关:目标非空 + 全部真实存在(启用中、未删除)。
@@ -83,6 +89,7 @@ public class NoticeService(
                 .ToList();
             await receivers.InsertRangeAsync(rows);
         }
+        dispatcher?.Enqueue(new NoticeDispatchItem(entity.Id, input.Title, input.Content, input.ReceiverType, targetIds));
         // 实时推送(开启时):发布即广播 notice-changed,各端立刻自查未读角标(替代最长 30s 轮询延迟)。
         // ponytail: 广播让各端自查(client 再打 unread-count,2 条 COUNT 很便宜);定向精确唤醒 receiver(角色→用户)集,公告量大再优化。
         if (realtime is not null)
@@ -220,18 +227,8 @@ public class NoticeService(
         return json;
     }
 
-    /// <summary>
-    /// 只接受以<b>单个</b> <c>/</c> 开头的站内相对路径。<c>//host</c> 与 <c>/\host</c> 是协议相对 URL,
-    /// 浏览器会跳出站;控制字符与空白也拒绝,免得存进去的 url 在前端拼不出请求。
-    /// </summary>
-    protected virtual bool IsSiteRelativeUrl(string url)
-    {
-        if (url.Length < 1 || url[0] != '/') return false;
-        if (url.Length > 1 && url[1] is '/' or '\\') return false;
-        foreach (var ch in url)
-            if (char.IsWhiteSpace(ch) || char.IsControl(ch) || ch == '\\') return false;
-        return true;
-    }
+    /// <summary>动作 url 是否是站内相对路径,规则见 <see cref="NoticeText.IsSiteRelativeUrl"/>。</summary>
+    protected virtual bool IsSiteRelativeUrl(string url) => NoticeText.IsSiteRelativeUrl(url);
 
     /// <summary>反序列化动作列表;空或坏 JSON 一律读作"没有动作",不让一行脏数据拖垮整页列表。</summary>
     protected virtual IReadOnlyList<NoticeAction>? DeserializeActions(string? json)

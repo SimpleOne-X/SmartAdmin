@@ -5,7 +5,7 @@ namespace SmartAdmin.Core;
 /// <para>各登录方式的连接与密钥由管理员在「系统配置 → 登录方式」填写,加密入库(<c>sys_external_auth_provider</c>),
 /// 运行时由 <see cref="IExternalAuthProviderType"/>(类型描述)与 <see cref="IExternalAuthProviderRegistry"/>(注册表)装配;
 /// 启用开关、未绑定策略、开户默认角色/机构等运营项走 <c>sys_config</c>
-/// 键 <c>sys.externalauth.{code}.{enabled|provisioning|linkByAccount|defaultRoleIds|defaultOrgId}</c>(运行时可改、无需重启)。</para>
+/// 键 <c>sys.externalauth.{code}.{enabled|provisioning|linkByAccount|defaultRoleIds|defaultOrgId|notify}</c>(运行时可改、无需重启)。</para>
 /// <para><see cref="CallbackBaseUrl"/> 留在配置里:它不是机密,而且启动时的格式校验能在部署阶段就拦下填错的值。</para>
 /// </summary>
 public class AdminExternalAuthOptions

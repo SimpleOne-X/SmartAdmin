@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildConfigProviderRows, LINK_BY_ACCOUNT_CODES, OFFICIAL_TYPES } from './oauthBrand'
 
-const type = (t: string) => ({ type: t })
+const type = (t: string, supportsNotice = false) => ({ type: t, supportsNotice })
 const entry = (
   over: Partial<Parameters<typeof buildConfigProviderRows>[0]['providers'][number]>,
 ) => ({
@@ -63,6 +63,42 @@ describe('buildConfigProviderRows', () => {
     expect(gh.state).toBe('unconfigured')
     expect(gh.enabled).toBe(false)
     expect(gh.linkByAccount).toBe(false)
+  })
+
+  it('carries the push switch for a type that supports notices', () => {
+    const catalog = (notice: boolean) => ({
+      types: [type('wecom', notice)],
+      providers: [entry({ code: 'wecom', type: 'wecom' })],
+    })
+    const row = (notice: boolean, admin: { notify?: boolean }[]) =>
+      buildConfigProviderRows(
+        catalog(notice),
+        admin.map(a => ({ code: 'wecom', enabled: true, ...a })),
+      ).find(r => r.code === 'wecom')!
+    expect(row(true, [{ notify: false }])).toMatchObject({ supportsNotice: true, notify: false })
+    // 后端缺省为开:管理端条目没带 notify 时按开处理
+    expect(row(true, [{}])).toMatchObject({ supportsNotice: true, notify: true })
+    expect(row(false, [{}]).supportsNotice).toBe(false)
+  })
+
+  it('keeps the push switch off for a provider that is not configured', () => {
+    const rows = buildConfigProviderRows(
+      {
+        types: [type('wecom', true)],
+        providers: [entry({ code: 'wecom', type: 'wecom', configured: false })],
+      },
+      [{ code: 'wecom', enabled: true, notify: true }],
+    )
+    expect(rows.find(r => r.code === 'wecom')).toMatchObject({
+      supportsNotice: true,
+      notify: false,
+    })
+    // 代码注册的 provider 没有类型,也就没有推送能力
+    const ldap = buildConfigProviderRows(
+      { types: [], providers: [entry({ code: 'ldap', type: '', source: 'code' })] },
+      [],
+    ).find(r => r.code === 'ldap')!
+    expect(ldap.supportsNotice).toBe(false)
   })
 
   it('a stored row whose package is not installed shows as not installed', () => {

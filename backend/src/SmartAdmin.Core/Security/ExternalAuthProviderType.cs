@@ -83,6 +83,9 @@ public interface IExternalAuthProviderType
     /// <summary>字段清单</summary>
     IReadOnlyList<ExternalAuthField> Fields { get; }
 
+    /// <summary>该类型造出的 provider 是否同时实现 <see cref="IExternalNoticeSender"/>(能把站内通知推到这个渠道)。</summary>
+    bool SupportsNotice => false;
+
     /// <summary>按配置造出 provider 实例(配置已通过必填校验)。</summary>
     IExternalAuthProvider Create(ExternalAuthProviderConfig config, IServiceProvider services);
 

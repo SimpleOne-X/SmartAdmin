@@ -6,6 +6,7 @@ import {
   resolveProviderIcon,
   splitLoginProviders,
   SSO_VISIBLE_MAX,
+  suppressWeComAutoLogin,
 } from './oauthBrand'
 
 const codes = (n: number) =>
@@ -117,6 +118,22 @@ describe('claimWeComAutoLogin', () => {
     expect(
       claimWeComAutoLogin({ userAgent: WECOM_UA, providers: withWeCom, storage: broken }),
     ).toBe(false)
+  })
+
+  it('suppressWeComAutoLogin 之后 claimWeComAutoLogin 返回 false', () => {
+    const storage = memoryStorage()
+    // 主动退出时还没进过登录页:标记要提前落下,否则回到登录页的第一次 claim 仍会放行
+    suppressWeComAutoLogin(storage)
+    expect(claimWeComAutoLogin({ userAgent: WECOM_UA, providers: withWeCom, storage })).toBe(false)
+  })
+
+  it('suppressWeComAutoLogin 在存储不可用时不抛异常', () => {
+    const broken = {
+      setItem: () => {
+        throw new Error('SecurityError')
+      },
+    }
+    expect(() => suppressWeComAutoLogin(broken)).not.toThrow()
   })
 })
 

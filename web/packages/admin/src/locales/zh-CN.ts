@@ -915,6 +915,17 @@ export default {
       linkByAccountConfirmTitle: '打开按账号自动关联?',
       linkByAccountConfirm:
         '{name}账号与本地账号完全相同的人,首次从{name}登录时会自动绑定到该本地账号并直接登录;超级管理员、已停用账号、已绑过{name}的账号除外。请先确认两边账号是同一批人,比如本地账号就是从{name}同步来的。',
+      notify: '同时推送消息',
+      notifyHint: '系统消息和审批消息同时发到企业微信,没绑定的人只收站内信',
+      testNotice: '发送测试消息',
+      noticeTest: {
+        ok: '已发送,请在企业微信里查看',
+        rejected: '企业微信拒收了这个账号,请检查应用可见范围和接口许可',
+        failed: '发送失败:{detail}',
+        notBound: '当前账号没有绑定企业微信,请先到个人中心绑定',
+        noBaseUrl: '没有配置 SmartAdmin:ExternalAuth:CallbackBaseUrl,无法生成卡片链接',
+        unsupported: '这种登录方式不支持推送消息',
+      },
       field: {
         displayName: '显示名',
         code: '标识',

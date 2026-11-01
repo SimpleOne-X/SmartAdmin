@@ -20,6 +20,7 @@ import { useUserStore } from '#/stores/user'
 import { useAuthStore } from '#/stores/auth'
 import { resetRouter } from '#/router'
 import { translateError } from '#/utils/error'
+import { suppressWeComAutoLogin } from '#/utils/oauthBrand'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -72,6 +73,7 @@ async function submit() {
     message.success(t('changePassword.changed'))
     // 改密后强制重新登录(自愿路径:先断实时,避免 force-logout 误弹「被强制下线」)
     await beginVoluntaryLogout()
+    suppressWeComAutoLogin()
     try {
       await authApi.logout()
     } catch {

@@ -125,6 +125,19 @@ describe('useRealtime force-logout', () => {
     app.unmount()
   })
 
+  it('force-logout 后回到登录页不再自动发起企业微信登录', async () => {
+    const setItem = vi.fn()
+    vi.stubGlobal('sessionStorage', { setItem })
+    const { app } = mountRealtime()
+    await nextTick()
+
+    handlers['force-logout']()
+
+    expect(setItem).toHaveBeenCalledWith('smart.sso.wecomAutoLogin', '1')
+    vi.unstubAllGlobals()
+    app.unmount()
+  })
+
   it('beginVoluntaryLogout 后 force-logout 静默:清会话但不弹强制下线', async () => {
     const { app } = mountRealtime()
     await nextTick()

@@ -276,6 +276,36 @@ public class SeedUpgradeTests
             });
     }
 
+    /// <summary>
+    /// 从种子版本 8 升上来:「配置-新增」按钮(312)拿到发送测试消息的权限码。
+    /// 改了已有种子行不升版本号的话,存量库的管理员点按钮只会得到无权限。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_from_version_8_grants_test_notice_permission_on_config_button()
+    {
+        const long ConfigAddButtonId = 312;   // DefaultMenuSeed:配置-新增
+        const string TestNotice = "POST:/api/v1/sys/external-auth/providers/{code}/test-notice";
+
+        await RestartWithAsync(
+            async db =>
+            {
+                await db.Updateable<SysSchemaVersion>()
+                    .SetColumns(x => new SysSchemaVersion { Version = "8" })
+                    .Where(x => x.Id == 1)
+                    .ExecuteCommandAsync();
+                var old = (await db.Queryable<SysMenu>().FirstAsync(x => x.Id == ConfigAddButtonId)).Permission.Replace(TestNotice, "");
+                await db.Updateable<SysMenu>()
+                    .SetColumns(x => new SysMenu { Permission = old })
+                    .Where(x => x.Id == ConfigAddButtonId)
+                    .ExecuteCommandAsync();
+            },
+            async db =>
+            {
+                var menu = await db.Queryable<SysMenu>().FirstAsync(x => x.Id == ConfigAddButtonId);
+                Assert.Contains(TestNotice, menu.Permission);
+            });
+    }
+
     /// <summary>非内置角色(雪花号段的 Id,模拟界面上新建的角色),直接插库造存量。</summary>
     private const long NewRoleId = 900_000_000_001;
 

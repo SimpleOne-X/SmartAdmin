@@ -19,10 +19,13 @@ vi.mock('#/api', () => ({
 vi.mock('#/composables/useSite', () => ({ loadSite: api.loadSite }))
 vi.mock('#/utils/oauthBrand', () => ({
   LINK_BY_ACCOUNT_CODES: ['wecom'],
-  // 行只由目录里「已配置」的项决定;开关值取自管理端列表
+  // 行只由目录里「已配置」的项决定;开关值取自管理端列表;类型码取 code,推送能力看类型目录
   buildConfigProviderRows: (
-    catalog: { providers: { code: string; configured: boolean }[] },
-    admin: { code: string; enabled: boolean; linkByAccount?: boolean }[],
+    catalog: {
+      types: { type: string; supportsNotice: boolean }[]
+      providers: { code: string; configured: boolean }[]
+    },
+    admin: { code: string; enabled: boolean; linkByAccount?: boolean; notify?: boolean }[],
   ) =>
     catalog.providers.map(p => {
       const a = admin.find(x => x.code === p.code)
@@ -31,6 +34,8 @@ vi.mock('#/utils/oauthBrand', () => ({
         registered: p.configured,
         enabled: p.configured && !!a?.enabled,
         linkByAccount: p.configured && !!a?.linkByAccount,
+        supportsNotice: catalog.types.some(x => x.type === p.code && x.supportsNotice),
+        notify: p.configured && (a?.notify ?? true),
         displayName: p.code,
         icon: '',
       }
@@ -40,11 +45,15 @@ vi.mock('#/utils/oauthBrand', () => ({
 import { checkDraft, createConfigDraft, diffKeys } from './draft'
 import { tabOfKey } from './groups'
 
-const catalogOf = (configured: string[], unconfigured: string[] = []) => ({
+const catalogOf = (
+  configured: string[],
+  unconfigured: string[] = [],
+  noticeTypes: string[] = [],
+) => ({
   dataProtectionEphemeral: false,
   callbackBaseUrlMissing: false,
   callbackUriTemplate: '',
-  types: [],
+  types: noticeTypes.map(type => ({ type, supportsNotice: true })),
   providers: [
     ...configured.map(code => ({ code, configured: true })),
     ...unconfigured.map(code => ({ code, configured: false })),
@@ -135,6 +144,41 @@ describe('createConfigDraft', () => {
     // 企业微信的未保存改动还在
     expect(d.values['sys.externalauth.wecom.enabled']).toBe('false')
     expect(d.dirtyKeys.value).toEqual(['sys.externalauth.wecom.enabled'])
+  })
+
+  it('草稿只为支持推送的已配置方式载入 notify 键,并计入 claimedKeys', async () => {
+    api.catalog.mockResolvedValue(catalogOf(['wecom', 'github'], [], ['wecom']))
+    api.providersAll.mockResolvedValue([
+      { code: 'wecom', enabled: true, linkByAccount: false, notify: false },
+      { code: 'github', enabled: true, linkByAccount: false },
+    ])
+    const d = createConfigDraft()
+    await d.load()
+    expect(d.values['sys.externalauth.wecom.notify']).toBe('false')
+    expect('sys.externalauth.github.notify' in d.values).toBe(false)
+    expect(d.claimedKeys.value).toContain('sys.externalauth.wecom.notify')
+    expect(d.claimedKeys.value).not.toContain('sys.externalauth.github.notify')
+    expect(d.dirtyKeys.value).toEqual([])
+  })
+
+  it('管理端条目没带 notify 时按开载入', async () => {
+    api.catalog.mockResolvedValue(catalogOf(['wecom'], [], ['wecom']))
+    const d = createConfigDraft()
+    await d.load()
+    expect(d.values['sys.externalauth.wecom.notify']).toBe('true')
+  })
+
+  it('方式被清除后 refreshProviders 移除 notify 键', async () => {
+    api.catalog.mockResolvedValue(catalogOf(['wecom'], [], ['wecom']))
+    const d = createConfigDraft()
+    await d.load()
+    expect('sys.externalauth.wecom.notify' in d.values).toBe(true)
+    api.catalog.mockResolvedValue(catalogOf([], ['wecom'], ['wecom']))
+    api.providersAll.mockResolvedValue([])
+    await d.refreshProviders()
+    expect('sys.externalauth.wecom.notify' in d.values).toBe(false)
+    expect('sys.externalauth.wecom.notify' in d.original).toBe(false)
+    expect(d.dirtyKeys.value).toEqual([])
   })
 
   it('清除配置后重读目录:它的开关移出草稿,不留孤键', async () => {

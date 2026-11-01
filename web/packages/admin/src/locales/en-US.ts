@@ -938,6 +938,19 @@ export default {
       linkByAccountConfirmTitle: 'Turn on link by account?',
       linkByAccountConfirm:
         'The first time someone signs in with {name}, if their {name} account ID is exactly the same as a local account, the two are bound and they are signed in directly. Super admins, disabled accounts and accounts already bound to {name} are never linked. Make sure both sides are the same people first, e.g. local accounts were synced from {name}.',
+      notify: 'Push messages too',
+      notifyHint:
+        'System and approval messages are also sent to WeCom; people who have not bound an account only get the in-site message',
+      testNotice: 'Send test message',
+      noticeTest: {
+        ok: 'Sent. Check WeCom for the message',
+        rejected: 'WeCom rejected this account. Check the app visibility scope and API permissions',
+        failed: 'Failed to send: {detail}',
+        notBound: 'Your account is not bound to WeCom. Bind it in your personal center first',
+        noBaseUrl:
+          'SmartAdmin:ExternalAuth:CallbackBaseUrl is not configured, so the card link cannot be built',
+        unsupported: 'This sign-in method does not support pushing messages',
+      },
       field: {
         displayName: 'Display name',
         code: 'Identifier',

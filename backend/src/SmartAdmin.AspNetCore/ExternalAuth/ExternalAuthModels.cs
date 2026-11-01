@@ -51,6 +51,8 @@ public record ExternalProviderAdminItem
     public bool Enabled { get; init; }
     /// <summary>对应 <c>sys.externalauth.{code}.linkByAccount</c>(未绑定的外部身份按账号名关联同名本地账号);缺省 false。</summary>
     public bool LinkByAccount { get; init; }
+    /// <summary>对应 <c>sys.externalauth.{code}.notify</c>(发布站内通知时是否同时推到该渠道);缺省 true。</summary>
+    public bool Notify { get; init; }
 }
 
 /// <summary>个人中心"账号绑定"列表项(只回展示所需,不回 Subject 等原始标识)。</summary>

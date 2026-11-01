@@ -52,6 +52,9 @@ public class WeComAuthProviderType : IExternalAuthProviderType
     public IReadOnlyList<ExternalAuthField> Fields => FieldList;
 
     /// <inheritdoc />
+    public bool SupportsNotice => true;
+
+    /// <inheritdoc />
     public virtual IExternalAuthProvider Create(ExternalAuthProviderConfig config, IServiceProvider services)
     {
         var options = new WeComAuthOptions

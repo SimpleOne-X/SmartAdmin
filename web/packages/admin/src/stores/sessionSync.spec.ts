@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createPersistedState } from 'pinia-plugin-persistedstate'
 import { installSessionSync } from './sessionSync'
 import { useUserStore } from './user'
+import { claimWeComAutoLogin } from '#/utils/oauthBrand'
 
 const authReset = vi.hoisted(() => vi.fn())
 const routerMock = vi.hoisted(() => ({
@@ -83,6 +84,36 @@ beforeEach(() => {
   // 重复安装只挂一次监听:下面每个用例里 replace / reset 只响应一次即是证明。
   installSessionSync()
   installSessionSync()
+})
+
+/** 这一页的登录页还会不会自动发起企业微信登录(sessionStorage 每个标签页一份)。 */
+function wouldAutoLogin(tabStorage: Storage) {
+  return claimWeComAutoLogin({
+    userAgent: 'wxwork',
+    providers: [{ code: 'wecom' }],
+    storage: tabStorage,
+  })
+}
+
+describe('别的标签页退出后的企业微信自动登录', () => {
+  it('本页有会话:跟着退出,回到登录页不再自动登录', () => {
+    const tabStorage = makeMemoryStorage()
+    vi.stubGlobal('sessionStorage', tabStorage)
+    signIn()
+
+    otherTabWrites(SIGNED_OUT)
+
+    expect(wouldAutoLogin(tabStorage)).toBe(false)
+  })
+
+  it('本页本来没有会话:不动它,一次性标记还留着', () => {
+    const tabStorage = makeMemoryStorage()
+    vi.stubGlobal('sessionStorage', tabStorage)
+
+    otherTabWrites(SIGNED_OUT)
+
+    expect(wouldAutoLogin(tabStorage)).toBe(true)
+  })
 })
 
 describe('installSessionSync', () => {

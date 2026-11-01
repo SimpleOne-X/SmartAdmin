@@ -59,10 +59,14 @@ export type ConfigProviderRow = {
   enabled: boolean
   /** 未绑定的外部身份按账号名关联同名本地账号(sys.externalauth.{code}.linkByAccount) */
   linkByAccount: boolean
+  /** 该类型能把站内通知推到外部渠道:显示推送开关与测试消息按钮 */
+  supportsNotice: boolean
+  /** 发布通知时同时推到这个渠道(sys.externalauth.{code}.notify) */
+  notify: boolean
 }
 
 type CatalogLike = {
-  types: readonly { type: string }[]
+  types: readonly { type: string; supportsNotice: boolean }[]
   providers: readonly {
     code: string
     type: string
@@ -74,7 +78,7 @@ type CatalogLike = {
   }[]
 }
 
-type AdminLike = { code: string; enabled: boolean; linkByAccount?: boolean }
+type AdminLike = { code: string; enabled: boolean; linkByAccount?: boolean; notify?: boolean }
 
 /**
  * 配置页列表 = 四个官方厂商(按固定顺序,没装的也列出并标「未安装」)
@@ -103,9 +107,10 @@ export function buildConfigProviderRows(
         : 'unconfigured'
     const a = adminByCode.get(code)
     const registered = state === 'configured'
+    const type = p?.type ?? (official ? code : '')
     rows.push({
       code,
-      type: p?.type ?? (official ? code : ''),
+      type,
       displayName: p?.displayName || (isBrandCode(code) ? brandDisplayName(code) : code),
       icon: p?.icon ?? null,
       state,
@@ -113,6 +118,10 @@ export function buildConfigProviderRows(
       registered,
       enabled: registered && !!a?.enabled,
       linkByAccount: registered && !!a?.linkByAccount,
+      // 代码注册的 provider 没有类型,这里判不出它能不能推送:它照样能发,只是页面不给开关和按钮,要在「高级设置」页设
+      supportsNotice: catalog.types.some(x => x.type === type && x.supportsNotice),
+      // 后端缺省为开:管理端条目没带 notify 就按开
+      notify: registered && (a?.notify ?? true),
     })
   }
 
@@ -191,6 +200,20 @@ export function claimWeComAutoLogin(opts: {
   } catch {
     // 存储不可用时记不住「已经跳过一次」,宁可不自动跳
     return false
+  }
+}
+
+/**
+ * 主动退出时调用:本会话还没进过登录页(带着持久化令牌直接进的应用),一次性标记还没落下,
+ * 不预先写入的话退出后的登录页会被 claimWeComAutoLogin 放行,立刻又静默登录回去。
+ * 只在主动退出的几处调用,不放进 user.clear():令牌过期也走 clear,那时要让点开卡片的人静默登录回原页面。
+ */
+export function suppressWeComAutoLogin(storage?: Pick<Storage, 'setItem'>): void {
+  try {
+    // sessionStorage 被禁用时,光是取这个全局就会抛,所以默认值要在 try 里取
+    ;(storage ?? sessionStorage).setItem(WECOM_AUTO_LOGIN_KEY, '1')
+  } catch {
+    // 存储不可用时 claimWeComAutoLogin 本来就不会自动跳
   }
 }
 

@@ -35,15 +35,52 @@ export function apiAdminToken(request: APIRequestContext): Promise<string> {
   return cachedAdminToken
 }
 
-async function requestAdminToken(request: APIRequestContext): Promise<string> {
+/** 登录接口返回的完整会话(`data` 原样),至少含令牌与账号信息。 */
+export type AdminSession = {
+  accessToken: string
+  refreshToken?: string
+  userId: number | string
+  account: string
+  name: string
+  [key: string]: unknown
+}
+
+/**
+ * 超管重新登录一次,返回完整会话。不缓存:要塞进浏览器的会话会被页面里的「退出」吊销,
+ * 和上面缓存的管理令牌必须是两次独立登录,否则用例退出后清理步骤的令牌跟着失效。
+ */
+export async function apiAdminSession(request: APIRequestContext): Promise<AdminSession> {
   const res = await request.post(`${apiBase()}/api/v1/auth/login`, {
     data: { account: ADMIN_ACCOUNT, password: ADMIN_PASSWORD },
   })
-  const env = await readEnvelope<{ accessToken: string }>(res)
+  const env = await readEnvelope<AdminSession>(res)
   if (env.code !== 0 || !env.data?.accessToken) {
     throw new Error(`admin login failed: code=${env.code} msg=${env.msg}`)
   }
-  return env.data.accessToken
+  return env.data
+}
+
+/**
+ * 超管能进的第一个应用 Id。多应用且没设默认应用的用户,深链会被守卫送去应用选择页;
+ * 「用过系统」的浏览器靠 auth store 持久化的 currentModuleId 直接回到原页面,用例要模拟的是后者。
+ */
+export async function apiFirstModuleId(
+  request: APIRequestContext,
+  token: string,
+): Promise<number | string> {
+  const res = await request.get(`${apiBase()}/api/v1/personal/modules`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const env = await readEnvelope<{ modules: { id: number | string }[] }>(res)
+  const id = env.data?.modules?.[0]?.id
+  if (env.code !== 0 || id == null) {
+    throw new Error(`list modules failed: code=${env.code} msg=${env.msg}`)
+  }
+  return id
+}
+
+async function requestAdminToken(request: APIRequestContext): Promise<string> {
+  return (await apiAdminSession(request)).accessToken
 }
 
 export async function apiCreateUser(

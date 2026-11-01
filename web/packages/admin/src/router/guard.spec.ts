@@ -193,4 +193,25 @@ describe('整屏页与选应用页', () => {
 
     expect(router.currentRoute.value.path).toBe('/module')
   })
+
+  it('转到选应用页时带上原地址(含查询串),选完才能回去', async () => {
+    const { router, user } = await load()
+    user.accessToken = 'at'
+    enterInitial.mockResolvedValue({ chooser: true })
+
+    await router.push('/flow/todo?taskId=1')
+
+    expect(router.currentRoute.value.path).toBe('/module')
+    expect(router.currentRoute.value.query.redirect).toBe('/flow/todo?taskId=1')
+  })
+
+  it('目标是首页时转到选应用页不带 redirect', async () => {
+    const { router, user } = await load()
+    user.accessToken = 'at'
+    enterInitial.mockResolvedValue({ chooser: true })
+
+    await router.push('/')
+
+    expect(router.currentRoute.value.fullPath).toBe('/module')
+  })
 })

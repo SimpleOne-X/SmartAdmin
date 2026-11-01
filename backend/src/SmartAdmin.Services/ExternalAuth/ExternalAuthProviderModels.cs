@@ -16,12 +16,19 @@ public static class ExternalAuthProviderSource
 public sealed record ExternalAuthFieldView(string Name, bool Secret, bool Required, string? Default, bool DefinesEndpoint);
 
 /// <summary>已安装的 provider 类型(出参):管理页据此渲染「添加」入口与设置面板的字段。</summary>
+/// <param name="Type">类型码</param>
+/// <param name="DefaultDisplayName">默认展示名</param>
+/// <param name="DefaultIcon">默认图标</param>
+/// <param name="AllowMultiple">允许配置多条(标准 OIDC);<c>false</c> 时只能有一份,标识就是类型码</param>
+/// <param name="Fields">字段清单</param>
+/// <param name="SupportsNotice">该类型能把站内通知推到外部渠道;管理页据此显示推送开关与测试消息按钮</param>
 public sealed record ExternalAuthTypeView(
     string Type,
     string DefaultDisplayName,
     string? DefaultIcon,
     bool AllowMultiple,
-    IReadOnlyList<ExternalAuthFieldView> Fields);
+    IReadOnlyList<ExternalAuthFieldView> Fields,
+    bool SupportsNotice = false);
 
 /// <summary>一个机密字段的状态:只回「是否已配置」与尾四位提示,永远没有明文。</summary>
 /// <param name="HasValue">已配置</param>
