@@ -80,7 +80,7 @@ bash scripts/smoke-multi-replica.sh http://localhost:8080   # 逐条验证下面
 
 ### 每个副本一个不同的 `WorkerId`
 
-雪花发号器的机器位来自 `SmartAdmin:Id:WorkerId`，取值 0–63。不配时内核用文件锁在本机抢号，可容器各有各的文件系统，两个副本都会抢到 0。同一毫秒各自发号就会撞主键，这是数据损坏级的事故。内核有两道兜底检查。第一道在启动时：配了 `Cache:Provider=Redis`，那是明显的多实例意图，却没有**显式**给出 `WorkerId`，启动就直接抛错，点名到 `SmartAdmin:Id:WorkerId` 和 0–63 范围。第二道在数据库：`WorkerIdLeaseGuard` 按机器号在 `sys_worker_lease` 表上抢租约并周期续租，同库另有一个活着的实例占着同一个号，后启动的那个当场抛错，不管有没有配 Redis。显式写 `0` 视为你知情，放行第一道检查；真正躲不开的是第二道——多副本必须各配一个不同的 `SmartAdmin:Id:WorkerId`。
+雪花发号器的机器位来自 `SmartAdmin:Id:WorkerId`，取值 0–63。不配时内核用文件锁在本机抢号，可容器各有各的文件系统，两个副本都会抢到 0。同一毫秒各自发号就会撞主键，这是数据损坏级的事故。内核有两道兜底检查。第一道在启动时：配了 `Cache:Provider=Redis`，那是明显的多实例意图，却没有**显式**给出 `WorkerId`，启动就直接抛错，点名到 `SmartAdmin:Id:WorkerId` 和 0–63 范围。第二道在数据库：`WorkerIdLeaseGuard` 按机器号在 `sys_worker_lease` 表上抢租约并周期续租，同库另一个副本占着同一个号还在续租，后启动的那个当场抛错，不管有没有配 Redis。显式写 `0` 视为你知情，放行第一道检查；真正躲不开的是第二道——多副本必须各配一个不同的 `SmartAdmin:Id:WorkerId`。
 
 - **compose**：`--scale app=2` 给不了各副本不同的环境变量，所以拆成多个显式的 `app` 服务各配各的。`docker-compose.scale.yml` 里 `app2` 就显式给了 `SmartAdmin__Id__WorkerId: "1"`，与 `app` 的 `0` 不同。
 - **k8s**：用 StatefulSet，从 Pod 名字的序号注入，比如 `app-0`、`app-1`。Deployment 的随机 Pod 名给不了稳定序号。
