@@ -19,6 +19,12 @@ public static class ServicesSetup
         // 统一时间源:AspNetCore 层也 TryAdd 同一个,这里再兜一次,让本层单独装配也能自洽(测试可换 Fake)
         services.TryAddSingleton(TimeProvider.System);
 
+        // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞。
+        // 必须是本层第一个后台服务:后台服务按注册顺序逐个启动,守卫可能要等本机旧进程退出(IIS 重叠回收),
+        // 排在它前面的服务会在等待期间开工——调度器的节点名与旧进程相同,能直接认领主节点,和旧进程一起用同一个号发 Id。
+        // 它前面只有 SqlSugar 层的 DatabaseInitializer(守卫要读的租约表由它建)。
+        services.AddHostedService<WorkerIdLeaseGuard>();
+
         // 错误码目录(含消费者登记的码):给 /meta 端点与业务代码查"码 → msgKey"
         services.TryAddSingleton<IErrorCodeCatalog, ErrorCodeCatalog>();
 
@@ -239,9 +245,6 @@ public static class ServicesSetup
         // 分片暂存清扫:双注册同一实例(同 FileGcService),单例可按类型注入直接调 SweepOnce,同一实例再作为后台任务托管
         services.TryAddSingleton<FilePathStagingSweeper>();
         services.AddHostedService(sp => sp.GetRequiredService<FilePathStagingSweeper>());
-
-        // WorkerId 数据库租约守卫——防止多实例配相同 WorkerId 导致雪花 Id 碰撞
-        services.AddHostedService<WorkerIdLeaseGuard>();
 
         // 回收站:类型是登记项而非硬编码 switch,消费者用 AddRecycleBinType<T>() 把自己的软删表接进来
         services.TryAddScoped<IRecycleBinService, RecycleBinService>();
