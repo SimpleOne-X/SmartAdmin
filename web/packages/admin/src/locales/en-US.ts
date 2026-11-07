@@ -2115,6 +2115,7 @@ export default {
       yearMonthOriginal: 'Year/Month/Name_ShortId',
       businessPath: 'Business-specified path',
       dateGuid: 'Date/GUID',
+      yearMonthDayHourOriginal: 'Year/Month/Day/Hour/Name',
     },
     onConflict: { reject: 'Reject', overwrite: 'Overwrite' },
     path: {

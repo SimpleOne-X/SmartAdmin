@@ -6,12 +6,13 @@ using SmartAdmin.Services;
 namespace SmartAdmin.Tests;
 
 /// <summary>
-/// 文件路径上传:只读/后缀/大小校验、三种命名规则、撞名与覆盖(含失败回滚、并发覆盖)、删除的隐藏段处理。
+/// 文件路径上传:只读/后缀/大小校验、四种命名规则、撞名与覆盖(含失败回滚、并发覆盖)、删除的隐藏段处理。
 /// 服务用固定时钟(本地时间 2026-10-20 10:00)手工构造,每个用例的文件落在各自的临时根目录里。
 /// </summary>
 public class FilePathUploadServiceTests
 {
-    private static readonly DateTimeOffset Fixed = new(new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Local));
+    // FakeTimeProvider 把起点当 UTC 返回,GetLocalNow 再加本地偏移;不先转成 UTC,非零时区下本地小时会多出一个偏移
+    private static readonly DateTimeOffset Fixed = new DateTimeOffset(new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Local)).ToUniversalTime();
 
     private static string NewCode() => $"u-{Guid.NewGuid():N}";
 
@@ -171,6 +172,53 @@ public class FilePathUploadServiceTests
 
         Assert.Matches(@"^20261020/[0-9a-f]{32}\.pdf$", output.Path);
         Assert.True(File.Exists(DiskPath(env, output.Path)));
+    }
+
+    [Fact]
+    public async Task Year_month_day_hour_original_naming()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.YearMonthDayHourOriginal);
+
+        var output = await NewService(env).UploadAsync(code, Upload("报价单.PDF", "你好"));
+
+        Assert.Equal("2026/10/20/10/报价单.pdf", output.Path);
+        Assert.Equal("你好", await File.ReadAllTextAsync(DiskPath(env, output.Path)));
+    }
+
+    [Fact]
+    public async Task Year_month_day_hour_collision_appends_short_id()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.YearMonthDayHourOriginal);
+        var service = new FixedIdService(env, "aaaaaaaa", "bbbbbbbb");
+
+        var first = await service.UploadAsync(code, Upload("a.pdf", "一"));
+        var second = await service.UploadAsync(code, Upload("a.pdf", "二"));
+        var third = await service.UploadAsync(code, Upload("a.pdf", "三"));
+
+        // 不撞名时保持原名,撞了才加短 ID,已有的文件不动
+        Assert.Equal("2026/10/20/10/a.pdf", first.Path);
+        Assert.Equal("2026/10/20/10/a_aaaaaaaa.pdf", second.Path);
+        Assert.Equal("2026/10/20/10/a_bbbbbbbb.pdf", third.Path);
+        Assert.Equal("一", await File.ReadAllTextAsync(DiskPath(env, first.Path)));
+        Assert.Equal("二", await File.ReadAllTextAsync(DiskPath(env, second.Path)));
+        Assert.Equal("三", await File.ReadAllTextAsync(DiskPath(env, third.Path)));
+    }
+
+    [Fact]
+    public async Task Year_month_day_hour_collision_that_repeats_is_reported()
+    {
+        await using var env = FilePathTestEnv.Create();
+        var code = await AddPathAsync(env, FilePathNamingRule.YearMonthDayHourOriginal);
+        var service = new FixedIdService(env, "aaaaaaaa", "aaaaaaaa");
+        await service.UploadAsync(code, Upload("a.pdf"));
+        await service.UploadAsync(code, Upload("a.pdf"));
+
+        // 原名和加了短 ID 的名字都已存在:只重试一次,如实报告
+        var ex = await Rejected(service.UploadAsync(code, Upload("a.pdf")));
+
+        Assert.Equal(ErrorCode.FilePathFileExists, ex.Code);
     }
 
     [Fact]

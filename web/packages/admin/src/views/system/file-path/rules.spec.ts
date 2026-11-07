@@ -97,9 +97,14 @@ describe('exampleFileName', () => {
     expect(exampleFileName(2, now)).toMatch(/^20261020\/[0-9a-f]{32}\.\w+$/)
   })
 
-  it('月、日补零', () => {
+  it('年/月/日/时/原名:不带短 ID', () => {
+    expect(exampleFileName(3, new Date(2026, 9, 20, 14))).toMatch(/^2026\/10\/20\/14\/[\w-]+\.\w+$/)
+  })
+
+  it('月、日、时补零', () => {
     expect(exampleFileName(2, new Date(2026, 0, 5)).startsWith('20260105/')).toBe(true)
     expect(exampleFileName(0, new Date(2026, 0, 5)).startsWith('2026/01/')).toBe(true)
+    expect(exampleFileName(3, new Date(2026, 0, 5, 8)).startsWith('2026/01/05/08/')).toBe(true)
   })
 })
 

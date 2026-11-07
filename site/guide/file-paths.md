@@ -83,22 +83,23 @@ On the "File paths" tab, one row is one kind of business file.
 
 Extensions and the size limit don't inherit the upload policy of "Files", so the two uploads don't affect each other. The edit dialog shows the full folder and an example file name as you type.
 
-Three naming rules:
+Four naming rules:
 
 | Naming rule | Relative path | Good for |
 |---|---|---|
 | Year/month/name_shortId | `{yyyy}/{MM}/{sanitized name}_{8 hex digits}{ext}`, such as `2030/01/quote_3f9c2e1a.pdf` | Attachments. Readable and never clashes |
 | Business-specified path | `{sanitized subPath}/{sanitized file name}`, `subPath` may be empty, and each of its segments is sanitized by the file name rules too (`:` becomes `_`, for example) | Print templates, installers, anything whose path carries business meaning |
 | Date/GUID | `{yyyyMMdd}/{GUID}{ext}`, such as `20300101/0198a3c4e5b27c61a8f90d1e2b3c4d5e.pdf` | Readability doesn't matter, only safety |
+| Year/month/day/hour/name | `{yyyy}/{MM}/{dd}/{HH}/{sanitized name}{ext}`, such as `2030/01/05/08/quote.pdf`. On a clash within the same hour, `_{8 hex digits}` is appended to the name | High-volume attachments that people browse by hour on the file server and whose names should stay as uploaded |
 
-Year, month and date use the server's local time. The folders are meant to be browsed by people in a file explorer, so splitting by local date matches what they expect.
+Year, month, day and hour use the server's local time. The folders are meant to be browsed by people in a file explorer, so splitting by local time matches what they expect.
 
 Validation and naming at upload time:
 
 - **File name sanitizing**: `\ / : * ? " < > |` and control characters become `_`, a leading dot becomes `_`, trailing dots and spaces are removed, and Windows reserved names such as `CON`, `NUL` and `COM1` get a `_` prefix. The part before the extension keeps at most 60 characters, so the whole name fits the 255-byte limit common on NAS devices under UTF-8. The segments of a business-specified path's `subPath` are sanitized one by one by the same rules, and only an absolute path, an empty segment, a segment such as `.` or `..` that is empty once trailing dots and spaces are stripped, or a segment over 255 bytes after sanitizing is rejected (`44112`).
 - The **extension** is taken from the sanitized name, lowercased, and must be in the whitelist. `quote.PDF` passes and is stored as `.pdf`; a file with no extension, such as `README`, is always rejected.
 - A file over the **size** limit is rejected. Chunked uploads are checked once at init against the declared size, and again after merging against the actual size.
-- A **name clash** can only happen with "business-specified path". With reject, the error is `44111`. With overwrite, the file is written to a temporary file in the same folder and then replaced. If the write fails halfway, the old file stays intact, and a file that is being downloaded can still be overwritten.
+- **Name clashes**: "year/month/day/hour/name" appends a short ID to the name and writes again, leaving the existing file alone. "Business-specified path" follows its clash setting: with reject, the error is `44111`. With overwrite, the file is written to a temporary file in the same folder and then replaced. If the write fails halfway, the old file stays intact, and a file that is being downloaded can still be overwritten.
 
 `subPath` comes from the frontend, so anyone who can upload to this row can overwrite any same-named file in the folder. Rows that overwrite should therefore have upload roles, and the settings page warns when "overwrite" is combined with empty upload roles.
 

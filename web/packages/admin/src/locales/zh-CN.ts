@@ -2058,6 +2058,7 @@ export default {
       yearMonthOriginal: '年/月/原名_短ID',
       businessPath: '业务指定路径',
       dateGuid: '日期/GUID',
+      yearMonthDayHourOriginal: '年/月/日/时/原名',
     },
     onConflict: { reject: '拒绝', overwrite: '覆盖' },
     path: {
