@@ -14,9 +14,12 @@ public enum FilePathNamingRule
 
     /// <summary>日期/GUID:<c>{yyyyMMdd}/{GUID}{后缀}</c>,不保留原文件名</summary>
     DateGuid = 2,
+
+    /// <summary>年/月/日/时/原名:<c>{yyyy}/{MM}/{dd}/{HH}/{清洗后的原名}{后缀}</c>,撞名时原名后加 <c>_{8 位随机十六进制}</c></summary>
+    YearMonthDayHourOriginal = 3,
 }
 
-/// <summary>业务指定路径撞名时的处理方式(<c>sys_file_path.OnConflict</c>);其余命名规则不会撞名</summary>
+/// <summary>业务指定路径撞名时的处理方式(<c>sys_file_path.OnConflict</c>);其余命名规则撞名时自动换名,不看它</summary>
 public enum FilePathConflictMode
 {
     /// <summary>拒绝上传</summary>

@@ -73,8 +73,8 @@ public class FilePathUploadService(
     }
 
     /// <summary>
-    /// 按命名规则定名字并写进文件夹,单文件上传和分片合并共用。年/月/原名_短ID、日期/GUID 的名字是随机生成的,
-    /// 撞名就换一个再试一次(<paramref name="content"/> 在撞名时还没被读过);业务指定的路径撞名是调用方要知道的结果,照原样抛出。
+    /// 按命名规则定名字并写进文件夹,单文件上传和分片合并共用。撞名时换一个名字再试一次(<paramref name="content"/> 在撞名时还没被读过):
+    /// 年/月/原名_短ID、日期/GUID 重新生成随机名,年/月/日/时/原名在原名后加短 ID;业务指定的路径撞名是调用方要知道的结果,照原样抛出。
     /// 出参的 <see cref="FilePathUploadOutput.Size"/> 取 <paramref name="size"/>。校验由调用方先做。
     /// </summary>
     protected virtual async Task<FilePathUploadOutput> StoreAsync(
@@ -87,7 +87,9 @@ public class FilePathUploadService(
         }
         catch (AdminException e) when (e.Code == ErrorCode.FilePathFileExists && target.Rule.NamingRule != FilePathNamingRule.BusinessPath)
         {
-            relative = BuildRelativePath(target.Rule, fileName, subPath);
+            relative = target.Rule.NamingRule == FilePathNamingRule.YearMonthDayHourOriginal
+                ? AppendShortId(relative)
+                : BuildRelativePath(target.Rule, fileName, subPath);
             await WriteAsync(target, relative, content, ct);
         }
 
@@ -453,6 +455,8 @@ public class FilePathUploadService(
                 $"{Format(now, "yyyy")}/{Format(now, "MM")}/{stem}_{NewShortId()}{ext}",
             FilePathNamingRule.DateGuid =>
                 $"{Format(now, "yyyyMMdd")}/{NewGuid():N}{ext}",
+            FilePathNamingRule.YearMonthDayHourOriginal =>
+                $"{Format(now, "yyyy")}/{Format(now, "MM")}/{Format(now, "dd")}/{Format(now, "HH")}/{stem}{ext}",
             _ => string.Join('/', SanitizeSubPath(subPath).Append(stem + ext)),
         };
 
@@ -483,8 +487,15 @@ public class FilePathUploadService(
         return segments;
     }
 
-    /// <summary>8 位小写十六进制的短 ID:年/月/原名的名字后缀,以及覆盖用临时文件名的随机部分。</summary>
+    /// <summary>8 位小写十六进制的短 ID:年/月/原名的名字后缀、年/月/日/时/原名撞名时的后缀,以及覆盖用临时文件名的随机部分。</summary>
     protected virtual string NewShortId() => RandomNumberGenerator.GetHexString(8, lowercase: true);
+
+    /// <summary>在相对路径的文件名主干后加 <c>_{短 ID}</c>:<c>2026/10/20/10/a.pdf</c> → <c>2026/10/20/10/a_3f9c2e1a.pdf</c>。</summary>
+    private string AppendShortId(string relative)
+    {
+        var ext = Path.GetExtension(relative);
+        return $"{relative[..^ext.Length]}_{NewShortId()}{ext}";
+    }
 
     /// <summary>日期/GUID 命名用的 GUID(v7:按时间有序,目录里大致按上传顺序排)。</summary>
     protected virtual Guid NewGuid() => Guid.CreateVersion7();

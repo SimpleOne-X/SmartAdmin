@@ -224,7 +224,7 @@ async function save() {
     serverId,
     folder: form.folder.trim() || null,
     namingRule: form.namingRule,
-    // 同名处理只对业务指定路径有意义,其余命名规则不会撞名
+    // 同名处理只对业务指定路径有意义,其余命名规则撞名时自动换名
     onConflict: form.namingRule === NamingRule.BusinessPath ? form.onConflict : ConflictMode.Reject,
     readOnly: form.readOnly,
     allowedExtensions: form.readOnly ? null : normalizeExtensions(form.allowedExtensions),

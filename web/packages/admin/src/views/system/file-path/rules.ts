@@ -1,16 +1,22 @@
 // 文件路径配置页的纯函数:校验与提示文案的素材。规则与后端保持一致,后端才是最终裁决。
 
 /** 文件落盘的命名规则(与后端 FilePathNamingRule 的值一致)。 */
-export const NamingRule = { YearMonthOriginal: 0, BusinessPath: 1, DateGuid: 2 } as const
+export const NamingRule = {
+  YearMonthOriginal: 0,
+  BusinessPath: 1,
+  DateGuid: 2,
+  YearMonthDayHourOriginal: 3,
+} as const
 
 /** 命名规则的显示名在语言包里的键。 */
 export const NAMING_RULE_LABEL_KEYS: Record<number, string> = {
   [NamingRule.YearMonthOriginal]: 'filePath.namingRule.yearMonthOriginal',
   [NamingRule.BusinessPath]: 'filePath.namingRule.businessPath',
   [NamingRule.DateGuid]: 'filePath.namingRule.dateGuid',
+  [NamingRule.YearMonthDayHourOriginal]: 'filePath.namingRule.yearMonthDayHourOriginal',
 }
 
-/** 业务指定路径撞名时的处理(与后端 FilePathConflictMode 的值一致);其余命名规则不会撞名。 */
+/** 业务指定路径撞名时的处理(与后端 FilePathConflictMode 的值一致);其余命名规则撞名时自动换名。 */
 export const ConflictMode = { Reject: 0, Overwrite: 1 } as const
 
 /**
@@ -116,12 +122,15 @@ export function folderPreview(rootPath: string, folder: string): string {
 
 const two = (n: number) => String(n).padStart(2, '0')
 
-/** 三种命名规则各一个示例路径(相对文件夹)。示例名与语言无关,所以用英文。 */
+/** 每种命名规则一个示例路径(相对文件夹)。示例名与语言无关,所以用英文。 */
 export function exampleFileName(rule: number, now: Date): string {
   const year = now.getFullYear()
   if (rule === NamingRule.BusinessPath) return 'template/label.btw'
   if (rule === NamingRule.DateGuid) {
     return `${year}${two(now.getMonth() + 1)}${two(now.getDate())}/3f2a9c1e7b4d4e0a8c5d6f1a2b3c4d5e.pdf`
+  }
+  if (rule === NamingRule.YearMonthDayHourOriginal) {
+    return `${year}/${two(now.getMonth() + 1)}/${two(now.getDate())}/${two(now.getHours())}/report.pdf`
   }
   return `${year}/${two(now.getMonth() + 1)}/report_a1b2c3d4.pdf`
 }
